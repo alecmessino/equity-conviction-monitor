@@ -35,8 +35,9 @@ def _get_json(url: str) -> dict:
 
 
 def _get_yahoo_quote(sym: str) -> dict | None:
-    """Price/volume/52wk from Yahoo chart (keyless)."""
-    url = f"https://query2.finance.yahoo.com/v8/finance/chart/{sym}?range=5d&interval=1d"
+    """Price/volume/52wk from Yahoo chart (keyless). Yahoo uses '-' for '.' (BRK.B -> BRK-B)."""
+    ysym = sym.replace(".", "-")
+    url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ysym}?range=5d&interval=1d"
     try:
         d = _get_json(url)
         res = d.get("chart", {}).get("result")

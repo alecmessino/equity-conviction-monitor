@@ -1,9 +1,12 @@
 """Nightly builder — Equity Conviction Monitor.
 
-Pulls features for the universe, enriches with RS, scores via model.score(),
-and writes ledger/index.json. Requires FMP_API_KEY (env). If the key is absent
-or a symbol fails, that symbol is skipped (never fabricated). The terminal
-renders whatever the ledger contains — so a partial pull still shows real data.
+Pulls features for the universe (Yahoo keyless prices + Alpha Vantage fundamentals),
+enriches with RS, scores via model.score(), and writes ledger/index.json.
+
+If ALPHAVANTAGE_API_KEY is absent, prices still pull keylessly from Yahoo and the
+terminal renders live prices with neutral Quality (never fabricated). If the pull
+produces zero rows (network/API down), it falls back to the committed fixture so
+the terminal never goes empty.
 """
 from __future__ import annotations
 import json, os, sys, time
@@ -17,14 +20,12 @@ from equity_monitor.model import score, signal
 
 LEDGER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ledger")
 
+BENCH = {"symbol": "SPY"}
+
+
 def build(allow_fixture_fallback=True):
-    if not data.FMP_KEY:
-        print("FMP_API_KEY not set — falling back to committed fixture ledger.")
-        if allow_fixture_fallback:
-            _fallback_to_committed()
-        else:
-            write_ledger([], 0.0)
-        return
+    av_set = bool(data.AV_KEY)
+    print(f"Alpha Vantage key: {'SET' if av_set else 'unset (neutral fundamentals, Yahoo prices only)'}")
 
     symbols = data.universe()
     feats, skipped = [], []
@@ -39,10 +40,19 @@ def build(allow_fixture_fallback=True):
             skipped.append(f"{sym}:{e}")
         time.sleep(0.05)  # gentle on rate limits
 
+    if not feats:
+        # live pull produced nothing (network/API down) — never ship an empty terminal
+        print("live pull produced 0 rows — falling back to committed fixture.")
+        if allow_fixture_fallback:
+            _fallback_to_committed()
+        else:
+            write_ledger([], 0.0)
+        return
+
     feats = rs.enrich(feats)
     rows = []
     for f in feats:
-        q, c, r, conv, sig, comp = score(f)
+        q, c, r, conv, sig, comp = score(f, BENCH)
         rows.append({
             "symbol": f["symbol"],
             "price": round(f["price"], 2),
@@ -78,12 +88,7 @@ def build(allow_fixture_fallback=True):
     for r in rows:
         r["weight"] = round(max(r["conviction"], 1) / total_score * 100.0, 2)
     mcapsum = sum(r["mcap"] for r in rows)
-    if not rows:
-        # live pull produced nothing (bad key / API down) — never ship an empty terminal
-        print("live pull produced 0 rows — falling back to committed fixture.")
-        _fallback_to_committed()
-        return
-    write_ledger(rows, mcapsum, skipped)
+    write_ledger(rows, mcapsum, skipped, live=True)
     print(f"built {len(rows)} rows from live data, skipped {len(skipped)}: {skipped[:5]}")
 
 
@@ -102,11 +107,12 @@ def _fallback_to_committed():
         write_ledger([], 0.0)
 
 
-def write_ledger(rows, mcapsum, skipped=None):
+def write_ledger(rows, mcapsum, skipped=None, live=False):
     os.makedirs(LEDGER, exist_ok=True)
     payload = {
         "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "benchmark": "SPY",
+        "live": live,
         "universe": len(rows),
         "mcapsum": float(mcapsum),
         "skipped": skipped or [],
@@ -115,6 +121,7 @@ def write_ledger(rows, mcapsum, skipped=None):
     }
     with open(os.path.join(LEDGER, "index.json"), "w") as fh:
         json.dump(payload, fh, indent=2)
+
 
 if __name__ == "__main__":
     build()
