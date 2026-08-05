@@ -37,7 +37,7 @@
 <body>
 <div class="ribbon">
   <div class="brand">EQUITY <span class="live">CONVICTION</span> MONITOR</div>
-  <a href="methodology.html" class="pill">Methodology · Performance</a>
+  <a href="../docs/methodology.html" class="pill">Methodology · Performance</a>
   <div class="stat"><b id="rb-mcap" class="num">—</b><span>Tracked Mkt Cap</span></div>
   <div class="stat"><b id="rb-conv" class="num">—</b><span>Avg Conviction</span></div>
   <div class="stat"><b id="rb-str" class="num">—</b><span>BUY+ (≥70)</span></div>
@@ -117,16 +117,16 @@ function rsBlend(t, spy){
 // --- load live data + render ---
 async function load(){
   let j;
-  try { j = await fetch('ledger/index.json').then(r=>r.json()); }
+  let ledgerPath = (location.pathname.includes('/web/') ? '../' : '') + 'ledger/index.json';
+  try { j = await fetch(ledgerPath).then(r=>r.json()); }
   catch(e){ console.error('load failed', e); return; }
   const rows = j.all || [];
   const spy = j.all ? j.all.find(a=>a.symbol==="SPY") : null;
-  const rows = j.all || [];
   rows.sort((a,b)=>b.conviction-a.conviction);
   const tb=document.getElementById('conv-tbody');
   tb.innerHTML = rows.slice(0,20).map((a,i)=>{
     const [s,sigc]=signal(a.conviction); const f=a.factors||{};
-    <tr onclick="showDetail('${a.symbol}')">
+    return `<tr onclick="showDetail('${a.symbol}')">
     <td>${i+1}</td><td>${a.symbol}</td><td>${fmtPrice(a.price,a.symbol)}</td>
     <td class="pos">${fmtPct(a.chg>=0?'+':'',a.chg||0)}%</td>
     <td>${a.turnover?`${(a.turnover*100).toFixed(1)}%`:'—'}</td>
