@@ -72,7 +72,8 @@ def _extract_js_score(html_path=TERMINAL_HTML):
         import subprocess, tempfile, os, threading
         # strip browser-only entrypoints so node can import the pure functions
         js_clean = re.sub(r"load\(\);", "", js)
-        js_clean = re.sub(r"setInterval\(.*?\),\s*900000\);", "", js_clean, flags=re.S)
+        js_clean = re.sub(r"setInterval\([^;]*;", "", js_clean)
+        js_clean = re.sub(r"setTimeout\([^;]*;", "", js_clean)
         with tempfile.NamedTemporaryFile("w", suffix=".cjs", delete=False) as f:
             f.write(js_clean + "\nmodule.exports = { score };\n")
             path = f.name
@@ -83,6 +84,7 @@ def _extract_js_score(html_path=TERMINAL_HTML):
                 f"const FIX={json.dumps(FIXTURE)};\n"
                 f"const res={{}}; for(const k in FIX){{res[k]=m.score(FIX[k]).conv;}}\n"
                 f"console.log(JSON.stringify(res));\n"
+                f"process.exit(0);\n"
             )
         result = {}
         def _run():

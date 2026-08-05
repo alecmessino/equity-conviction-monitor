@@ -24,6 +24,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v4
+      - name: Live data pull (FMP)
+        env:
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+        run: |
+          python -m equity_monitor.nightly || echo "nightly failed; falling back to committed fixture"
       - name: Assemble site
         run: |
           mkdir -p site/web site/ledger site/docs

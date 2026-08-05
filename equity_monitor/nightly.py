@@ -17,10 +17,13 @@ from equity_monitor.model import score, signal
 
 LEDGER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ledger")
 
-def build():
+def build(allow_fixture_fallback=True):
     if not data.FMP_KEY:
-        print("FMP_API_KEY not set — emitting empty ledger (terminal shows no rows).")
-        write_ledger([], 0.0)
+        print("FMP_API_KEY not set — falling back to committed fixture ledger.")
+        if allow_fixture_fallback:
+            _fallback_to_committed()
+        else:
+            write_ledger([], 0.0)
         return
 
     symbols = data.universe()
@@ -62,8 +65,29 @@ def build():
         })
     rows.sort(key=lambda x: x["conviction"], reverse=True)
     mcapsum = sum(r["mcap"] for r in rows)
+    if not rows:
+        # live pull produced nothing (bad key / API down) — never ship an empty terminal
+        print("live pull produced 0 rows — falling back to committed fixture.")
+        _fallback_to_committed()
+        return
     write_ledger(rows, mcapsum, skipped)
-    print(f"built {len(rows)} rows, skipped {len(skipped)}: {skipped[:5]}")
+    print(f"built {len(rows)} rows from live data, skipped {len(skipped)}: {skipped[:5]}")
+
+
+def _fallback_to_committed():
+    """Copy the committed ledger/index.json as-is so the terminal never goes empty."""
+    src = os.path.join(LEDGER, "index.json")
+    if os.path.exists(src):
+        with open(src) as fh:
+            payload = json.load(fh)
+        payload["as_of"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+        payload["live"] = False
+        with open(src, "w") as fh:
+            json.dump(payload, fh, indent=2)
+        print(f"fallback: served committed fixture ({len(payload.get('all', []))} rows)")
+    else:
+        write_ledger([], 0.0)
+
 
 def write_ledger(rows, mcapsum, skipped=None):
     os.makedirs(LEDGER, exist_ok=True)

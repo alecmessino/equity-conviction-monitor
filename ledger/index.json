@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-08-05T19:10:00Z",
+  "as_of": "2026-08-05T20:02:16Z",
   "benchmark": "SPY",
   "universe": 4,
   "mcapsum": 6990000000000,
@@ -167,5 +167,6 @@
         "short_days": 9.0
       }
     }
-  ]
+  ],
+  "live": false
 }
