@@ -23,3 +23,6 @@ htmlcov/
 .env.*
 .venv*/
 *.local
+
+# rolling T-1 baseline (regenerated each nightly run)
+ledger/prev_index.json

@@ -17,6 +17,7 @@ If ALPHAVANTAGE_API_KEY is unset we still render with Yahoo price + neutral fund
 from __future__ import annotations
 import os, math, time, json
 import urllib.request, urllib.parse
+from datetime import datetime
 
 AV_KEY = os.environ.get("ALPHAVANTAGE_API_KEY", "")
 
@@ -71,6 +72,39 @@ def _get_yahoo_history(sym: str, days: int = 30) -> list[float]:
 def history(sym: str, days: int = 30) -> list[float]:
     """Public: trailing daily closes for sparklines."""
     return _get_yahoo_history(sym, days)
+
+
+def _get_yahoo_earnings_date(sym: str) -> str | None:
+    """Next earnings date (ISO) via Yahoo quoteSummary/calendarEvents (keyless).
+    Returns None if unavailable (e.g. ETFs have no earnings)."""
+    ysym = sym.replace(".", "-")
+    url = (f"https://query2.finance.yahoo.com/v10/finance/quoteSummary/{ysym}"
+           "?modules=calendarEvents")
+    try:
+        d = _get_json(url)
+        cal = (d.get("quoteSummary", {}).get("result") or [{}])[0].get("calendarEvents", {})
+        # prefer the earnings array's earliest future date
+        earnings = cal.get("earnings") or {}
+        dates = [e.get("startDate") for e in earnings.get("earningsDate", []) if e.get("startDate")]
+        if not dates:
+            return None
+        return min(dates)  # ISO timestamp string
+    except Exception:
+        return None
+
+
+def days_to_earnings(sym: str, today: datetime | None = None) -> int | None:
+    """Days from `today` to the next earnings date, or None if unknown."""
+    ed = _get_yahoo_earnings_date(sym)
+    if not ed:
+        return None
+    try:
+        if today is None:
+            today = datetime.now()
+        d0 = datetime.fromisoformat(ed.replace("Z", "+00:00"))
+        return max(0, (d0.date() - today.date()).days)
+    except Exception:
+        return None
 
 
 def _get_av_overview(sym: str) -> dict:
@@ -139,6 +173,13 @@ def build_features(symbol: str) -> dict | None:
 
         val_zscore = pe_to_z(pe)
 
+        # keyless earnings date (None for ETFs) — purely additive metadata, no scoring impact
+        dte = None
+        try:
+            dte = days_to_earnings(symbol)
+        except Exception:
+            dte = None
+
         return {
             "symbol": symbol,
             "price": price,
@@ -158,6 +199,7 @@ def build_features(symbol: str) -> dict | None:
             "drawdown_52w": (1 - price / hi) if hi else 0.0,
             "sector": sector,
             "beta": beta,
+            "dte": dte,
         }
     except Exception as e:
         raise RuntimeError(f"{symbol}: {e}") from e

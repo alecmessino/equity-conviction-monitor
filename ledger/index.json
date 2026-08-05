@@ -1,8 +1,11 @@
 {
-  "as_of": "2026-08-05T21:38:28Z",
+  "as_of": "2026-08-05T21:50:06Z",
   "benchmark": "SPY",
   "live": true,
   "hist_base": "history/",
+  "sector_deltas": {
+    "Other": 0.0
+  },
   "universe": 48,
   "mcapsum": 0.0,
   "skipped": [],
@@ -19,6 +22,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -47,6 +51,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -75,6 +80,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -103,6 +109,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -131,6 +138,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -159,6 +167,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -187,6 +196,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -215,6 +225,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -243,6 +254,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -271,6 +283,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -299,6 +312,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -327,6 +341,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -355,6 +370,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -383,6 +399,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -411,6 +428,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -439,6 +457,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -467,6 +486,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -495,6 +515,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -523,6 +544,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -551,6 +573,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -579,6 +602,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -607,6 +631,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -635,6 +660,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -663,6 +689,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -691,6 +718,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -719,6 +747,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -747,6 +776,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -775,6 +805,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -803,6 +834,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -831,6 +863,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -859,6 +892,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -887,6 +921,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -915,6 +950,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -943,6 +979,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -971,6 +1008,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -999,6 +1037,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1027,6 +1066,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1055,6 +1095,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1083,6 +1124,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1111,6 +1153,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1139,6 +1182,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1167,6 +1211,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1195,6 +1240,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1223,6 +1269,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1251,6 +1298,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1279,6 +1327,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1307,6 +1356,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1335,6 +1385,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1365,6 +1416,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1393,6 +1445,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1421,6 +1474,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1449,6 +1503,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1477,6 +1532,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1505,6 +1561,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1533,6 +1590,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1561,6 +1619,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1589,6 +1648,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,
@@ -1617,6 +1677,7 @@
       "signal": "AVOID",
       "sector": "",
       "beta": 1.0,
+      "dte": null,
       "factors": {
         "quality": 0.0,
         "confirmation": 11.0,

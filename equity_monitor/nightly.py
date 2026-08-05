@@ -76,6 +76,7 @@ def build(allow_fixture_fallback=True):
             "signal": sig,
             "sector": f.get("sector", ""),
             "beta": f.get("beta", 1.0),
+            "dte": f.get("dte"),  # days to next earnings (None = n/a, e.g. ETFs)
             "factors": {
                 "quality": comp["quality"],
                 "confirmation": comp["confirmation"],
@@ -118,13 +119,44 @@ def _fallback_to_committed():
         write_ledger([], 0.0)
 
 
+def compute_sector_deltas(prev_payload, rows):
+    """Score-weighted sector % now vs previous run. Additive metadata only."""
+    def sector_weights(payload):
+        by = {}
+        for r in (payload or {}).get("all", []):
+            w = r.get("weight", 0) or 0
+            sec = (r.get("factors") or {}).get("sector") or r.get("sector") or "Other"
+            by[sec] = by.get(sec, 0) + w
+        tot = sum(by.values()) or 1.0
+        return {k: v / tot * 100.0 for k, v in by.items()}
+    cur = sector_weights({"all": rows})
+    prev = sector_weights(prev_payload)
+    out = {}
+    for sec in set(cur) | set(prev):
+        out[sec] = round(cur.get(sec, 0.0) - prev.get(sec, 0.0), 2)
+    return out
+
+
 def write_ledger(rows, mcapsum, skipped=None, live=False):
+    import glob
     os.makedirs(LEDGER, exist_ok=True)
+    # archive previous run for drift comparison (rolling T-1)
+    prev_path = os.path.join(LEDGER, "prev_index.json")
+    prev_payload = None
+    if os.path.exists(prev_path):
+        try:
+            with open(prev_path) as fh:
+                prev_payload = json.load(fh)
+        except Exception:
+            prev_payload = None
+    # sector deltas vs previous run
+    sector_deltas = compute_sector_deltas(prev_payload, rows) if prev_payload else {}
     payload = {
         "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "benchmark": "SPY",
         "live": live,
         "hist_base": "history/",   # sparkline closes live at {hist_base}{SYMBOL}.json
+        "sector_deltas": sector_deltas,  # additive metadata: today% - prev% per sector
         "universe": len(rows),
         "mcapsum": float(mcapsum),
         "skipped": skipped or [],
@@ -133,6 +165,12 @@ def write_ledger(rows, mcapsum, skipped=None, live=False):
     }
     with open(os.path.join(LEDGER, "index.json"), "w") as fh:
         json.dump(payload, fh, indent=2)
+    # archive this run as previous for next drift comparison
+    try:
+        with open(prev_path, "w") as fh:
+            json.dump(payload, fh, indent=2)
+    except Exception:
+        pass
 
 
 if __name__ == "__main__":
