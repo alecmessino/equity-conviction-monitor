@@ -28,7 +28,9 @@ jobs:
         env:
           FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
         run: |
-          python -m equity_monitor.nightly || echo "nightly failed; falling back to committed fixture"
+          python -m equity_monitor.nightly
+          echo "--- nightly exit: $? ---"
+          python -c "import json;d=json.load(open('ledger/index.json'));print('LEDGER live=',d.get('live'),'rows=',len(d.get('all',[])))"
       - name: Assemble site
         run: |
           mkdir -p site/web site/ledger site/docs
