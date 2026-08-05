@@ -93,14 +93,16 @@ def refresh() -> None:
 
 def _write_ledger(ranked: list[dict], bench: Quote | None) -> None:
     os.makedirs("ledger", exist_ok=True)
+    mcapsum = sum(r.get("mcap", 0) for r in ranked)
     payload = {"as_of": datetime.now(timezone.utc).isoformat(),
                "benchmark": (bench.symbol if bench else "SPY"),
                "universe": len(ranked) + 1,
+               "mcapsum": mcapsum,
                "top10": ranked[:10],
                "all": ranked}
-    with open("ledger/signals.json", "w") as f:
+    with open("ledger/index.json", "w") as f:
         json.dump(payload, f, indent=2)
-    _log("wrote ledger/signals.json")
+    _log("wrote ledger/index.json")
 
 
 def cli() -> None:

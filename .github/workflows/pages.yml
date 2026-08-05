@@ -1,0 +1,43 @@
+name: Deploy Equity Terminal to GitHub Pages
+
+on:
+  push:
+    branches: ["master"]
+  schedule:
+    - cron: "10 13 * * 1-5"   # weekdays 13:10 UTC (post-US-market-close refresh)
+  workflow_dispatch:
+
+env:
+  FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+  POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+      - name: Install deps
+        run: pip install -e .[dev]
+      - name: Run nightly build (generates ledger/)
+        run: python -m equity_monitor --build
+        env:
+          FMP_API_KEY: ${{ secrets.FMP_API_KEY }}
+          POLYGON_API_KEY: ${{ secrets.POLYGON_API_KEY }}
+      - name: Gather Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./web
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
