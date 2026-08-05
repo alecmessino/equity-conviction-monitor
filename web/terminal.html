@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <title>Equity Conviction Monitor — Terminal</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">  <!-- avoid favicon 404 noise -->
 <style>
   :root{--bg:#0b0c10;--fg:#e6e6e6;--muted:#8a8f98;--g:#14161a;--g2:#1d2026;--buy:#2ecc71;--hold:#f1c40f;--sell:#e74c3c;--str:#27ae60;--watch:#95a5a6}
   *{box-sizing:border-box}body{margin:0;font-family:'SF Mono',Monaco,monospace;font-size:13px;color:var(--fg);background:var(--bg)}
@@ -116,6 +117,7 @@ function rsBlend(t, spy){
 
 // --- load live data + render ---
 async function load(){
+  try {
   let j;
   let ledgerPath = (location.pathname.includes('/web/') ? '../' : '') + 'ledger/index.json';
   try { j = await fetch(ledgerPath).then(r=>r.json()); }
@@ -142,15 +144,16 @@ async function load(){
   document.getElementById('rb-mcap').textContent='$'+(j.mcapsum/1e12).toFixed(1)+'T';
   document.getElementById('rb-upd').textContent=j.as_of? j.as_of.slice(11,16):'—';
   renderFactors(rows.slice(0,6));
+  } catch(e){ console.error('render failed', e); }
 }
 function renderFactors(top){
   const d=document.getElementById('top-factors');
-  d.innerHTML = top.map(a=>{const f=a.factors||{};const sig=signal(a.conviction);return `<div style="margin-bottom:3px"><b>${a.symbol}</b> <span style="color:var(--muted)">Q${f.quality!=null?f.quality:'—'}·C${f.momentum!=null?f.momentum:'—'}·R${f.risk!=null?f.risk.toFixed(2):'—'}</span> <b class="sig-${sig[1]}">${a.conviction} ${sig[0]}</b></div>`}).join('');
+  d.innerHTML = top.map(a=>{const f=a.factors||{};const sig=signal(a.conviction);return `<div style="margin-bottom:3px"><b>${a.symbol}</b> <span style="color:var(--muted)">Q${f.quality!=null?f.quality:'—'}·C${f.confirmation!=null?f.confirmation:'—'}·R${f.risk!=null?f.risk.toFixed(2):'—'}</span> <b class="sig-${sig[1]}">${a.conviction} ${sig[0]}</b></div>`}).join('');
 }
 function fmtPrice(p,s){if(p==null)p=0;return (s.includes('BRK')||p>=100)?'$'+p.toFixed(2):'$'+p.toFixed(2)}
 function fmtPct(s,v){if(v==null)v=0;return s+(v>=0?'':'-')+Math.abs(v).toFixed(1)}
-function showDetail(sym){ alert(`Detail for ${sym}\\n(v2: Quality × Confirmation × RiskAdj)`); }
+function showDetail(sym){ console.log(`Detail for ${sym}\n(v2: Quality × Confirmation × RiskAdj)`); }
 load();
-setInterval(load, 900_000);  // 15-min refresh
+setInterval(function(){load().catch(function(e){console.error('refresh failed',e);});}, 900_000);  // 15-min refresh
 </script>
 </body></html>
