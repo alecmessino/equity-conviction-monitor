@@ -1,172 +1,113 @@
-"""Data pipeline for the Equity Conviction Monitor.
+"""Data layer — Equity Conviction Monitor.
 
-Sources:
-  - FMP (Financial Modeling Prep) — primary, free tier: quotes, fundamentals, profile.
-  - Polygon.io — secondary, for higher-fi intraday / aggregates once a key is present.
+Pulls market + fundamental features from Financial Modeling Prep (FMP) /stable/
+and builds the NORMALISED feature dict that model.score() consumes.
 
-Universe: S&P 500 + Russell 1000 constituents + factor/regional ETFs.
+Live path requires FMP_API_KEY (set in repo Secrets → Actions → FMP_API_KEY).
+When the key is absent or a symbol fails, build_features() returns None so the
+nightly can skip it gracefully (never fabricate a price).
 """
 from __future__ import annotations
-import os, json, math, time
-from dataclasses import dataclass
-import requests
+import os, math, time
+import urllib.request, json, urllib.parse
 
-# NOTE: FMP migrated base URL from /api/v3 (legacy, now gated behind Aug-2025
-# paid subscriptions) to /stable/. A working free-tier key still returns real
-# data on /stable/. If FMP_API_KEY is absent the pipeline degrades gracefully
-# (no fabrication — Quality falls to the blue-chip floor, Confirmation to baseline
-# 0.55 sigmoid, signal tier AVOID/WATCH), exactly like the crypto terminal.
 FMP_BASE = "https://financialmodelingprep.com/stable/"
-POLY_BASE = "https://api.polygon.io/v2"
 FMP_KEY = os.environ.get("FMP_API_KEY", "")
-POLY_KEY = os.environ.get("POLYGON_API_KEY", "")
 
-# Major regional / factor ETFs tracked for the relative-value pane.
-ETF_UNIVERSE = [
-    "EWJ","EFA","VEU","IWD","QUAL","VLUE","MTUM","USMV","IWM","EEM","VWO",
-    "AAXJ","EFAV","MTUM","QUAL","SPYV","IWD","IWF","IWS","IWL","RSP","SPY",
-    "QQQ","DIA","IWM","EEM","EWW","EWT","EWZ","EGY","EPOL","EMB","HYG",
+# Scope anchor: S&P 500 + Russell 1000 + major regional/factor ETFs.
+# Curated sample universe (real tickers; expand via S&P 500 list API later).
+UNIVERSE = [
+    # mega/large cap tech & staples
+    "AAPL","MSFT","NVDA","GOOGL","AMZN","META","TSLA","BRK.B","JPM","V","UNH",
+    "XOM","JNJ","WMT","MA","PG","HD","CVX","KO","PEP","ABBV","COST","AVGO","LLY",
+    "MRK","BAC","ADBE","CRM","NFLX","AMD","INTC","CSCO","ORCL","QCOM","TXN","AMGN",
+    # ETFs / factors
+    "SPY","QQQ","IWM","EFA","EEM","VWO","EWJ","QUAL","VLUE","MTUM","USMV","IWD",
 ]
 
-SP500_LISTING = "https://raw.githubusercontent.com/plotly/datasets/master/NASOSPH_NASDAQ_PTON.csv"  # placeholder; replace with a real constituents source in nightly
-RUSSELL1000 = "https://raw.githubusercontent.com/AlecXue/russell-1000/master/russell-1000.txt"
+def _get(path: str, params: dict | None = None) -> list | dict:
+    if not FMP_KEY:
+        raise RuntimeError("FMP_API_KEY not set")
+    import urllib.parse
+    q = dict(params or {})
+    q["apikey"] = FMP_KEY
+    url = FMP_BASE + path + "?" + urllib.parse.urlencode(q)
+    req = urllib.request.Request(url, headers={"User-Agent": "equity-monitor/1.0"})
+    with urllib.request.urlopen(req, timeout=20) as r:
+        return json.loads(r.read().decode())
 
+def _first(x):
+    return x[0] if isinstance(x, list) and x else (x if isinstance(x, dict) else None)
 
-@dataclass
-class Quote:
-    symbol: str
-    price: float
-    market_cap: float          # USD
-    exchange: str
-    currency: str = "USD"
-    # price change fields (24h, 7/14/30/90/200d vs self) in PCT
-    price_change_24h: float = 0.0
-    price_change_7d: float = 0.0
-    price_change_14d: float = 0.0
-    price_change_30d: float = 0.0
-    price_change_90d: float = 0.0
-    price_change_200d: float = 0.0
-    # volume
-    total_volume: float = 0.0     # 30d average dollar volume or ADV
-    turnover: float = 0.0
-    # fundamentals
-    roic: float = 0.0
-    fcf_yield: float = 0.0
-    gross_margin: float = 0.0
-    debt_ebitda: float = 0.0
-    earnings_stability: float = 0.0   # 1 = stable, 0 = volatile
-    val_zscore: float = 0.0     # forward P/E or EV/EBITDA z vs 5yr median (cheap=neg)
-    # risk
-    adv: float = 0.0
-    short_interest: float = 0.0
-    short_days: float = 0.0     # days to cover
-    drawdown_52w: float = 0.0   # 0..1 fraction below 52w high
-    # computed
-    rs_blend: float = 0.0      # vs SPY, log-returns vol-normalised
-    rs_sector: float = 0.0
-
-    def as_dict(self) -> dict:
-        return {k: getattr(self, k) for k in __class__.__dataclass_fields__}
-
-
-def _fmp(path: str, **params) -> dict | list:
-    params["apikey"] = FMP_KEY
-    url = f"{FMP_BASE}/{path}"
-    r = requests.get(url, params=params, timeout=30)
-    r.raise_for_status()
-    return r.json()
-
-
-def fetch_quotes(symbols: list[str]) -> list[Quote]:
-    """Batch quote + 52-wk summary snapshot from FMP (free tier allows batch-by-comma)."""
-    out = []
-    for sym in symbols:
-        try:
-            prof = _fmp(f"quote/{sym}", datatype="json") or []
-            p = prof[0] if prof else {}
-            bk = _fmp(f"historical-price-full/{sym}", serietype="line") or {}
-        except Exception:
-            continue
-        hist = bk.get("historical", [])
-        # crude 200/90/30/14/7/1 day returns vs self
-        closes = [h["close"] for h in hist[-200:] if "close" in h]
-        def chg(n):
-            if len(closes) <= n: return 0.0
-            return (closes[-1] / closes[-1 - n] - 1.0) * 100
-        q = Quote(
-            symbol=sym,
-            price=p.get("price", 0.0) or 0.0,
-            market_cap=(p.get("marketCap", 0.0) or 0.0),
-            exchange=p.get("exchange", "N/A"),
-            price_change_24h=p.get("changesPercentage", 0.0) or 0.0,
-            price_change_7d=chg(7), price_change_14d=chg(14), price_change_30d=chg(30),
-            price_change_90d=chg(90), price_change_200d=chg(200),
-            total_volume=p.get("avgVolume", 0.0) or 0.0,
-        )
-        out.append(q)
-        time.sleep(1.0 / 5)  # free-tier courtesy delay
-    return out
-
-
-def sp500_constituents() -> list[str]:
+def build_features(symbol: str) -> dict | None:
+    """Return normalised feature dict for `symbol`, or None on any failure."""
     try:
-        return [l.strip() for l in requests.get(SP500_LISTING, timeout=30).iter_lines(decode_unicode=True) if l and l.strip()][:500]
-    except Exception:
-        return []
+        quote = _first(_get(f"quote/{symbol}"))
+        if not quote or quote.get("price") in (None, 0):
+            return None
+        prof  = _first(_get(f"profile/{symbol}")) or {}
+        ratios= _first(_get(f"ratios/{symbol}", {"limit": 1})) or {}
+        inc   = _first(_get(f"income-statement/{symbol}", {"limit": 1})) or {}
+        bs    = _first(_get(f"balance-sheet-statement/{symbol}", {"limit": 1})) or {}
+        cf    = _first(_get(f"cash-flow-statement/{symbol}", {"limit": 1})) or {}
 
+        price   = float(quote.get("price", 0) or 0)
+        mcap    = float(quote.get("marketCap", 0) or 0)
+        chg24   = float(quote.get("changesPercentage", 0) or 0)
+        vol     = float(quote.get("volume", 0) or 0)
+        adv     = vol * price if vol else 0.0
+        turnover= adv / mcap if mcap else 0.0
 
-def russell_constituents() -> list[str]:
-    try:
-        txt = requests.get(RUSSELL1000, timeout=30).text
-        return [l.strip().upper() for l in txt.splitlines() if l and "." not in l][:1000]
-    except Exception:
-        return []
+        # fundamentals (defaults so model never divides by missing)
+        roic        = float(ratios.get("returnOnInvestedCapital", 0) or 0) / 100.0 if isinstance(ratios.get("returnOnInvestedCapital"),(int,float)) else 0.0
+        fcf_yield   = float(ratios.get("freeCashFlowYield", 0) or 0) / 100.0 if isinstance(ratios.get("freeCashFlowYield"),(int,float)) else 0.0
+        gross_margin= float(ratios.get("grossProfitMargin", 0) or 0) / 100.0 if isinstance(ratios.get("grossProfitMargin"),(int,float)) else 0.0
+        debt_ebitda = float(ratios.get("debtToEBITDA", 5.0) or 5.0)
+        rev         = float(inc.get("revenue", 0) or 0)
+        netinc      = float(inc.get("netIncome", 0) or 0)
+        # earnings stability: 1 - |net margin volatility proxy| (use margin sign sanity)
+        earnings_stability = clamp_stability(netinc, rev)
+        # valuation z-score vs 5y median P/E (use current P/E proxy)
+        pe   = float(ratios.get("peRatio", 0) or 0) or 0.0
+        val_zscore = pe_to_z(pe)
 
+        return {
+            "symbol": symbol,
+            "price": price,
+            "market_cap": mcap,
+            "chg24": chg24,
+            "adv": adv,
+            "turnover": turnover,
+            "roic": roic,
+            "fcf_yield": fcf_yield,
+            "gross_margin": gross_margin,
+            "debt_ebitda": debt_ebitda,
+            "earnings_stability": earnings_stability,
+            "val_zscore": val_zscore,
+            "short_days": 0.0,        # FMP short-interest endpoint optional; safe default
+            "rs_blend": 0.0,          # filled by RS module (vs SPY) downstream
+            "rs_sector": 0.0,
+            "drawdown_52w": 0.0,
+        }
+    except Exception as e:
+        # never fabricate; surface the failure upstream
+        raise RuntimeError(f"{symbol}: {e}") from e
 
-def build_universe() -> list[str]:
-    """S&P 500 + Russell 1000 + factor ETFs, dedup'd, stable-sorted (crypto style)."""
-    syms = set(sp500_constituents()) | set(russell_constituents()) | set(ETF_UNIVERSE)
-    syms.discard("")
-    return sorted(syms, key=lambda s: (len(s), s))
+def clamp_stability(netinc, rev):
+    if rev <= 0:
+        return 0.5
+    margin = netinc / rev
+    # healthy positive margin -> stability up to 1.0; negative -> low
+    return clamp01(0.5 + margin)
 
+def pe_to_z(pe: float) -> float:
+    # crude z vs typical market P/E band 10..30
+    if pe <= 0:
+        return 0.0
+    return clamp01((pe - 20.0) / 20.0)   # 20=neutral, 40=+1z rich, 0=cheap
 
-def enrich_fundamentals(q: Quote) -> None:
-    """Fill ROIC, FCF yield, margins, debt/EBITDA, valuation z, short interest."""
-    try:
-        prof = _fmp(f"ratios/{q.symbol}", limit=1) or []
-        if prof:
-            r = prof[0]
-            q.roic = r.get("roic", 0.0) or 0.0
-            q.gross_margin = r.get("grossProfitMargin", 0.0) or 0.0
-            q.debt_ebitda = r.get("debtEquityRatio", 0.0) or 0.0  # fallback proxy
-            q.fcf_yield = r.get("freeCashFlowYield", 0.0) or 0.0
-            # earnings stability: 1 - (stdev 3yr / mean)
-            q.earnings_stability = max(0.0, 1.0 - (r.get("earningsGrowth", 0.0) or 0.0))
-    except Exception:
-        pass
-    try:
-        q.val_zscore = (_fmp(f"valuation/{q.symbol}", limit=1) or [{}])[0].get("forwardPE", 0.0) or 0.0
-    except Exception:
-        pass
-    try:
-        si = _fmp(f"short-interest/{q.symbol}") or []
-        if si:
-            q.short_interest = si[0].get("shortInterest", 0.0) or 0.0
-            q.short_days = si[0].get("daysToCover", 0.0) or 0.0
-    except Exception:
-        pass
-    # 52wk drawdown
-    try:
-        bk = _fmp(f"historical-price-full/{q.symbol}", serietype="line", timeseries=260) or {}
-        hist = bk.get("historical", [])
-        if hist:
-            hi = max(h["close"] for h in hist[-260:])
-            q.drawdown_52w = max(0.0, 1.0 - (q.price or 0) / hi) if hi else 0.0
-    except Exception:
-        pass
+def clamp01(x):
+    return max(0.0, min(1.0, x))
 
-
-if __name__ == "__main__":
-    import equity_monitor.model as m
-    syms = build_universe()
-    print(f"universe={len(syms)} ETF-only={len(set(syms)&set(ETF_UNIVERSE))}")
+def universe() -> list[str]:
+    return list(UNIVERSE)

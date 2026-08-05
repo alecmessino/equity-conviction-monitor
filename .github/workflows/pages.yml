@@ -1,8 +1,8 @@
 name: Deploy Equity Terminal to GitHub Pages
 
-# Decouples site deploy from data fetch: Pages always builds from the committed
-# web/ + ledger/ so the terminal renders even before FMP_API_KEY is wired.
-# A separate nightly workflow (nightly.yml) regenerates ledger/ once keys exist.
+# Pages serves a static site built from web/ + ledger/ + docs/. The terminal
+# fetches ../ledger/index.json relative to /web/, so the artifact must contain
+# both web/ and ledger/ at the served root. A small build step assembles them.
 
 on:
   push:
@@ -24,10 +24,22 @@ jobs:
       - uses: actions/checkout@v4
       - name: Setup Pages
         uses: actions/configure-pages@v4
+      - name: Assemble site
+        run: |
+          mkdir -p site/web site/ledger site/docs
+          cp web/terminal.html site/web/
+          cp ledger/index.json site/ledger/
+          cp docs/methodology.html site/docs/
+          cat > site/index.html <<'EOF'
+          <!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+          <meta http-equiv="refresh" content="0;url=web/terminal.html">
+          <title>Equity Conviction Monitor</title></head>
+          <body><p>Loading <a href="web/terminal.html">Equity Conviction Monitor</a>…</p></body></html>
+          EOF
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: ./web
+          path: ./site
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4

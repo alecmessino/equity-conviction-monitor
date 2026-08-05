@@ -78,7 +78,7 @@ A mean-reversion kicker lifts C when a high-ROIC leader sits ≥10% off its 52-w
 <h3>Risk Adjustment — the down-weight</h3>
 <p>This is where thin-float pumps and expensive momentum traps get multiplied down:</p>
 <ul>
-  <li><b>Liquidity fit</b> — ADV/mc turnover band; floored to 1.0 for depth≥0.90 (blue-chip perps/ETFs not punished for low %)</li>
+  <li><b>Liquidity fit</b> — <b>dollar ADV tiers</b> (log scale): $1M/d≈0.25, $10M≈0.5, $100M≈0.75, $1B≈0.9, $10B+≈1.0. Floored at 0.25 so thin names aren't zeroed, never a blanket mega-cap grant.</li>
   <li><b>Short interest</b> — days-to-cover ≥3 starts a linear drag; 33d → full kill</li>
   <li><b>Valuation z-score</b> — forward P/E or EV/EBITDA vs 5-yr median; cheap lifts, rich dings</li>
   <li><b>Perp/options overlay</b> — RiskMult<sub>perp</sub>, currently 1.0 (no derivatives feed; flips on once short-interest + option-skew ingest is live).</li>

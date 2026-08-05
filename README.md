@@ -39,20 +39,26 @@ Every score is byte-identical between the browser (vanilla JS) and the nightly
 builder (Python) and is gated by `tests/test_parity.py` (frontend/backend parity)
 and the FROZEN_CONVICTION regression fixture.
 
-## Go live (2 steps — both needed, neither is committed)
+## Go live (2 steps — both needed)
 
-1. **Flip GitHub Pages on** (no code fix possible here — it's a UI toggle):
-   `Settings → Pages → Build and deployment → Source: Deploy from a branch`
-   → select `master` branch, `/` (root) folder → Save.
-   Once on, the terminal serves at `https://alecmessino.github.io/equity-conviction-monitor/`.
+1. **Enable Pages with the Actions source** (one-time UI toggle):
+   `Settings → Pages → Build and deployment → Source: GitHub Actions`
+   (do NOT pick "Deploy from a branch" — this repo uses the `pages.yml` workflow).
+   The terminal then serves at `https://alecmessino.github.io/equity-conviction-monitor/web/terminal.html`.
 
-2. **Set FMP_API_KEY** (`Settings → Secrets and variables → Actions`):
-   - `FMP_API_KEY` — **required** for live S&P 500 / Russell 1000 data.
+2. **Set `FMP_API_KEY`** (`Settings → Secrets and variables → Actions → New repository secret`):
+   - `FMP_API_KEY` — **required** for live market data. Free tier covers
+     `quote`, `profile`, `income-statement`, `ratios`, `balance-sheet-statement`,
+     `cash-flow-statement` (everything the model consumes).
      Create a free account at financialmodelingprep.com → Dashboard → API Keys.
-     NOTE: the key printed in FMP's docs page is a **placeholder** (returns 401
-     `[]` on `/stable/`); generate a real one from your dashboard.
-   - `POLYGON_API_KEY` — optional, for higher-fi intraday/Vol surfaces.
+     The key printed in FMP's docs page is a **placeholder** (returns `404 []` on
+     `/stable/`); generate a real one from your dashboard.
+   - `POLYGON_API_KEY` — optional (higher-fi intraday/Vol surfaces).
 
-**Without FMP_API_KEY**: the terminal still serves and renders (shows the fixture
-data + v2 model), but scores are placeholder-calibrated, not market data. No
-data is ever fabricated.
+**After setting the key**, trigger the data refresh: `Actions → pages.yml → Run workflow`
+(or push to `master`). The nightly (`equity_monitor/nightly.py`) pulls fresh features,
+scores them, and rewrites `ledger/index.json` — the terminal then shows live prices
+and **model-computed** convictions, not the committed fixture.
+
+Without `FMP_API_KEY`: the terminal still serves and renders, but `ledger/index.json`
+is the committed fixture (model-computed sample, clearly labelled). No data is ever fabricated.

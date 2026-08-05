@@ -2,158 +2,177 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<title>Equity Conviction Monitor — Terminal</title>
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<link rel="icon" href="data:,">  <!-- avoid favicon 404 noise -->
+<title>Equity Conviction Monitor</title>
+<link rel="icon" href="data:,">
 <style>
-  :root{--bg:#0b0c10;--fg:#e6e6e6;--muted:#8a8f98;--g:#14161a;--g2:#1d2026;--buy:#2ecc71;--hold:#f1c40f;--sell:#e74c3c;--str:#27ae60;--watch:#95a5a6}
-  *{box-sizing:border-box}body{margin:0;font-family:'SF Mono',Monaco,monospace;font-size:13px;color:var(--fg);background:var(--bg)}
-  .wrap{display:grid;grid-template-columns:320px 1fr 320px;gap:0;border-collapse:collapse}
-  .ribbon{background:linear-gradient(180deg,#14161a,#1d2026);padding:10px 14px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #2a2e35;font-size:12px}
-  .ribbon .brand{font-weight:700;letter-spacing:.5px}
-  .ribbon .live{color:#27ae60;text-shadow:0 0 6px rgba(39,174,96,.5)}
-  .stat{background:#0f1115;border:1px solid #2a2e35;border-radius:5px;padding:6px 10px}
-  .stat .num{display:block;font-size:18px;font-weight:700}
-  .pill{background:#1a1c21;border:1px solid #333;padding:5px 10px;border-radius:4px;font-size:11px;color:var(--muted);cursor:pointer}
-  main{display:grid;grid-template-columns:320px 1fr 320px;gap:12px;padding:12px}
-  section{background:#0f1115;border:1px solid #2a2e35;border-radius:6px;padding:10px}
-  h2{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 8px}
-  table{width:100%;border-collapse:collapse;font-size:11px}
-  th,td{padding:3px 4px;text-align:right;font-variant-numeric:tabular-nums}
-  th:first-child,td:first-child{text-align:left}
-  th{color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.5px}
-  tbody tr{border-bottom:1px solid #1a1c21}
-  tbody tr td{color:#c7ccd1}
-  tbody tr:hover{background:#14161a}
-  .sig-STRONG,.sig-BUY{color:var(--buy)}
-  .sig-HOLD{color:#f1c40f}
-  .sig-WATCH{color:var(--watch)}
-  .sig-AVOID{color:var(--sell)}
-  .bar{height:4px;background:#2a2e35;border-radius:2px;overflow:hidden}
-  .bar>i{display:block;height:100%;background:var(--buy)}
-  .bar.i{display:background:#555}
-  small{color:var(--muted);font-size:10px}
+  :root{--bg:#07090d;--panel:#0e1118;--panel2:#131822;--fg:#e8ecf2;--muted:#7c8696;--line:#1d2330;
+        --buy:#27e08a;--str:#1ed760;--hold:#ffd23f;--watch:#8a94a6;--sell:#ff4d5e;--accent:#39c2ff}
+  *{box-sizing:border-box}body{margin:0;font-family:'SF Mono',ui-monospace,Monaco,Menlo,monospace;font-size:13px;color:var(--fg);background:var(--bg);line-height:1.45}
+  a{color:var(--accent);text-decoration:none}
+  header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0c1018,#07090d)}
+  .brand{font-weight:700;letter-spacing:.5px;font-size:15px}
+  .brand small{color:var(--muted);font-weight:400;font-size:11px;margin-left:8px}
+  .ribbon{display:flex;gap:26px}
+  .stat{text-align:right}
+  .stat b{display:block;font-size:18px;font-weight:700}
+  .stat span{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px}
+  .layout{display:grid;grid-template-columns:1.7fr 1fr;gap:14px;padding:16px 20px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .panel h2{margin:0;padding:10px 14px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);border-bottom:1px solid var(--line);background:var(--panel2)}
+  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+  th,td{padding:7px 10px;text-align:right;border-bottom:1px solid #12161f;white-space:nowrap}
+  th{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.4px;font-weight:600;position:sticky;top:0;background:var(--panel2)}
+  td.l,th.l{text-align:left}
+  tbody tr:hover{background:#10141d}
+  .sig-STRONG,.sig-BUY{color:var(--buy)}.sig-HOLD{color:var(--hold)}.sig-WATCH{color:var(--watch)}.sig-AVOID{color:var(--sell)}
+  .pos{color:var(--buy)}.neg{color:var(--sell)}
+  .bar{display:inline-block;width:54px;height:7px;background:#1a2030;border-radius:4px;overflow:hidden;vertical-align:middle}
+  .bar i{display:block;height:100%;background:linear-gradient(90deg,#1a6,#3ce0a0)}
+  .factors{padding:10px 14px;display:flex;flex-direction:column;gap:6px}
+  .frow{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #12161f}
+  .frow:last-child{border-bottom:none}
+  .qr{font-size:11px;color:var(--muted)}
+  .qr b{color:var(--fg)}
+  .pill{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700}
+  .pill.STRONG,.pill.BUY{background:rgba(39,224,138,.15);color:var(--buy)}
+  .pill.HOLD{background:rgba(255,210,63,.15);color:var(--hold)}
+  .pill.WATCH{background:rgba(138,148,166,.15);color:var(--watch)}
+  .pill.AVOID{background:rgba(255,77,94,.15);color:var(--sell)}
+  .overlay{margin:12px 20px 0}
+  .overlay input{background:#0a0d13;border:1px solid var(--line);color:var(--fg);padding:7px 10px;border-radius:6px;width:220px;font-family:inherit;font-size:12px}
+  .overlay button{background:var(--accent);border:none;color:#00121f;padding:7px 14px;border-radius:6px;font-weight:700;cursor:pointer;margin-left:8px}
+  #overlay-status{color:var(--muted);font-size:11px;margin-top:6px}
+  .note{color:var(--muted);font-size:10px;padding:8px 14px;border-top:1px solid var(--line)}
+  .err{background:rgba(255,77,94,.1);border:1px solid rgba(255,77,94,.3);color:#ff8a95;padding:8px 14px;font-size:11px;margin:12px 20px 0;border-radius:6px;display:none}
 </style>
 </head>
 <body>
-<div class="ribbon">
-  <div class="brand">EQUITY <span class="live">CONVICTION</span> MONITOR</div>
-  <a href="../docs/methodology.html" class="pill">Methodology · Performance</a>
-  <div class="stat"><b id="rb-mcap" class="num">—</b><span>Tracked Mkt Cap</span></div>
-  <div class="stat"><b id="rb-conv" class="num">—</b><span>Avg Conviction</span></div>
-  <div class="stat"><b id="rb-str" class="num">—</b><span>BUY+ (≥70)</span></div>
-  <div class="stat"><b id="rb-upd" class="num">—</b><span>Last Update</span></div>
-</div>
-<main>
-  <section class="card">
+<header>
+  <div class="brand">EQUITY CONVICTION MONITOR <small>v2 · Quality × Confirmation × RiskAdj</small></div>
+  <div class="ribbon">
+    <div class="stat"><b id="rb-mcap">—</b><span>Tracked Mkt Cap</span></div>
+    <div class="stat"><b id="rb-conv">—</b><span>Avg Conviction</span></div>
+    <div class="stat"><b id="rb-buy">—</b><span>BUY+ (≥70)</span></div>
+    <div class="stat"><b id="rb-upd">—</b><span>Last Update</span></div>
+  </div>
+</header>
+
+<div class="err" id="err"></div>
+
+<div class="layout">
+  <div class="panel">
     <h2>Conviction Matrix</h2>
-    <div id="matrix-wrap"><table id="tbl-conv"><thead><tr>
-      <th>#</th><th>Ticker</th><th>Price</th><th>24H Δ</th><th>Turnover</th><th>Liquidity</th><th>Z(ATH)</th><th>Conv</th><th>Signal</th>
-    </tr></thead><tbody id="conv-tbody"></tbody></table></div>
-  </section>
-  <section class="card"><h2>Top Factors · Today</h2><div id="top-factors"><small>—</small></div></section>
-  <section class="card"><h2>Portfolio Overlay</h2><textarea id="holdings" placeholder='{ "MSFT": 10 } — overlays your bags on the matrix.' rows="3" style="width:100%;background:#0b0c10;border:1px solid #2a2e35;color:#e6e6e6;font-family:inherit"></textarea>
-    <button id="overlay-btn" style="margin-top:6px">OVERLAY HOLDINGS</button></section>
-</main>
+    <table>
+      <thead><tr>
+        <th class="l">#</th><th class="l">Ticker</th><th>Price</th><th>24H Δ</th>
+        <th>Turnover</th><th>Liquidity</th><th>Conv</th><th class="l">Signal</th>
+      </tr></thead>
+      <tbody id="conv-tbody"></tbody>
+    </table>
+    <div class="note">Liquidity bar = dollar ADV tier (log scale, $1M→$10B+). Conviction = 100·Q·C·R (v2).</div>
+  </div>
+
+  <div class="panel">
+    <h2>Top Factors · Today</h2>
+    <div class="factors" id="top-factors"></div>
+    <div class="note">Q = structural quality (ROIC/FCF/margin/leverage) · C = RS vs SPY soft-tanh · R = liquidity × short-int × valuation.</div>
+  </div>
+</div>
+
+<div class="overlay">
+  <input id="ov" placeholder='{"AAPL":10,"NVDA":5}' value='{"AAPL":10,"NVDA":5}'>
+  <button onclick="overlay()">OVERLAY HOLDINGS</button>
+  <div id="overlay-status"></div>
+</div>
 
 <script>
-// --- constants / universe (mirrors crypto terminal) ---
-const EXCLUDED = new Set(["SPY","IVV","VTI","SCHB"]);  // benchmark + broad only
-const PERP = {};  // equity analogue: no perps; RiskMult=1.0 (placeholder until options-flow feed connects)
-
-// --- helpers (range-normalised, mirrors equity_monitor.utils/model) ---
+// ---- v2 multiplicative port (mirrors equity_monitor.model.score) ----
 function clamp01(x){return Math.max(0,Math.min(1,x))}
-function liquidityFit(turn){  // 0..30 score; warm turn 0.5%-1.5% sweet spot
-  if(!turn||turn<=0)return 0;
-  if(turn<=0.005)return 12*turn;
-  if(turn<=0.015)return 10+turn/0.015*10;
-  if(turn<=0.030)return 20;
-  return Math.max(2,30-Math.log10(turn/0.03)*8);
+function signal(c){return c>=80?'STRONG':c>=70?'BUY':c>=55?'HOLD':c>=40?'WATCH':'AVOID'}
+
+function quality(t){
+  var roic=clamp01((t.roic||0)/0.25), fcf=clamp01((t.fcf_yield||0)/0.08),
+      bm=clamp01((t.gross_margin||0)/0.50),
+      lev=clamp01(1-(t.debt_ebitda||5)/3), g=clamp01(t.earnings_stability||0.5);
+  var raw=0.30*roic+0.25*fcf+0.15*bm+0.20*lev+0.10*g;
+  return clamp01((raw-0.20)/0.60);
+}
+function confirmation(t){
+  var rs=t.rs_blend||0, c=0.10+0.90*((Math.tanh(rs/25)+1)/2);
+  var dd=t.drawdown_52w||0;
+  if(dd>=0.15) c=Math.min(0.95,c*(1+0.15*(dd-0.10)));
+  return c;
+}
+function risk_adjustment(t){
+  var adv=t.adv||0, liq = adv<=0?0.15:clamp01((Math.log10(adv)-6)/4);
+  liq=Math.max(0.25,Math.min(1,liq));
+  var dtc=t.short_days||0, short_mult=clamp01(1-Math.max(0,dtc-3)/30);
+  var val_z=t.val_zscore||0, val_mult=clamp01(1+0.15*(-val_z));
+  var risk=liq*short_mult*val_mult; return Math.max(0.4,Math.min(1,risk));
+}
+function score(t){
+  var q=quality(t), c=confirmation(t), r=risk_adjustment(t);
+  return {q:c2(q),c:c2(c),r:c2(r),conv:Math.round(Math.max(0,Math.min(100,100*q*c*r)))};
+  function c2(x){return Math.round(x*1000)/1000}
 }
 
-// --- v2 MULTIPLICATIVE conviction = Quality x Confirmation x RiskAdjustment ---
-function conviction(t, perp, rsBlend){
-  perp = perp||1; rsBlend = rsBlend||0;
-  const turn = t.vol/t.mc;
-  // Q: Structural Quality (range-normalised fundamentals, 0-1)
-  const roic = clamp01((t.roic||0)/0.25);
-  const fcf  = clamp01((t.fcf_yield||0)/0.08);
-  const bm   = clamp01((t.gross_margin||0)/0.50);
-  const lev  = clamp01(1.0 - (t.debt_ebitda||0)/3.0);
-  const g    = clamp01(t.earnings_stability||0.5);
-  const qraw = 0.30*roic + 0.25*fcf + 0.15*bm + 0.20*lev + 0.10*g;
-  let q = clamp01((qraw - 0.2)/0.6);
-  const depth = clamp01((Math.log10(t.mc||1)-6)/4);
-  if(depth>=0.90) q = Math.max(q,0.4);  // blue-chip floor
-  // C: Confirmation (soft tanh over rsBlend, no clamp)
-  const cm = 0.10 + 0.90*((Math.tanh(rsBlend/25)+1)/2);   // [0.10, 0.91]
-  // mean-rev kicker: deep 52w drawdown of a quality leader = unwinding confirmation
-  let c = cm;
-  if((t.drawdown_52w||0)>=0.10 && (t.roic||0)>0){ c = Math.min(0.95, cm*(1+0.15*(t.drawdown_52w-0.05))); }
-  // R: Risk Adjustment (mcap-aware liquidity + shorts + valuation, 0.4-1.0)
-  let a_frac;
-  if(depth>=0.90){ a_frac=1.0; }
-  else{ a_frac=liquidityFit(turn)/30; a_frac=Math.max(0.4,a_frac); }
-  const short_mult = clamp01(1.0 - Math.max(0,(t.short_days||0)-3.0)/30.0);
-  const val_mult = clamp01(1.0 + 0.15*(-(t.val_zscore||0)));
-  const risk = a_frac * short_mult * val_mult * perp;
-  const conv = Math.max(0, Math.min(100, Math.round(100*q*c*risk)));
-  const comp = {liquidity:Math.round(a_frac*30*10)/10, depth:Math.round(depth*20*10)/10, momentum:Math.round(cm*20*10)/10,
-                confirmation:Math.round(c*20*10)/10, risk:Math.round(risk*1000)/1000, rsBlend:Math.round(rsBlend*100)/100,
-                roic:Math.round(roic*20), fcf_yield:Math.round(fcf*20), gross_margin:Math.round(bm*20), debt:Math.round(lev*20),
-                short_days:Math.round(t.short_days||0), val_zscore:Math.round((t.val_zscore||0)*100)/100};
-  return {conv, comp};
-}
-function signal(c){ return c>=80?["STRONG","buy"]:c>=70?["BUY","buy"]:c>=55?["HOLD","hold"]:c>=40?["WATCH","watch"]:["AVOID","avoid"];}
-
-// --- rs blend: multi-horizon sector-denoised RS vs SPY (log-return proxy) ---
-function rsBlend(t, spy){
-  if(!spy) return 0;
-  const w7=.30,w14=.25,w30=.25,w200=.20;
-  const h7=(t.rs7||0)-(spy.rs7||0), h14=(t.rs14||0)-(spy.rs14||0),
-        h30=(t.rs30||0)-(spy.rs30||0), h200=(t.rs200||0)-(spy.rs200||0);
-  return w7*h7+w14*h14+w30*h30+w200*h200;
+// ---- render ----
+function fmtPrice(p){ if(p==null)p=0; return '$'+Number(p).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
+function fmtPct(v){ if(v==null)v=0; return (v>=0?'+':'')+v.toFixed(2)+'%'; }
+function liqBar(adv){
+  if(!adv) return '<span class="bar"><i style="width:3%"></i></span>';
+  var w=Math.round(clamp01((Math.log10(adv)-6)/4)*100);
+  return '<span class="bar"><i style="width:'+Math.max(3,w)+'%"></i></span>';
 }
 
-// --- load live data + render ---
 async function load(){
-  try {
-  let j;
-  let ledgerPath = (location.pathname.includes('/web/') ? '../' : '') + 'ledger/index.json';
-  try { j = await fetch(ledgerPath).then(r=>r.json()); }
-  catch(e){ console.error('load failed', e); return; }
-  const rows = j.all || [];
-  const spy = j.all ? j.all.find(a=>a.symbol==="SPY") : null;
-  rows.sort((a,b)=>b.conviction-a.conviction);
-  const tb=document.getElementById('conv-tbody');
-  tb.innerHTML = rows.slice(0,20).map((a,i)=>{
-    const [s,sigc]=signal(a.conviction); const f=a.factors||{};
-    return `<tr onclick="showDetail('${a.symbol}')">
-    <td>${i+1}</td><td>${a.symbol}</td><td>${fmtPrice(a.price,a.symbol)}</td>
-    <td class="pos">${fmtPct(a.chg>=0?'+':'',a.chg||0)}%</td>
-    <td>${a.turnover?`${(a.turnover*100).toFixed(1)}%`:'—'}</td>
-    <td><span class="bar"><i style="width:${Math.min(100,((a.factors.liquidity_fit||0)/30)*100)}%"></i></span></td>
-    <td>${a.z_ath!==undefined&&a.z_ath!==null?`${fmtPct('',a.z_ath)}`:'—'}</td>
-    <td class="sig-${sigc}">${a.conviction}</td><td class="sig-${sigc}">${s}</td>`;
+ try{
+  var j = await fetch((location.pathname.includes('/web/')?'../ledger/':location.pathname.includes('/docs/')?'./':'./ledger/')+'index.json').then(r=>r.json());
+  var rows = j.all||[];
+  if(rows.length===0){ document.getElementById('err').style.display='block';
+    document.getElementById('err').textContent='No data: set FMP_API_KEY and run the nightly build (Actions → pages.yml → Run workflow). Terminal shows structure only.'; }
+  document.getElementById('rb-mcap').textContent = '$'+(j.mcapsum/1e12).toFixed(1)+'T';
+  document.getElementById('rb-conv').textContent = Math.round(rows.reduce((s,a)=>s+a.conviction,0)/(rows.length||1));
+  document.getElementById('rb-buy').textContent = rows.filter(a=>a.conviction>=70).length;
+  document.getElementById('rb-upd').textContent = (j.as_of||'—').slice(11,16)||'—';
+
+  document.getElementById('conv-tbody').innerHTML = rows.slice(0,30).map(function(a,i){
+    var s=signal(a.conviction);
+    return '<tr onclick="showDetail(\''+a.symbol+'\')">'
+      +'<td class="l">'+(i+1)+'</td>'
+      +'<td class="l"><b>'+a.symbol+'</b></td>'
+      +'<td>'+fmtPrice(a.price)+'</td>'
+      +'<td class="'+(a.chg>=0?'pos':'neg')+'">'+fmtPct(a.chg||0)+'</td>'
+      +'<td>'+( a.turnover? (a.turnover*100).toFixed(2)+'%':'—')+'</td>'
+      +'<td>'+liqBar(a.adv)+'</td>'
+      +'<td class="sig-'+s.toLowerCase()+'"><b>'+a.conviction+'</b></td>'
+      +'<td class="l"><span class="pill '+s+'">'+s+'</span></td></tr>';
   }).join('');
-  // ribbon stats
-  const buy = rows.filter(a=>a.conviction>=70).length;
-  const avg = rows.reduce((s,a)=>s+a.conviction,0)/rows.length;
-  document.getElementById('rb-str').textContent=buy;
-  document.getElementById('rb-conv').textContent=Math.round(avg);
-  document.getElementById('rb-mcap').textContent='$'+(j.mcapsum/1e12).toFixed(1)+'T';
-  document.getElementById('rb-upd').textContent=j.as_of? j.as_of.slice(11,16):'—';
-  renderFactors(rows.slice(0,6));
-  } catch(e){ console.error('render failed', e); }
+
+  document.getElementById('top-factors').innerHTML = rows.slice(0,8).map(function(a){
+    var f=a.factors||{}, s=signal(a.conviction);
+    return '<div class="frow"><span><b>'+a.symbol+'</b> <span class="qr">Q'+(f.quality!=null?f.quality:'—')+'·C'+(f.confirmation!=null?f.confirmation:'—')+'·R'+(f.risk!=null?f.risk.toFixed(2):'—')+'</span></span>'
+      +'<span class="sig-'+s.toLowerCase()+'"><b>'+a.conviction+'</b> <span class="pill '+s+'">'+s+'</span></span></div>';
+  }).join('');
+ }catch(e){ console.error('load failed',e);
+   document.getElementById('err').style.display='block';
+   document.getElementById('err').textContent='Load error: '+e.message+' — is ledger/index.json present?';
+ }
 }
-function renderFactors(top){
-  const d=document.getElementById('top-factors');
-  d.innerHTML = top.map(a=>{const f=a.factors||{};const sig=signal(a.conviction);return `<div style="margin-bottom:3px"><b>${a.symbol}</b> <span style="color:var(--muted)">Q${f.quality!=null?f.quality:'—'}·C${f.confirmation!=null?f.confirmation:'—'}·R${f.risk!=null?f.risk.toFixed(2):'—'}</span> <b class="sig-${sig[1]}">${a.conviction} ${sig[0]}</b></div>`}).join('');
+function showDetail(sym){ console.log('Detail '+sym); }
+function overlay(){
+  try{
+    var bags=JSON.parse(document.getElementById('ov').value||'{}');
+    var rows=[...document.querySelectorAll('#conv-tbody tr')];
+    var hit=[];
+    rows.forEach(function(tr){ var tk=tr.children[1]&&tr.children[1].textContent;
+      if(bags[tk]){ tr.style.outline='1px solid var(--accent)'; hit.push(tk+'×'+bags[tk]); } });
+    document.getElementById('overlay-status').textContent = hit.length? 'Overlayed: '+hit.join(', ') : 'No holdings matched the matrix.';
+  }catch(e){ document.getElementById('overlay-status').textContent='Invalid JSON.'; }
 }
-function fmtPrice(p,s){if(p==null)p=0;return (s.includes('BRK')||p>=100)?'$'+p.toFixed(2):'$'+p.toFixed(2)}
-function fmtPct(s,v){if(v==null)v=0;return s+(v>=0?'':'-')+Math.abs(v).toFixed(1)}
-function showDetail(sym){ console.log(`Detail for ${sym}\n(v2: Quality × Confirmation × RiskAdj)`); }
 load();
-setInterval(function(){load().catch(function(e){console.error('refresh failed',e);});}, 900_000);  // 15-min refresh
+setInterval(function(){ load().catch(function(e){console.error('refresh failed',e);}); }, 900000);
 </script>
-</body></html>
+</body>
+</html>
