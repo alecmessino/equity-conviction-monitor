@@ -37,4 +37,22 @@ Data (FMP/Polygon) -> Features -> v2 Multiplicative Model -> Portfolio -> Ledger
 
 Every score is byte-identical between the browser (vanilla JS) and the nightly
 builder (Python) and is gated by `tests/test_parity.py` (frontend/backend parity)
-plus `FROZEN_CONVICTION` fixture regression.
+and the FROZEN_CONVICTION regression fixture.
+
+## Go live (2 steps — both needed, neither is committed)
+
+1. **Flip GitHub Pages on** (no code fix possible here — it's a UI toggle):
+   `Settings → Pages → Build and deployment → Source: Deploy from a branch`
+   → select `master` branch, `/` (root) folder → Save.
+   Once on, the terminal serves at `https://alecmessino.github.io/equity-conviction-monitor/`.
+
+2. **Set FMP_API_KEY** (`Settings → Secrets and variables → Actions`):
+   - `FMP_API_KEY` — **required** for live S&P 500 / Russell 1000 data.
+     Create a free account at financialmodelingprep.com → Dashboard → API Keys.
+     NOTE: the key printed in FMP's docs page is a **placeholder** (returns 401
+     `[]` on `/stable/`); generate a real one from your dashboard.
+   - `POLYGON_API_KEY` — optional, for higher-fi intraday/Vol surfaces.
+
+**Without FMP_API_KEY**: the terminal still serves and renders (shows the fixture
+data + v2 model), but scores are placeholder-calibrated, not market data. No
+data is ever fabricated.
