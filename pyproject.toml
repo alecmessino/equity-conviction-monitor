@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=64", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "equity-conviction-monitor"
+version = "0.1.0"
+description = "Equity Conviction Monitor - Quality mean-reversion terminal (S&P 500 + Russell 1000 + factor ETFs)"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas>=2.0",
+    "requests>=2.31",
+    "numpy>=1.24",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=7.4"]
+
+[project.scripts]
+equity-monitor = "equity_monitor.cli:main"
+
+[tool.setuptools]
+packages = ["equity_monitor"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

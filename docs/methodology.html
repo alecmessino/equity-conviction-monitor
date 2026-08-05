@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><title>Equity Conviction Monitor — Methodology · Performance</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{--bg:#0b0c10;--fg:#e6e6e6;--muted:#8a8f98;--g:#14161a;--buy:#2ecc71;--str:#27ae60}
+  *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--fg);font-family:-apple-system,Segoe UI,Roboto,monospace;font-size:13px;line-height:1.5}
+  .wrap{max-width:820px;margin:0 auto;padding:24px}
+  h1{font-size:26px}
+  h2{font-size:18px;margin-top:24px;border-bottom:1px solid #222;padding-bottom:6px}
+  h3{font-size:14px;margin-top:18px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px}
+  code{background:#14161a;padding:1px 4px;border-radius:3px;font-size:12px}
+  table{width:100%;border-collapse:collapse;margin:12px 0;font-size:12px}
+  th,td{border-bottom:1px solid #1a1c21;padding:6px 8px;text-align:left}
+  th{color:var(--muted);font-weight:600}
+  .formula{background:#0f1115;border:1px solid #2a2e35;border-radius:6px;padding:14px;font-family:monospace;font-size:13px;line-height:1.8;margin:10px 0}
+  .callout{background:#0f1115;border-left:3px solid var(--buy);padding:10px 14px;margin:12px 0;border-radius:0 6px 6px 0}
+  .tag{display:inline-block;background:#1a1c21;border:1px solid #333;border-radius:3px;padding:1px 6px;font-size:10px;text-transform:uppercase;margin-right:6px}
+  .muted{color:var(--muted)}
+  .pos{color:var(--buy)}
+</style>
+</head>
+<body><div class="wrap">
+
+<h1>Equity Conviction Monitor — Methodology</h1>
+<p class="muted">Quality mean-reversion terminal · S&P 500 + Russell 1000 + factor/regional ETFs</p>
+
+<h2>1 · Overview</h2>
+<p>A distinct terminal to the <a href="https://crypto-conviction-monitor.github.io/" target="_blank">Crypto Conviction Monitor</a>. Captures
+high-quality mean-reversion and factor-rotation opportunities in large-cap US equities and major
+factor/regional ETFs. Same v2 multiplicative philosophy — <b>Conviction = 100 × Quality × Confirmation × RiskAdjustment</b> — but with
+equity-native factors (fundamentals, multi-horizon RS vs SPY, short-interest, valuation). Updated nightly + 15-min intraday.</p>
+
+<h2>2 · Data</h2>
+<ul>
+  <li><b>Polygon.io / FMP</b> — price, volume, ADV, short interest, option skew (when available)</li>
+  <li><b>Tiingo / Yahoo</b> — fundamentals (ROIC, FCF yield, margins, debt/EBITDA, earnings stability)</li>
+  <li><b>FRED / ETF.com</b> — factor ETF constituents &amp; factor exposure weights</li>
+  <li><b>Universe</b> — S&amp;P 500 + Russell 1000 constituents + ETFs (EWJ, EFA, VEU, IWD, QUAL, VLUE, MTUM, USMV, IWM, EEM, VWO, AAXJ, …)</li>
+</ul>
+
+<h2>3 · Conviction Model</h2>
+<p>Each eligible name gets one 0–100 score. The identical function runs in the terminal (JS) and the
+nightly builder (Python), tested byte-identical via <code>tests/test_parity.py</code> (parity gate +
+FROZEN_CONVICTION regression).</p>
+
+<div class="formula">
+// v2 MULTIPLICATIVE (replaces v1 additive on 2026-08-04):<br>
+// forced by the crypto v1 ceiling collision — clamping momentum erased discrimination.<br>
+<br>
+Q = Structural Quality &nbsp;(log-mcap floor + fundamentals)<br>
+C = Market Confirmation &nbsp; (soft tanh over rs_blend vs SPY/sector; NO hard clamp)<br>
+R = Risk Adjustment &nbsp; (liquidity-fit × short-interest × valuation, 0.4–1.0)<br>
+<br>
+conviction = clamp( 100 · Q · C · R , 0, 100 )<br>
+<br>
+signal: <span class="pos">STRONG ≥80</span> · <span class="pos">BUY ≥70</span> · HOLD ≥55 · WATCH ≥40 · AVOID &lt;40
+</div>
+
+<h3>Quality — Structural Quality</h3>
+<ul>
+  <li><span class="tag">ROIC</span> clamp(ROIC / 0.25) — 25% = excellent</li>
+  <li><span class="tag">FCF yield</span> clamp(FCF yield / 0.08) — 8% = excellent</li>
+  <li><span class="tag">gross margin</span> clamp(gross / 0.50)</li>
+  <li><span class="tag">balance sheet</span> clamp(1 − debt/EBITDA / 3.0)</li>
+  <li><span class="tag">earnings stability</span> 3-yr earnings-volatility inverse</li>
+  <li><span class="tag">mcap depth</span> log-mcap floor; blue chips (depth≥0.90) get Q≥0.4 so a rich single
+      metric never annihilates a quality leader.</li>
+</ul>
+
+<h3>Confirmation — Multi-horizon RS</h3>
+<p>rs_blend = 0.30·rs<sub>7d</sub> + 0.25·rs<sub>14d</sub> + 0.25·rs<sub>30d</sub> + 0.20·rs<sub>200d</sub> — relative
+to <b>sector then SPY</b> (so sector beta doesn't masquerade as alpha). Log-return based, vol-normalised.
+Mapped through a soft <code>tanh(rs_blend/25)</code> sigmoid — <b>no clamp</b>, so names inside a tier stay ranked by RS strength.
+A mean-reversion kicker lifts C when a high-ROIC leader sits ≥10% off its 52-wk high (unwinding = confirmation, not risk).</p>
+
+<h3>Risk Adjustment — the down-weight</h3>
+<p>This is where thin-float pumps and expensive momentum traps get multiplied down:</p>
+<ul>
+  <li><b>Liquidity fit</b> — ADV/mc turnover band; floored to 1.0 for depth≥0.90 (blue-chip perps/ETFs not punished for low %)</li>
+  <li><b>Short interest</b> — days-to-cover ≥3 starts a linear drag; 33d → full kill</li>
+  <li><b>Valuation z-score</b> — forward P/E or EV/EBITDA vs 5-yr median; cheap lifts, rich dings</li>
+  <li><b>Perp/options overlay</b> — RiskMult<sub>perp</sub>, currently 1.0 (no derivatives feed; flips on once short-interest + option-skew ingest is live).</li>
+</ul>
+
+<div class="callout"><b>Conjunctive gate (eligibility).</b> A name is <i>qualified</i> only if it clears Liquidity (ADV ≥ 0.25% mc),
+Valuation (forward P/E ∈ [5, 40] or EV/EBITDA ∈ [4, 25]), and Regime (not a macro risk-off / LIQ TRAP) — <i>simultaneously</i>.
+The gate filters <i>eligibility</i>; the score ranks among eligible names.</div>
+
+<h2>4 · Portfolio Construction</h2>
+<p>Paper index of the <b>top-10 eligible names by conviction</b>, <b>score-proportional weights</b>, daily rebalanced.
+Performance attribution decomposes into Q / C / R contributions per name.</p>
+
+<h2>5 · Special Modules</h2>
+<div class="formula">
+Module A — Liquidity &amp; Short-Interest (turnover band + days-to-cover)<br>
+Module B — Stability/ERA (24h stability of RS)<br>
+Module C — Fundamentals (the Quality composite)<br>
+Module D — Factor Exposure (Value / Quality / Momentum / Size / Low-Vol from ETF weights)<br>
+Module E — Mean-Reversion Overlay (RSI(14) troughs, Bollinger %B, 200d distance, 52w drawdown)
+</div>
+
+<h3>6 · Caveats</h3>
+<ul>
+  <li><b>Free-tier limits.</b> Polygon/FMP free tiers lack intraday order book and full fundamental history. Modules are scoped to real fields; anything un-sourced is marked unavailable.</li>
+  <li><b>Calibration.</b> The z-score / threshold bands were set from representative mega-cap fixtures and single-asset ranges, not a calibrated S&amp;P 500 universe. Retune against realised 12-mo realised vs conviction ranks before treating scores as investible.</li>
+  <li><b>Mean-reversion ≠ free money.</b> A high-Quality / deep-drawdown / strong-RS-setup (the MSFT-style candidate) is a <i>probability</i> filter, not a guarantee.</li>
+  <li><b>Paper only.</b> Research signal system, not investment advice.</li>
+  <li><b>Perps/options overlay is server-side.</b> RiskMult<sub>perp</sub> needs a short-interest + options-fit feed (no cross-origin client call). The terminal reads the nightly <code>perp_mult</code> field so client and index stay consistent.</li>
+</ul>
+
+</div></body></html>

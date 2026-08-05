@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Equity Conviction Monitor — Terminal</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root{--bg:#0b0c10;--fg:#e6e6e6;--muted:#8a8f98;--g:#14161a;--g2:#1d2026;--buy:#2ecc71;--hold:#f1c40f;--sell:#e74c3c;--str:#27ae60;--watch:#95a5a6}
+  *{box-sizing:border-box}body{margin:0;font-family:'SF Mono',Monaco,monospace;font-size:13px;color:var(--fg);background:var(--bg)}
+  .wrap{display:grid;grid-template-columns:320px 1fr 320px;gap:0;border-collapse:collapse}
+  .ribbon{background:linear-gradient(180deg,#14161a,#1d2026);padding:10px 14px;display:flex;align-items:center;gap:14px;border-bottom:1px solid #2a2e35;font-size:12px}
+  .ribbon .brand{font-weight:700;letter-spacing:.5px}
+  .ribbon .live{color:#27ae60;text-shadow:0 0 6px rgba(39,174,96,.5)}
+  .stat{background:#0f1115;border:1px solid #2a2e35;border-radius:5px;padding:6px 10px}
+  .stat .num{display:block;font-size:18px;font-weight:700}
+  .pill{background:#1a1c21;border:1px solid #333;padding:5px 10px;border-radius:4px;font-size:11px;color:var(--muted);cursor:pointer}
+  main{display:grid;grid-template-columns:320px 1fr 320px;gap:12px;padding:12px}
+  section{background:#0f1115;border:1px solid #2a2e35;border-radius:6px;padding:10px}
+  h2{font-size:12px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin:0 0 8px}
+  table{width:100%;border-collapse:collapse;font-size:11px}
+  th,td{padding:3px 4px;text-align:right;font-variant-numeric:tabular-nums}
+  th:first-child,td:first-child{text-align:left}
+  th{color:var(--muted);text-transform:uppercase;font-size:10px;letter-spacing:.5px}
+  tbody tr{border-bottom:1px solid #1a1c21}
+  tbody tr td{color:#c7ccd1}
+  tbody tr:hover{background:#14161a}
+  .sig-STRONG,.sig-BUY{color:var(--buy)}
+  .sig-HOLD{color:#f1c40f}
+  .sig-WATCH{color:var(--watch)}
+  .sig-AVOID{color:var(--sell)}
+  .bar{height:4px;background:#2a2e35;border-radius:2px;overflow:hidden}
+  .bar>i{display:block;height:100%;background:var(--buy)}
+  .bar.i{display:background:#555}
+  small{color:var(--muted);font-size:10px}
+</style>
+</head>
+<body>
+<div class="ribbon">
+  <div class="brand">EQUITY <span class="live">CONVICTION</span> MONITOR</div>
+  <a href="methodology.html" class="pill">Methodology · Performance</a>
+  <div class="stat"><b id="rb-mcap" class="num">—</b><span>Tracked Mkt Cap</span></div>
+  <div class="stat"><b id="rb-conv" class="num">—</b><span>Avg Conviction</span></div>
+  <div class="stat"><b id="rb-str" class="num">—</b><span>BUY+ (≥70)</span></div>
+  <div class="stat"><b id="rb-upd" class="num">—</b><span>Last Update</span></div>
+</div>
+<main>
+  <section class="card">
+    <h2>Conviction Matrix</h2>
+    <div id="matrix-wrap"><table id="tbl-conv"><thead><tr>
+      <th>#</th><th>Ticker</th><th>Price</th><th>24H Δ</th><th>Turnover</th><th>Liquidity</th><th>Z(ATH)</th><th>Conv</th><th>Signal</th>
+    </tr></thead><tbody id="conv-tbody"></tbody></table></div>
+  </section>
+  <section class="card"><h2>Top Factors · Today</h2><div id="top-factors"><small>—</small></div></section>
+  <section class="card"><h2>Portfolio Overlay</h2><textarea id="holdings" placeholder='{ "MSFT": 10 } — overlays your bags on the matrix.' rows="3" style="width:100%;background:#0b0c10;border:1px solid #2a2e35;color:#e6e6e6;font-family:inherit"></textarea>
+    <button id="overlay-btn" style="margin-top:6px">OVERLAY HOLDINGS</button></section>
+</main>
+
+<script>
+// --- constants / universe (mirrors crypto terminal) ---
+const EXCLUDED = new Set(["SPY","IVV","VTI","SCHB"]);  // benchmark + broad only
+const PERP = {};  // equity analogue: no perps; RiskMult=1.0 (placeholder until options-flow feed connects)
+
+// --- helpers (range-normalised, mirrors equity_monitor.utils/model) ---
+function clamp01(x){return Math.max(0,Math.min(1,x))}
+function liquidityFit(turn){  // 0..30 score; warm turn 0.5%-1.5% sweet spot
+  if(!turn||turn<=0)return 0;
+  if(turn<=0.005)return 12*turn;
+  if(turn<=0.015)return 10+turn/0.015*10;
+  if(turn<=0.030)return 20;
+  return Math.max(2,30-Math.log10(turn/0.03)*8);
+}
+
+// --- v2 MULTIPLICATIVE conviction = Quality x Confirmation x RiskAdjustment ---
+function conviction(t, perp, rsBlend){
+  perp = perp||1; rsBlend = rsBlend||0;
+  const turn = t.vol/t.mc;
+  // Q: Structural Quality (range-normalised fundamentals, 0-1)
+  const roic = clamp01((t.roic||0)/0.25);
+  const fcf  = clamp01((t.fcf_yield||0)/0.08);
+  const bm   = clamp01((t.gross_margin||0)/0.50);
+  const lev  = clamp01(1.0 - (t.debt_ebitda||0)/3.0);
+  const g    = clamp01(t.earnings_stability||0.5);
+  const qraw = 0.30*roic + 0.25*fcf + 0.15*bm + 0.20*lev + 0.10*g;
+  let q = clamp01((qraw - 0.2)/0.6);
+  const depth = clamp01((Math.log10(t.mc||1)-6)/4);
+  if(depth>=0.90) q = Math.max(q,0.4);  // blue-chip floor
+  // C: Confirmation (soft tanh over rsBlend, no clamp)
+  const cm = 0.10 + 0.90*((Math.tanh(rsBlend/25)+1)/2);   // [0.10, 0.91]
+  // mean-rev kicker: deep 52w drawdown of a quality leader = unwinding confirmation
+  let c = cm;
+  if((t.drawdown_52w||0)>=0.10 && (t.roic||0)>0){ c = Math.min(0.95, cm*(1+0.15*(t.drawdown_52w-0.05))); }
+  // R: Risk Adjustment (mcap-aware liquidity + shorts + valuation, 0.4-1.0)
+  let a_frac;
+  if(depth>=0.90){ a_frac=1.0; }
+  else{ a_frac=liquidityFit(turn)/30; a_frac=Math.max(0.4,a_frac); }
+  const short_mult = clamp01(1.0 - Math.max(0,(t.short_days||0)-3.0)/30.0);
+  const val_mult = clamp01(1.0 + 0.15*(-(t.val_zscore||0)));
+  const risk = a_frac * short_mult * val_mult * perp;
+  const conv = Math.max(0, Math.min(100, Math.round(100*q*c*risk)));
+  const comp = {liquidity:Math.round(a_frac*30*10)/10, depth:Math.round(depth*20*10)/10, momentum:Math.round(cm*20*10)/10,
+                confirmation:Math.round(c*20*10)/10, risk:Math.round(risk*1000)/1000, rsBlend:Math.round(rsBlend*100)/100,
+                roic:Math.round(roic*20), fcf_yield:Math.round(fcf*20), gross_margin:Math.round(bm*20), debt:Math.round(lev*20),
+                short_days:Math.round(t.short_days||0), val_zscore:Math.round((t.val_zscore||0)*100)/100};
+  return {conv, comp};
+}
+function signal(c){ return c>=80?["STRONG","buy"]:c>=70?["BUY","buy"]:c>=55?["HOLD","hold"]:c>=40?["WATCH","watch"]:["AVOID","avoid"];}
+
+// --- rs blend: multi-horizon sector-denoised RS vs SPY (log-return proxy) ---
+function rsBlend(t, spy){
+  if(!spy) return 0;
+  const w7=.30,w14=.25,w30=.25,w200=.20;
+  const h7=(t.rs7||0)-(spy.rs7||0), h14=(t.rs14||0)-(spy.rs14||0),
+        h30=(t.rs30||0)-(spy.rs30||0), h200=(t.rs200||0)-(spy.rs200||0);
+  return w7*h7+w14*h14+w30*h30+w200*h200;
+}
+
+// --- load live data + render ---
+async function load(){
+  let j;
+  try { j = await fetch('ledger/index.json').then(r=>r.json()); }
+  catch(e){ console.error('load failed', e); return; }
+  const rows = j.all || [];
+  const spy = j.all ? j.all.find(a=>a.symbol==="SPY") : null;
+  const rows = j.all || [];
+  rows.sort((a,b)=>b.conviction-a.conviction);
+  const tb=document.getElementById('conv-tbody');
+  tb.innerHTML = rows.slice(0,20).map((a,i)=>{
+    const [s,sigc]=signal(a.conviction); const f=a.factors||{};
+    <tr onclick="showDetail('${a.symbol}')">
+    <td>${i+1}</td><td>${a.symbol}</td><td>${fmtPrice(a.price,a.symbol)}</td>
+    <td class="pos">${fmtPct(a.chg>=0?'+':'',a.chg||0)}%</td>
+    <td>${a.turnover?`${(a.turnover*100).toFixed(1)}%`:'—'}</td>
+    <td><span class="bar"><i style="width:${Math.min(100,((a.factors.liquidity_fit||0)/30)*100)}%"></i></span></td>
+    <td>${a.z_ath!==undefined&&a.z_ath!==null?`${fmtPct('',a.z_ath)}`:'—'}</td>
+    <td class="sig-${sigc}">${a.conviction}</td><td class="sig-${sigc}">${s}</td>`;
+  }).join('');
+  // ribbon stats
+  const buy = rows.filter(a=>a.conviction>=70).length;
+  const avg = rows.reduce((s,a)=>s+a.conviction,0)/rows.length;
+  document.getElementById('rb-str').textContent=buy;
+  document.getElementById('rb-conv').textContent=Math.round(avg);
+  document.getElementById('rb-mcap').textContent='$'+(j.mcapsum/1e12).toFixed(1)+'T';
+  document.getElementById('rb-upd').textContent=j.as_of? j.as_of.slice(11,16):'—';
+  renderFactors(rows.slice(0,6));
+}
+function renderFactors(top){
+  const d=document.getElementById('top-factors');
+  d.innerHTML = top.map(a=>`<div style="margin-bottom:3px"><b>${a.symbol}</b> <span style="color:var(--muted)">Q${a.factors.quality}·C${a.factors.momentum}·R${a.factors.risk}</span> <b class="sig-${signal(a.conviction)[1]}">${a.conviction} ${signal(a.conviction)[0]}</b></div>`).join('');
+}
+function fmtPrice(p,s){return s.includes('BRK')?'$'+p.toFixed(2):(p>=100?'$'+p.toFixed(0):'$'+p.toFixed(2))}
+function fmtPct(s,v){return s+(v>=0?'':'-')+Math.abs(v).toFixed(1)}
+function showDetail(sym){ alert(`Detail for ${sym}\\n(v2: Quality × Confirmation × RiskAdj)`); }
+load();
+setInterval(load, 900_000);  // 15-min refresh
+</script>
+</body></html>

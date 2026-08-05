@@ -1,0 +1,250 @@
+{
+  "as_of": "2026-08-04T19:10:00Z",
+  "benchmark": "SPY",
+  "universe": 7,
+  "mcapsum": 10332000000000.0,
+  "top10": [
+    {
+      "symbol": "AAPL",
+      "price": 220.0,
+      "conviction": 49,
+      "signal": "WATCH",
+      "mcap": 3400000000000.0,
+      "turnover": 0.0013235294117647058,
+      "rs_blend": 1.35,
+      "chg": 1.2,
+      "z_ath": 0.24,
+      "factors": {
+        "quality": 20.0,
+        "confirmation": 11.5,
+        "risk": 0.85,
+        "rs_blend": 1.35,
+        "liquidity_fit": 0.85,
+        "val_zscore": -0.5,
+        "depth": 20.0
+      }
+    },
+    {
+      "symbol": "MSFT",
+      "price": 480.0,
+      "conviction": 47,
+      "signal": "WATCH",
+      "mcap": 2800000000000.0,
+      "turnover": 0.001,
+      "rs_blend": 1.5,
+      "chg": 0.8,
+      "z_ath": 0.16,
+      "factors": {
+        "quality": 20.0,
+        "confirmation": 11.5,
+        "risk": 0.812,
+        "rs_blend": 1.5,
+        "liquidity_fit": 0.85,
+        "val_zscore": 0.3,
+        "depth": 20.0
+      }
+    },
+    {
+      "symbol": "NVDA",
+      "price": 1100.0,
+      "conviction": 35,
+      "signal": "AVOID",
+      "mcap": 2700000000000.0,
+      "turnover": 0.0012962962962962963,
+      "rs_blend": 24.25,
+      "chg": 3.1,
+      "z_ath": 0.62,
+      "factors": {
+        "quality": 14.7,
+        "confirmation": 17.7,
+        "risk": 0.544,
+        "rs_blend": 24.25,
+        "liquidity_fit": 0.85,
+        "val_zscore": 2.4,
+        "depth": 20.0
+      }
+    },
+    {
+      "symbol": "BRK.B",
+      "price": 520.0,
+      "conviction": 31,
+      "signal": "AVOID",
+      "mcap": 750000000000.0,
+      "turnover": 0.004,
+      "rs_blend": 0.02,
+      "chg": 0.3,
+      "z_ath": 0.06,
+      "factors": {
+        "quality": 15.0,
+        "confirmation": 11.0,
+        "risk": 0.748,
+        "rs_blend": 0.02,
+        "liquidity_fit": 0.85,
+        "val_zscore": 0.8,
+        "depth": 20.0
+      }
+    },
+    {
+      "symbol": "KO",
+      "price": 62.0,
+      "conviction": 23,
+      "signal": "AVOID",
+      "mcap": 72000000000.0,
+      "turnover": 0.016666666666666666,
+      "rs_blend": -4.4,
+      "chg": -0.5,
+      "z_ath": -0.1,
+      "factors": {
+        "quality": 14.1,
+        "confirmation": 9.4,
+        "risk": 0.68,
+        "rs_blend": -4.4,
+        "liquidity_fit": 0.85,
+        "val_zscore": -1.2,
+        "depth": 20.0
+      }
+    },
+    {
+      "symbol": "IWM",
+      "price": 210.0,
+      "conviction": 17,
+      "signal": "AVOID",
+      "mcap": 610000000000.0,
+      "turnover": 0.006557377049180328,
+      "rs_blend": -0.38,
+      "chg": 0.6,
+      "z_ath": 0.12,
+      "factors": {
+        "quality": 8.0,
+        "confirmation": 10.9,
+        "risk": 0.786,
+        "rs_blend": -0.38,
+        "liquidity_fit": 0.85,
+        "val_zscore": 0.5,
+        "depth": 20.0
+      }
+    }
+  ],
+  "all": [
+    {
+      "symbol": "AAPL",
+      "price": 220.0,
+      "conviction": 49,
+      "signal": "WATCH",
+      "mcap": 3400000000000.0,
+      "turnover": 0.0013235294117647058,
+      "rs_blend": 1.35,
+      "chg": 1.2,
+      "z_ath": 0.24,
+      "factors": {
+        "quality": 20.0,
+        "confirmation": 11.5,
+        "risk": 0.85,
+        "rs_blend": 1.35,
+        "liquidity_fit": 0.85,
+        "val_zscore": -0.5,
+        "depth": 20.0
+      }
+    },
+    {
+      "symbol": "MSFT",
+      "price": 480.0,
+      "conviction": 47,
+      "signal": "WATCH",
+      "mcap": 2800000000000.0,
+      "turnover": 0.001,
+      "rs_blend": 1.5,
+      "chg": 0.8,
+      "z_ath": 0.16,
+      "factors": {
+        "quality": 20.0,
+        "confirmation": 11.5,
+        "risk": 0.812,
+        "rs_blend": 1.5,
+        "liquidity_fit": 0.85,
+        "val_zscore": 0.3,
+        "depth": 20.0
+      }
+    },
+    {
+      "symbol": "NVDA",
+      "price": 1100.0,
+      "conviction": 35,
+      "signal": "AVOID",
+      "mcap": 2700000000000.0,
+      "turnover": 0.0012962962962962963,
+      "rs_blend": 24.25,
+      "chg": 3.1,
+      "z_ath": 0.62,
+      "factors": {
+        "quality": 14.7,
+        "confirmation": 17.7,
+        "risk": 0.544,
+        "rs_blend": 24.25,
+        "liquidity_fit": 0.85,
+        "val_zscore": 2.4,
+        "depth": 20.0
+      }
+    },
+    {
+      "symbol": "BRK.B",
+      "price": 520.0,
+      "conviction": 31,
+      "signal": "AVOID",
+      "mcap": 750000000000.0,
+      "turnover": 0.004,
+      "rs_blend": 0.02,
+      "chg": 0.3,
+      "z_ath": 0.06,
+      "factors": {
+        "quality": 15.0,
+        "confirmation": 11.0,
+        "risk": 0.748,
+        "rs_blend": 0.02,
+        "liquidity_fit": 0.85,
+        "val_zscore": 0.8,
+        "depth": 20.0
+      }
+    },
+    {
+      "symbol": "KO",
+      "price": 62.0,
+      "conviction": 23,
+      "signal": "AVOID",
+      "mcap": 72000000000.0,
+      "turnover": 0.016666666666666666,
+      "rs_blend": -4.4,
+      "chg": -0.5,
+      "z_ath": -0.1,
+      "factors": {
+        "quality": 14.1,
+        "confirmation": 9.4,
+        "risk": 0.68,
+        "rs_blend": -4.4,
+        "liquidity_fit": 0.85,
+        "val_zscore": -1.2,
+        "depth": 20.0
+      }
+    },
+    {
+      "symbol": "IWM",
+      "price": 210.0,
+      "conviction": 17,
+      "signal": "AVOID",
+      "mcap": 610000000000.0,
+      "turnover": 0.006557377049180328,
+      "rs_blend": -0.38,
+      "chg": 0.6,
+      "z_ath": 0.12,
+      "factors": {
+        "quality": 8.0,
+        "confirmation": 10.9,
+        "risk": 0.786,
+        "rs_blend": -0.38,
+        "liquidity_fit": 0.85,
+        "val_zscore": 0.5,
+        "depth": 20.0
+      }
+    }
+  ]
+}
