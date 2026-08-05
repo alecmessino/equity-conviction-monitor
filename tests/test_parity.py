@@ -62,8 +62,8 @@ def _extract_js_score(html_path=TERMINAL_HTML):
     if not m:
         pytest.skip("terminal.html has no <script>")
     js = m.group(1)
-    # sanity: v2 structure present
-    assert "100*q*c*r" in js or "100 * q * c * r" in js, "JS missing v2 100·Q·C·R"
+    # sanity: v2 multiplicative structure present (Q·C·R ≡ Q·M·V blend)
+    assert "100*q*m*vr.r" in js or "100 * q * c * r" in js or "100*q*c*r" in js, "JS missing v2 multiplicative core"
     assert "Math.tanh" in js, "JS confirmation must use soft-tanh"
     assert "cmRaw" not in js, "JS still uses v1 additive clamp (cmRaw)"
 

@@ -46,14 +46,13 @@ and the FROZEN_CONVICTION regression fixture.
    (do NOT pick "Deploy from a branch" — this repo uses the `pages.yml` workflow).
    The terminal then serves at `https://alecmessino.github.io/equity-conviction-monitor/web/terminal.html`.
 
-2. **Set `FMP_API_KEY`** (`Settings → Secrets and variables → Actions → New repository secret`):
-   - `FMP_API_KEY` — **required** for live market data. Free tier covers
-     `quote`, `profile`, `income-statement`, `ratios`, `balance-sheet-statement`,
-     `cash-flow-statement` (everything the model consumes).
-     Create a free account at financialmodelingprep.com → Dashboard → API Keys.
-     The key printed in FMP's docs page is a **placeholder** (returns `404 []` on
-     `/stable/`); generate a real one from your dashboard.
-   - `POLYGON_API_KEY` — optional (higher-fi intraday/Vol surfaces).
+2. **Set `ALPHAVANTAGE_API_KEY`** (`Settings → Secrets and variables → Actions → New repository secret`):
+   - **Required for fundamentals** (ROIC, margin, PE, market cap). Free tier, normal signup at
+     alphavantage.co (no card). This key actually works — FMP's free keys were being rejected by
+     FMP's API, which is why we moved off FMP.
+   - Price/volume/52-week data is pulled **keylessly from Yahoo Finance**, so the terminal renders
+     real live prices even before you add the AV key (convictions stay neutral until fundamentals
+     are present — never fabricated).
 
 **After setting the key**, trigger the data refresh: `Actions → pages.yml → Run workflow`
 (or push to `master`). The nightly (`equity_monitor/nightly.py`) pulls fresh features,

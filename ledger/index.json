@@ -1,10 +1,39 @@
 {
-  "as_of": "2026-08-05T20:02:16Z",
+  "as_of": "2026-08-05T20:30:00Z",
   "benchmark": "SPY",
-  "universe": 4,
-  "mcapsum": 6990000000000,
+  "universe": 8,
+  "mcapsum": 12520000000000,
   "skipped": [],
+  "live": false,
   "all": [
+    {
+      "symbol": "MSFT",
+      "price": 480.0,
+      "chg": 2.8,
+      "turnover": 0.00139,
+      "adv": 5000000000,
+      "mcap": 3600000000000,
+      "z_ath": null,
+      "conviction": 54,
+      "signal": "WATCH",
+      "sector": "Tech",
+      "beta": 1.1,
+      "factors": {
+        "quality": 20.0,
+        "confirmation": 11.7,
+        "risk": 0.925,
+        "rs_blend": 2.0,
+        "liquidity_fit": 0.925,
+        "val_zscore": -0.2,
+        "short_days": 2.0,
+        "roic": 0.27,
+        "fcf_yield": 0.06,
+        "gross_margin": 0.68,
+        "debt_ebitda": 0.8,
+        "earnings_stability": 0.88
+      },
+      "weight": 19.22
+    },
     {
       "symbol": "AAPL",
       "price": 220.0,
@@ -15,6 +44,8 @@
       "z_ath": null,
       "conviction": 52,
       "signal": "WATCH",
+      "sector": "Tech",
+      "beta": 1.25,
       "factors": {
         "quality": 20.0,
         "confirmation": 11.5,
@@ -22,8 +53,42 @@
         "rs_blend": 1.35,
         "liquidity_fit": 0.901,
         "val_zscore": -0.5,
-        "short_days": 3.0
-      }
+        "short_days": 3.0,
+        "roic": 0.3,
+        "fcf_yield": 0.08,
+        "gross_margin": 0.42,
+        "debt_ebitda": 1.8,
+        "earnings_stability": 0.85
+      },
+      "weight": 18.51
+    },
+    {
+      "symbol": "WMT",
+      "price": 62.0,
+      "chg": 0.4,
+      "turnover": 0.00235,
+      "adv": 2000000000,
+      "mcap": 850000000000,
+      "z_ath": null,
+      "conviction": 37,
+      "signal": "AVOID",
+      "sector": "Consumer",
+      "beta": 0.7,
+      "factors": {
+        "quality": 16.0,
+        "confirmation": 11.2,
+        "risk": 0.825,
+        "rs_blend": 0.6,
+        "liquidity_fit": 0.825,
+        "val_zscore": -0.8,
+        "short_days": 3.0,
+        "roic": 0.14,
+        "fcf_yield": 0.055,
+        "gross_margin": 0.25,
+        "debt_ebitda": 0.5,
+        "earnings_stability": 0.99
+      },
+      "weight": 13.17
     },
     {
       "symbol": "NVDA",
@@ -35,6 +100,8 @@
       "z_ath": null,
       "conviction": 36,
       "signal": "AVOID",
+      "sector": "Tech",
+      "beta": 1.8,
       "factors": {
         "quality": 14.7,
         "confirmation": 17.7,
@@ -42,8 +109,14 @@
         "rs_blend": 24.25,
         "liquidity_fit": 0.869,
         "val_zscore": 2.4,
-        "short_days": 2.5
-      }
+        "short_days": 2.5,
+        "roic": 0.28,
+        "fcf_yield": 0.01,
+        "gross_margin": 0.72,
+        "debt_ebitda": 1.5,
+        "earnings_stability": 0.6
+      },
+      "weight": 12.81
     },
     {
       "symbol": "BRK.B",
@@ -55,6 +128,8 @@
       "z_ath": null,
       "conviction": 30,
       "signal": "AVOID",
+      "sector": "Financial",
+      "beta": 1.0,
       "factors": {
         "quality": 15.0,
         "confirmation": 11.0,
@@ -62,8 +137,70 @@
         "rs_blend": 0.02,
         "liquidity_fit": 0.836,
         "val_zscore": 0.8,
-        "short_days": 1.0
-      }
+        "short_days": 1.0,
+        "roic": 0.09,
+        "fcf_yield": 0.035,
+        "gross_margin": 0.5,
+        "debt_ebitda": 0.2,
+        "earnings_stability": 0.95
+      },
+      "weight": 10.68
+    },
+    {
+      "symbol": "JPM",
+      "price": 210.0,
+      "chg": 0.9,
+      "turnover": 0.00583,
+      "adv": 3500000000,
+      "mcap": 600000000000,
+      "z_ath": null,
+      "conviction": 30,
+      "signal": "AVOID",
+      "sector": "Financial",
+      "beta": 1.2,
+      "factors": {
+        "quality": 13.2,
+        "confirmation": 11.2,
+        "risk": 0.818,
+        "rs_blend": 0.5,
+        "liquidity_fit": 0.886,
+        "val_zscore": 0.3,
+        "short_days": 4.0,
+        "roic": 0.1,
+        "fcf_yield": 0.04,
+        "gross_margin": 0.6,
+        "debt_ebitda": 1.2,
+        "earnings_stability": 0.8
+      },
+      "weight": 10.68
+    },
+    {
+      "symbol": "XOM",
+      "price": 120.0,
+      "chg": -1.2,
+      "turnover": 0.00583,
+      "adv": 2800000000,
+      "mcap": 480000000000,
+      "z_ath": null,
+      "conviction": 22,
+      "signal": "AVOID",
+      "sector": "Energy",
+      "beta": 1.3,
+      "factors": {
+        "quality": 14.1,
+        "confirmation": 10.1,
+        "risk": 0.621,
+        "rs_blend": -2.5,
+        "liquidity_fit": 0.862,
+        "val_zscore": 0.9,
+        "short_days": 8.0,
+        "roic": 0.08,
+        "fcf_yield": 0.05,
+        "gross_margin": 0.45,
+        "debt_ebitda": 0.6,
+        "earnings_stability": 0.75
+      },
+      "weight": 7.83
     },
     {
       "symbol": "KO",
@@ -75,6 +212,8 @@
       "z_ath": null,
       "conviction": 20,
       "signal": "AVOID",
+      "sector": "Consumer",
+      "beta": 0.6,
       "factors": {
         "quality": 14.1,
         "confirmation": 9.4,
@@ -82,12 +221,46 @@
         "rs_blend": -4.4,
         "liquidity_fit": 0.75,
         "val_zscore": -1.2,
-        "short_days": 9.0
-      }
+        "short_days": 9.0,
+        "roic": 0.12,
+        "fcf_yield": 0.07,
+        "gross_margin": 0.62,
+        "debt_ebitda": 2.8,
+        "earnings_stability": 0.98
+      },
+      "weight": 7.12
     }
   ],
   "top10": [
     {
+      "symbol": "MSFT",
+      "price": 480.0,
+      "chg": 2.8,
+      "turnover": 0.00139,
+      "adv": 5000000000,
+      "mcap": 3600000000000,
+      "z_ath": null,
+      "conviction": 54,
+      "signal": "WATCH",
+      "sector": "Tech",
+      "beta": 1.1,
+      "factors": {
+        "quality": 20.0,
+        "confirmation": 11.7,
+        "risk": 0.925,
+        "rs_blend": 2.0,
+        "liquidity_fit": 0.925,
+        "val_zscore": -0.2,
+        "short_days": 2.0,
+        "roic": 0.27,
+        "fcf_yield": 0.06,
+        "gross_margin": 0.68,
+        "debt_ebitda": 0.8,
+        "earnings_stability": 0.88
+      },
+      "weight": 19.22
+    },
+    {
       "symbol": "AAPL",
       "price": 220.0,
       "chg": 1.2,
@@ -97,6 +270,8 @@
       "z_ath": null,
       "conviction": 52,
       "signal": "WATCH",
+      "sector": "Tech",
+      "beta": 1.25,
       "factors": {
         "quality": 20.0,
         "confirmation": 11.5,
@@ -104,8 +279,42 @@
         "rs_blend": 1.35,
         "liquidity_fit": 0.901,
         "val_zscore": -0.5,
-        "short_days": 3.0
-      }
+        "short_days": 3.0,
+        "roic": 0.3,
+        "fcf_yield": 0.08,
+        "gross_margin": 0.42,
+        "debt_ebitda": 1.8,
+        "earnings_stability": 0.85
+      },
+      "weight": 18.51
+    },
+    {
+      "symbol": "WMT",
+      "price": 62.0,
+      "chg": 0.4,
+      "turnover": 0.00235,
+      "adv": 2000000000,
+      "mcap": 850000000000,
+      "z_ath": null,
+      "conviction": 37,
+      "signal": "AVOID",
+      "sector": "Consumer",
+      "beta": 0.7,
+      "factors": {
+        "quality": 16.0,
+        "confirmation": 11.2,
+        "risk": 0.825,
+        "rs_blend": 0.6,
+        "liquidity_fit": 0.825,
+        "val_zscore": -0.8,
+        "short_days": 3.0,
+        "roic": 0.14,
+        "fcf_yield": 0.055,
+        "gross_margin": 0.25,
+        "debt_ebitda": 0.5,
+        "earnings_stability": 0.99
+      },
+      "weight": 13.17
     },
     {
       "symbol": "NVDA",
@@ -117,6 +326,8 @@
       "z_ath": null,
       "conviction": 36,
       "signal": "AVOID",
+      "sector": "Tech",
+      "beta": 1.8,
       "factors": {
         "quality": 14.7,
         "confirmation": 17.7,
@@ -124,8 +335,14 @@
         "rs_blend": 24.25,
         "liquidity_fit": 0.869,
         "val_zscore": 2.4,
-        "short_days": 2.5
-      }
+        "short_days": 2.5,
+        "roic": 0.28,
+        "fcf_yield": 0.01,
+        "gross_margin": 0.72,
+        "debt_ebitda": 1.5,
+        "earnings_stability": 0.6
+      },
+      "weight": 12.81
     },
     {
       "symbol": "BRK.B",
@@ -137,6 +354,8 @@
       "z_ath": null,
       "conviction": 30,
       "signal": "AVOID",
+      "sector": "Financial",
+      "beta": 1.0,
       "factors": {
         "quality": 15.0,
         "confirmation": 11.0,
@@ -144,8 +363,70 @@
         "rs_blend": 0.02,
         "liquidity_fit": 0.836,
         "val_zscore": 0.8,
-        "short_days": 1.0
-      }
+        "short_days": 1.0,
+        "roic": 0.09,
+        "fcf_yield": 0.035,
+        "gross_margin": 0.5,
+        "debt_ebitda": 0.2,
+        "earnings_stability": 0.95
+      },
+      "weight": 10.68
+    },
+    {
+      "symbol": "JPM",
+      "price": 210.0,
+      "chg": 0.9,
+      "turnover": 0.00583,
+      "adv": 3500000000,
+      "mcap": 600000000000,
+      "z_ath": null,
+      "conviction": 30,
+      "signal": "AVOID",
+      "sector": "Financial",
+      "beta": 1.2,
+      "factors": {
+        "quality": 13.2,
+        "confirmation": 11.2,
+        "risk": 0.818,
+        "rs_blend": 0.5,
+        "liquidity_fit": 0.886,
+        "val_zscore": 0.3,
+        "short_days": 4.0,
+        "roic": 0.1,
+        "fcf_yield": 0.04,
+        "gross_margin": 0.6,
+        "debt_ebitda": 1.2,
+        "earnings_stability": 0.8
+      },
+      "weight": 10.68
+    },
+    {
+      "symbol": "XOM",
+      "price": 120.0,
+      "chg": -1.2,
+      "turnover": 0.00583,
+      "adv": 2800000000,
+      "mcap": 480000000000,
+      "z_ath": null,
+      "conviction": 22,
+      "signal": "AVOID",
+      "sector": "Energy",
+      "beta": 1.3,
+      "factors": {
+        "quality": 14.1,
+        "confirmation": 10.1,
+        "risk": 0.621,
+        "rs_blend": -2.5,
+        "liquidity_fit": 0.862,
+        "val_zscore": 0.9,
+        "short_days": 8.0,
+        "roic": 0.08,
+        "fcf_yield": 0.05,
+        "gross_margin": 0.45,
+        "debt_ebitda": 0.6,
+        "earnings_stability": 0.75
+      },
+      "weight": 7.83
     },
     {
       "symbol": "KO",
@@ -157,6 +438,8 @@
       "z_ath": null,
       "conviction": 20,
       "signal": "AVOID",
+      "sector": "Consumer",
+      "beta": 0.6,
       "factors": {
         "quality": 14.1,
         "confirmation": 9.4,
@@ -164,9 +447,14 @@
         "rs_blend": -4.4,
         "liquidity_fit": 0.75,
         "val_zscore": -1.2,
-        "short_days": 9.0
-      }
+        "short_days": 9.0,
+        "roic": 0.12,
+        "fcf_yield": 0.07,
+        "gross_margin": 0.62,
+        "debt_ebitda": 2.8,
+        "earnings_stability": 0.98
+      },
+      "weight": 7.12
     }
-  ],
-  "live": false
+  ]
 }

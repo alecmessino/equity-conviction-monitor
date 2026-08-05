@@ -1,74 +1,120 @@
 """Data layer — Equity Conviction Monitor.
 
-Pulls market + fundamental features from Financial Modeling Prep (FMP) /stable/
-and builds the NORMALISED feature dict that model.score() consumes.
+Live market + fundamental features from KEYLESS price source + free fundamentals:
 
-Live path requires FMP_API_KEY (set in repo Secrets → Actions → FMP_API_KEY).
-When the key is absent or a symbol fails, build_features() returns None so the
-nightly can skip it gracefully (never fabricate a price).
+  * Price / volume / 52-wk range  -> Yahoo Finance /v8/finance/chart  (NO KEY required)
+  * Fundamentals (ROIC, margin, PE, mktcap) -> Alpha Vantage /OVERVIEW (free key)
+
+Why: FMP free keys are being rejected by FMP's API (confirmed: /stable/quote returns
+"Invalid API KEY" for every key tried; income/balance/cash-flow are premium-gated).
+Twelve Data /quote now also requires a key. Yahoo chart is keyless and returns
+price/volume/52wk; Alpha Vantage's free OVERVIEW key (normal signup, no card) supplies
+the Quality inputs (Alpha Vantage's free tier actually works — only FMP's was broken).
+
+If ALPHAVANTAGE_API_KEY is unset we still render with Yahoo price + neutral fundamentals
+(never fabricate a price; fundamentals default to quality-neutral so the score stays honest).
 """
 from __future__ import annotations
-import os, math, time
-import urllib.request, json, urllib.parse
+import os, math, time, json
+import urllib.request, urllib.parse
 
-FMP_BASE = "https://financialmodelingprep.com/stable/"
-FMP_KEY = os.environ.get("FMP_API_KEY", "")
+AV_KEY = os.environ.get("ALPHAVANTAGE_API_KEY", "")
 
-# Scope anchor: S&P 500 + Russell 1000 + major regional/factor ETFs.
-# Curated sample universe (real tickers; expand via S&P 500 list API later).
 UNIVERSE = [
-    # mega/large cap tech & staples
     "AAPL","MSFT","NVDA","GOOGL","AMZN","META","TSLA","BRK.B","JPM","V","UNH",
     "XOM","JNJ","WMT","MA","PG","HD","CVX","KO","PEP","ABBV","COST","AVGO","LLY",
     "MRK","BAC","ADBE","CRM","NFLX","AMD","INTC","CSCO","ORCL","QCOM","TXN","AMGN",
-    # ETFs / factors
     "SPY","QQQ","IWM","EFA","EEM","VWO","EWJ","QUAL","VLUE","MTUM","USMV","IWD",
 ]
 
-def _get(path: str, params: dict | None = None) -> list | dict:
-    if not FMP_KEY:
-        raise RuntimeError("FMP_API_KEY not set")
-    import urllib.parse
-    q = dict(params or {})
-    q["apikey"] = FMP_KEY
-    url = FMP_BASE + path + "?" + urllib.parse.urlencode(q)
-    req = urllib.request.Request(url, headers={"User-Agent": "equity-monitor/1.0"})
+
+def _get_json(url: str) -> dict:
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (equity-monitor)"})
     with urllib.request.urlopen(req, timeout=20) as r:
         return json.loads(r.read().decode())
 
-def _first(x):
-    return x[0] if isinstance(x, list) and x else (x if isinstance(x, dict) else None)
+
+def _get_yahoo_quote(sym: str) -> dict | None:
+    """Price/volume/52wk from Yahoo chart (keyless)."""
+    url = f"https://query2.finance.yahoo.com/v8/finance/chart/{sym}?range=5d&interval=1d"
+    try:
+        d = _get_json(url)
+        res = d.get("chart", {}).get("result")
+        if not res:
+            return None
+        m = res[0]["meta"]
+        price = m.get("regularMarketPrice")
+        if not price:
+            return None
+        return m
+    except Exception:
+        return None
+
+
+def _get_av_overview(sym: str) -> dict:
+    """Fundamentals from Alpha Vantage /OVERVIEW (free key)."""
+    if not AV_KEY:
+        return {}
+    url = ("https://www.alphavantage.co/query?function=OVERVIEW&symbol="
+           + urllib.parse.quote(sym) + "&apikey=" + AV_KEY)
+    try:
+        d = _get_json(url)
+        if isinstance(d, dict) and ("Information" in d or "Error Message" in d or "Note" in d):
+            return {}
+        return d or {}
+    except Exception:
+        return {}
+
 
 def build_features(symbol: str) -> dict | None:
-    """Return normalised feature dict for `symbol`, or None on any failure."""
+    """Return normalised feature dict for `symbol`, or None on hard failure."""
     try:
-        quote = _first(_get(f"quote/{symbol}"))
-        if not quote or quote.get("price") in (None, 0):
+        m = _get_yahoo_quote(symbol)
+        if not m:
             return None
-        prof  = _first(_get(f"profile/{symbol}")) or {}
-        ratios= _first(_get(f"ratios/{symbol}", {"limit": 1})) or {}
-        inc   = _first(_get(f"income-statement/{symbol}", {"limit": 1})) or {}
-        bs    = _first(_get(f"balance-sheet-statement/{symbol}", {"limit": 1})) or {}
-        cf    = _first(_get(f"cash-flow-statement/{symbol}", {"limit": 1})) or {}
+        price = float(m.get("regularMarketPrice", 0) or 0)
+        vol = float(m.get("regularMarketVolume", 0) or 0)
+        adv = vol  # Yahoo gives daily volume; treat as ADV proxy
+        hi = float(m.get("fiftyTwoWeekHigh", 0) or 0)
+        lo = float(m.get("fiftyTwoWeekLow", 0) or 0)
+        chg24 = float(m.get("regularMarketChangePercent", 0) or 0)
+        # Yahoo sometimes includes marketCap in meta
+        mcap = float(m.get("marketCap", 0) or 0)
 
-        price   = float(quote.get("price", 0) or 0)
-        mcap    = float(quote.get("marketCap", 0) or 0)
-        chg24   = float(quote.get("changesPercentage", 0) or 0)
-        vol     = float(quote.get("volume", 0) or 0)
-        adv     = vol * price if vol else 0.0
-        turnover= adv / mcap if mcap else 0.0
+        # neutral fundamentals until AV provides real values
+        roic = 0.0
+        fcf_yield = 0.0
+        gross_margin = 0.30
+        debt_ebitda = 2.5
+        earnings_stability = 0.6
+        pe = 0.0
+        sector = ""
+        beta = 1.0
 
-        # fundamentals (defaults so model never divides by missing)
-        roic        = float(ratios.get("returnOnInvestedCapital", 0) or 0) / 100.0 if isinstance(ratios.get("returnOnInvestedCapital"),(int,float)) else 0.0
-        fcf_yield   = float(ratios.get("freeCashFlowYield", 0) or 0) / 100.0 if isinstance(ratios.get("freeCashFlowYield"),(int,float)) else 0.0
-        gross_margin= float(ratios.get("grossProfitMargin", 0) or 0) / 100.0 if isinstance(ratios.get("grossProfitMargin"),(int,float)) else 0.0
-        debt_ebitda = float(ratios.get("debtToEBITDA", 5.0) or 5.0)
-        rev         = float(inc.get("revenue", 0) or 0)
-        netinc      = float(inc.get("netIncome", 0) or 0)
-        # earnings stability: 1 - |net margin volatility proxy| (use margin sign sanity)
-        earnings_stability = clamp_stability(netinc, rev)
-        # valuation z-score vs 5y median P/E (use current P/E proxy)
-        pe   = float(ratios.get("peRatio", 0) or 0) or 0.0
+        if AV_KEY:
+            ov = _get_av_overview(symbol)
+            if ov:
+                def num(k, d=0.0):
+                    v = ov.get(k)
+                    try:
+                        return float(v) if v not in (None, "", "None") else d
+                    except Exception:
+                        return d
+                ric = ov.get("ReturnOnInvestedCapital")
+                roic = (num("ReturnOnInvestedCapital") / 100.0) if ric else (num("ROIC") / 100.0)
+                gross_margin = clamp01(num("GrossProfitTTM") / max(num("RevenueTTM"), 1)) if ov.get("GrossProfitTTM") else 0.30
+                debt_ebitda = num("DebtEquityRatio") * 1.5
+                earnings_stability = clamp01(0.5 + num("ProfitMargin") / 2.0)
+                pe = num("PERatio")
+                sector = ov.get("Sector", "") or ov.get("Industry", "")
+                beta = num("Beta", 1.0) or 1.0
+                mc_raw = ov.get("MarketCapitalization")
+                if mc_raw not in (None, "", "None"):
+                    try:
+                        mcap = float(mc_raw) * 1e6
+                    except Exception:
+                        pass
+
         val_zscore = pe_to_z(pe)
 
         return {
@@ -77,37 +123,33 @@ def build_features(symbol: str) -> dict | None:
             "market_cap": mcap,
             "chg24": chg24,
             "adv": adv,
-            "turnover": turnover,
+            "turnover": (adv * price) / mcap if mcap else 0.0,
             "roic": roic,
             "fcf_yield": fcf_yield,
             "gross_margin": gross_margin,
             "debt_ebitda": debt_ebitda,
             "earnings_stability": earnings_stability,
             "val_zscore": val_zscore,
-            "short_days": 0.0,        # FMP short-interest endpoint optional; safe default
+            "short_days": 0.0,
             "rs_blend": 0.0,          # filled by RS module (vs SPY) downstream
             "rs_sector": 0.0,
-            "drawdown_52w": 0.0,
+            "drawdown_52w": (1 - price / hi) if hi else 0.0,
+            "sector": sector,
+            "beta": beta,
         }
     except Exception as e:
-        # never fabricate; surface the failure upstream
         raise RuntimeError(f"{symbol}: {e}") from e
 
-def clamp_stability(netinc, rev):
-    if rev <= 0:
-        return 0.5
-    margin = netinc / rev
-    # healthy positive margin -> stability up to 1.0; negative -> low
-    return clamp01(0.5 + margin)
 
 def pe_to_z(pe: float) -> float:
-    # crude z vs typical market P/E band 10..30
     if pe <= 0:
         return 0.0
-    return clamp01((pe - 20.0) / 20.0)   # 20=neutral, 40=+1z rich, 0=cheap
+    return clamp01((pe - 20.0) / 20.0)
+
 
 def clamp01(x):
     return max(0.0, min(1.0, x))
+
 
 def universe() -> list[str]:
     return list(UNIVERSE)

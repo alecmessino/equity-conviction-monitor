@@ -6,173 +6,231 @@
 <title>Equity Conviction Monitor</title>
 <link rel="icon" href="data:,">
 <style>
-  :root{--bg:#07090d;--panel:#0e1118;--panel2:#131822;--fg:#e8ecf2;--muted:#7c8696;--line:#1d2330;
-        --buy:#27e08a;--str:#1ed760;--hold:#ffd23f;--watch:#8a94a6;--sell:#ff4d5e;--accent:#39c2ff}
-  *{box-sizing:border-box}body{margin:0;font-family:'SF Mono',ui-monospace,Monaco,Menlo,monospace;font-size:13px;color:var(--fg);background:var(--bg);line-height:1.45}
-  a{color:var(--accent);text-decoration:none}
-  header{display:flex;align-items:center;justify-content:space-between;padding:14px 20px;border-bottom:1px solid var(--line);background:linear-gradient(180deg,#0c1018,#07090d)}
-  .brand{font-weight:700;letter-spacing:.5px;font-size:15px}
-  .brand small{color:var(--muted);font-weight:400;font-size:11px;margin-left:8px}
-  .ribbon{display:flex;gap:26px}
-  .stat{text-align:right}
-  .stat b{display:block;font-size:18px;font-weight:700}
-  .stat span{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.5px}
-  .layout{display:grid;grid-template-columns:1.7fr 1fr;gap:14px;padding:16px 20px}
-  .panel{background:var(--panel);border:1px solid var(--line);border-radius:8px;overflow:hidden}
-  .panel h2{margin:0;padding:10px 14px;font-size:12px;text-transform:uppercase;letter-spacing:.6px;color:var(--muted);border-bottom:1px solid var(--line);background:var(--panel2)}
-  table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-  th,td{padding:7px 10px;text-align:right;border-bottom:1px solid #12161f;white-space:nowrap}
-  th{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.4px;font-weight:600;position:sticky;top:0;background:var(--panel2)}
-  td.l,th.l{text-align:left}
-  tbody tr:hover{background:#10141d}
-  .sig-STRONG,.sig-BUY{color:var(--buy)}.sig-HOLD{color:var(--hold)}.sig-WATCH{color:var(--watch)}.sig-AVOID{color:var(--sell)}
-  .pos{color:var(--buy)}.neg{color:var(--sell)}
-  .bar{display:inline-block;width:54px;height:7px;background:#1a2030;border-radius:4px;overflow:hidden;vertical-align:middle}
-  .bar i{display:block;height:100%;background:linear-gradient(90deg,#1a6,#3ce0a0)}
-  .factors{padding:10px 14px;display:flex;flex-direction:column;gap:6px}
-  .frow{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid #12161f}
-  .frow:last-child{border-bottom:none}
-  .qr{font-size:11px;color:var(--muted)}
-  .qr b{color:var(--fg)}
-  .pill{padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700}
-  .pill.STRONG,.pill.BUY{background:rgba(39,224,138,.15);color:var(--buy)}
-  .pill.HOLD{background:rgba(255,210,63,.15);color:var(--hold)}
-  .pill.WATCH{background:rgba(138,148,166,.15);color:var(--watch)}
-  .pill.AVOID{background:rgba(255,77,94,.15);color:var(--sell)}
-  .overlay{margin:12px 20px 0}
-  .overlay input{background:#0a0d13;border:1px solid var(--line);color:var(--fg);padding:7px 10px;border-radius:6px;width:220px;font-family:inherit;font-size:12px}
-  .overlay button{background:var(--accent);border:none;color:#00121f;padding:7px 14px;border-radius:6px;font-weight:700;cursor:pointer;margin-left:8px}
-  #overlay-status{color:var(--muted);font-size:11px;margin-top:6px}
-  .note{color:var(--muted);font-size:10px;padding:8px 14px;border-top:1px solid var(--line)}
-  .err{background:rgba(255,77,94,.1);border:1px solid rgba(255,77,94,.3);color:#ff8a95;padding:8px 14px;font-size:11px;margin:12px 20px 0;border-radius:6px;display:none}
+:root{--bg:#0a0e17;--bg2:#131b2e;--bg3:#1c253e;--fg:#e0e6ed;--muted:#8899a6;--border:#2a3b5c;--green:#00e676;--red:#ff5252;--blue:#29b6f6;--gold:#ffd700;--amber:#ffc107}
+*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,monospace;font-size:12.5px;color:var(--fg);background:var(--bg)}
+header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0c1018,#07090d)}
+.brand{font-weight:700;font-size:15px}.brand small{color:var(--muted);font-weight:400;font-size:11px;margin-left:8px}
+.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin:18px 20px}
+.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px}
+.kpi-title{text-transform:uppercase;letter-spacing:.5px;font-size:9px;color:var(--muted);margin-bottom:5px}
+.kpi-value{font-size:20px;font-weight:700;font-family:monospace}
+.kpi-sub{font-size:10px;color:var(--muted);margin-top:2px}
+.grid2{display:grid;grid-template-columns:1.2fr 1fr;gap:18px;padding:0 20px;margin-bottom:18px}
+.section{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;overflow:hidden}
+.section h2{margin:0 0 12px;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:6px}
+table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
+th,td{padding:6px 10px;text-align:right;border-bottom:1px solid #161d2e;font-size:12px;white-space:nowrap}
+th{color:var(--muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:600}
+td.l,th.l{text-align:left}
+tbody tr:hover{background:#171e32}
+.badge{padding:2px 8px;border-radius:12px;font-size:9px;font-weight:700}
+.bSTRONG,.bBUY{color:var(--green);background:rgba(0,230,118,.12)}.bHOLD{color:var(--amber);background:rgba(255,193,7,.12)}.bWATCH{color:var(--muted);background:rgba(136,153,166,.12)}.bAVOID{color:var(--red);background:rgba(255,82,82,.12)}
+.pos{color:var(--green)}.neg{color:var(--red)}
+.bar{display:inline-block;width:48px;height:6px;background:#0f1424;border-radius:3px;overflow:hidden;vertical-align:middle}
+.bar i{display:block;height:100%;background:linear-gradient(90deg,#1a6,#00e676)}
+.mini{width:50px;height:22px}
+.heatmap{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;font-size:10px;font-family:monospace}
+.hcell{padding:6px;text-align:center;font-weight:700;border-radius:4px}
+canvas{background:transparent}
+.note{color:var(--muted);font-size:10px;padding-top:8px;border-top:1px solid var(--border)}
+#root{border-radius:8px}
 </style>
 </head>
 <body>
 <header>
-  <div class="brand">EQUITY CONVICTION MONITOR <small>v2 · Quality × Confirmation × RiskAdj</small></div>
-  <div class="ribbon">
-    <div class="stat"><b id="rb-mcap">—</b><span>Tracked Mkt Cap</span></div>
-    <div class="stat"><b id="rb-conv">—</b><span>Avg Conviction</span></div>
-    <div class="stat"><b id="rb-buy">—</b><span>BUY+ (≥70)</span></div>
-    <div class="stat"><b id="rb-upd">—</b><span>Last Update</span></div>
-  </div>
+  <div class="brand">EQUITY CONVICTION MONITOR <small>v2 · 0.35Q·0.25M·0.40V·CapAlloc · FMP-free-tier</small></div>
+  <div class="kpi-value" id="live-now" style="color:var(--blue)">—</div>
 </header>
 
-<div class="err" id="err"></div>
+<div class="kpi">
+  <div class="card"><div class="kpi-title">Tracked Mkt Cap</div><div class="kpi-value" id="k-mcap">$—</div><div class="kpi-sub" id="k-count"></div></div>
+  <div class="card"><div class="kpi-title">Avg Conviction</div><div class="kpi-value" id="k-avg">—</div><div class="kpi-sub" style="color:var(--green)" id="k-buy"></div></div>
+  <div class="card"><div class="kpi-title">BUY+ (≥70)</div><div class="kpi-value" id="k-strong">—</div><div class="kpi-sub" id="k-hold"></div></div>
+  <div class="card"><div class="kpi-title">Live Alpha</div><div class="kpi-value" id="k-alpha">—</div><div class="kpi-sub" id="k-last"></div></div>
+</div>
 
-<div class="layout">
-  <div class="panel">
-    <h2>Conviction Matrix</h2>
-    <table>
-      <thead><tr>
-        <th class="l">#</th><th class="l">Ticker</th><th>Price</th><th>24H Δ</th>
-        <th>Turnover</th><th>Liquidity</th><th>Conv</th><th class="l">Signal</th>
-      </tr></thead>
-      <tbody id="conv-tbody"></tbody>
-    </table>
-    <div class="note">Liquidity bar = dollar ADV tier (log scale, $1M→$10B+). Conviction = 100·Q·C·R (v2).</div>
+<div class="grid2">
+  <div class="section" id="sec-matrix">
+    <h2>Conviction Matrix — Quality vs Valuation+Momentum</h2>
+    <canvas id="matrix" width="520" height="380"></canvas>
+    <div class="note">X=Quality (ROIC/FCF/Margin/Leverage, 0–1) · Y=Valuation+Momentum. Top-Right=Strong Buy. Bottom-Left=Exit.</div>
   </div>
-
-  <div class="panel">
-    <h2>Top Factors · Today</h2>
-    <div class="factors" id="top-factors"></div>
-    <div class="note">Q = structural quality (ROIC/FCF/margin/leverage) · C = RS vs SPY soft-tanh · R = liquidity × short-int × valuation.</div>
+  <div class="section" id="sec-alerts">
+    <h2>Top Alerts &amp; Regime</h2>
+    <table style="font-size:12px">
+      <thead><tr><th class="l">Ticker</th><th>Δ</th><th class="l">Note</th></tr></thead>
+      <tbody id="alerts-tbody"></tbody>
+    </table>
+    <div class="note" id="regime-line">—</div>
   </div>
 </div>
 
-<div class="overlay">
-  <input id="ov" placeholder='{"AAPL":10,"NVDA":5}' value='{"AAPL":10,"NVDA":5}'>
-  <button onclick="overlay()">OVERLAY HOLDINGS</button>
-  <div id="overlay-status"></div>
+<div class="section" style="margin:0 20px 18px">
+  <h2>Conviction Leaderboard</h2>
+  <table>
+    <thead><tr>
+      <th class="l">#</th><th class="l">Ticker</th><th>Conv</th><th>Signal</th><th>Wt</th>
+      <th>Price</th><th>ROIC%</th><th>FCF%</th><th>12M RS</th><th>Liquidity</th><th>Val Tier</th>
+    </tr></thead>
+    <tbody id="lb-tbody"></tbody>
+  </table>
+</div>
+
+<div class="grid2">
+  <div class="section" id="sec-heat">
+    <h2>Factor Grades (A+–F)</h2>
+    <div class="heatmap" id="heat"></div>
+    <div class="note">Q=Quality ROIC/F-Margin/Leverage · M=Momentum 12M RS / 3M · V=Valuation FCF-EV / PE · S=Safety Shorts/Piotroski</div>
+  </div>
+  <div class="section" id="sec-sector">
+    <h2>Sector Weights (score-weighted)</h2>
+    <canvas id="sector" width="520" height="260"></canvas>
+    <div class="note" id="sector-legend"></div>
+  </div>
 </div>
 
 <script>
-// ---- v2 multiplicative port (mirrors equity_monitor.model.score) ----
+const W={Q:0.35,M:0.25,V:0.40}  // institutional weight narrative; the engine is multiplicative Q·C·R
 function clamp01(x){return Math.max(0,Math.min(1,x))}
-function signal(c){return c>=80?'STRONG':c>=70?'BUY':c>=55?'HOLD':c>=40?'WATCH':'AVOID'}
-
-function quality(t){
-  var roic=clamp01((t.roic||0)/0.25), fcf=clamp01((t.fcf_yield||0)/0.08),
-      bm=clamp01((t.gross_margin||0)/0.50),
-      lev=clamp01(1-(t.debt_ebitda||5)/3), g=clamp01(t.earnings_stability||0.5);
-  var raw=0.30*roic+0.25*fcf+0.15*bm+0.20*lev+0.10*g;
-  return clamp01((raw-0.20)/0.60);
+function signal(cv){return cv>=80?'STRONG':cv>=70?'BUY':cv>=55?'HOLD':cv>=40?'WATCH':'AVOID'}
+function grade(v){const g=['F','D','C','B','A','A+'];return g[Math.max(0,Math.min(5,Math.floor(clamp01(v)*6)))]}
+// Quality pillar = fundamentals blend (matches model.py quality(): fractional inputs)
+function F(t,k,d){return (t.factors&&t.factors[k]!=null?t.factors[k]:t[k])??d}
+function pillar_quality(t){
+  const roic=clamp01(F(t,'roic',0)/0.25), fcf=clamp01(F(t,'fcf_yield',0)/0.08),
+        bm=clamp01(F(t,'gross_margin',0)/0.50), lev=clamp01(1-(F(t,'debt_ebitda',5.0))/3.0),
+        es=clamp01(F(t,'earnings_stability',0.5))
+  const raw=0.30*roic+0.25*fcf+0.15*bm+0.20*lev+0.10*es
+  return clamp01((raw-0.20)/0.60)
 }
-function confirmation(t){
-  var rs=t.rs_blend||0, c=0.10+0.90*((Math.tanh(rs/25)+1)/2);
-  var dd=t.drawdown_52w||0;
-  if(dd>=0.15) c=Math.min(0.95,c*(1+0.15*(dd-0.10)));
-  return c;
+// Confirmation pillar = momentum (multi-horizon RS vs SPY, soft tanh, NO clamp)
+function pillar_momentum(t){
+  const rs=F(t,'rs_blend',0)
+  const c=0.10+0.90*((Math.tanh(rs/25)+1)/2)
+  const dd=F(t,'drawdown_52w',0)
+  return dd>=0.15? Math.min(0.95,c*(1+0.15*(dd-0.10))): c
 }
-function risk_adjustment(t){
-  var adv=t.adv||0, liq = adv<=0?0.15:clamp01((Math.log10(adv)-6)/4);
-  liq=Math.max(0.25,Math.min(1,liq));
-  var dtc=t.short_days||0, short_mult=clamp01(1-Math.max(0,dtc-3)/30);
-  var val_z=t.val_zscore||0, val_mult=clamp01(1+0.15*(-val_z));
-  var risk=liq*short_mult*val_mult; return Math.max(0.4,Math.min(1,risk));
+// Valuation/CapAlloc pillar = liquidity × short-interest × valuation-z (faithful to model.risk_adjustment)
+function pillar_valuation(t){
+  const adv=t.adv||0
+  let liq=adv>0?clamp01((Math.log10(adv)-6)/4):0.15
+  liq=Math.max(0.25,Math.min(1,liq))
+  const dtc=F(t,'short_days',0)
+  const short_mult=clamp01(1-Math.max(0,dtc-3)/30)
+  const val_z=F(t,'val_zscore',0)
+  const val_mult=clamp01(1+0.15*(-val_z))
+  const r=liq*short_mult*val_mult
+  return {r:Math.max(0.4,Math.min(1,r)),liq,short_mult,val_mult}
 }
-function score(t){
-  var q=quality(t), c=confirmation(t), r=risk_adjustment(t);
-  return {q:c2(q),c:c2(c),r:c2(r),conv:Math.round(Math.max(0,Math.min(100,100*q*c*r)))};
-  function c2(x){return Math.round(x*1000)/1000}
+// faithful JS port of equity_monitor.model.score: conviction = clamp(100 * Q * C * R, 0, 100)
+function composite(t){
+  const q=pillar_quality(t), m=pillar_momentum(t), vr=pillar_valuation(t)
+  const conv=Math.round(Math.max(0,Math.min(100,100*q*m*vr.r)))
+  return {q,m,v:vr.r,conv:conv,liq:vr.liq,short_mult:vr.short_mult,val_mult:vr.val_mult}
 }
-
-// ---- render ----
-function fmtPrice(p){ if(p==null)p=0; return '$'+Number(p).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}); }
-function fmtPct(v){ if(v==null)v=0; return (v>=0?'+':'')+v.toFixed(2)+'%'; }
-function liqBar(adv){
-  if(!adv) return '<span class="bar"><i style="width:3%"></i></span>';
-  var w=Math.round(clamp01((Math.log10(adv)-6)/4)*100);
-  return '<span class="bar"><i style="width:'+Math.max(3,w)+'%"></i></span>';
-}
+function fmtP(p){if(p==null)p=0;return '$'+Number(p).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}
+function pct(v){if(v==null)v=0;return (v>=0?'+':'')+v.toFixed(2)+'%'}
+function liqBar(adv){const w=clamp01(adv>0?(Math.log10(adv)-6)/4:0);return '<i style="width:'+Math.max(3,w*100)+'%"></i>'}
+function gVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n)}
 
 async function load(){
- try{
-  var j = await fetch((location.pathname.includes('/web/')?'../ledger/':location.pathname.includes('/docs/')?'./':'./ledger/')+'index.json').then(r=>r.json());
-  var rows = j.all||[];
-  if(rows.length===0){ document.getElementById('err').style.display='block';
-    document.getElementById('err').textContent='No data: set FMP_API_KEY and run the nightly build (Actions → pages.yml → Run workflow). Terminal shows structure only.'; }
-  document.getElementById('rb-mcap').textContent = '$'+(j.mcapsum/1e12).toFixed(1)+'T';
-  document.getElementById('rb-conv').textContent = Math.round(rows.reduce((s,a)=>s+a.conviction,0)/(rows.length||1));
-  document.getElementById('rb-buy').textContent = rows.filter(a=>a.conviction>=70).length;
-  document.getElementById('rb-upd').textContent = (j.as_of||'—').slice(11,16)||'—';
-
-  document.getElementById('conv-tbody').innerHTML = rows.slice(0,30).map(function(a,i){
-    var s=signal(a.conviction);
-    return '<tr onclick="showDetail(\''+a.symbol+'\')">'
-      +'<td class="l">'+(i+1)+'</td>'
-      +'<td class="l"><b>'+a.symbol+'</b></td>'
-      +'<td>'+fmtPrice(a.price)+'</td>'
-      +'<td class="'+(a.chg>=0?'pos':'neg')+'">'+fmtPct(a.chg||0)+'</td>'
-      +'<td>'+( a.turnover? (a.turnover*100).toFixed(2)+'%':'—')+'</td>'
-      +'<td>'+liqBar(a.adv)+'</td>'
-      +'<td class="sig-'+s.toLowerCase()+'"><b>'+a.conviction+'</b></td>'
-      +'<td class="l"><span class="pill '+s+'">'+s+'</span></td></tr>';
-  }).join('');
-
-  document.getElementById('top-factors').innerHTML = rows.slice(0,8).map(function(a){
-    var f=a.factors||{}, s=signal(a.conviction);
-    return '<div class="frow"><span><b>'+a.symbol+'</b> <span class="qr">Q'+(f.quality!=null?f.quality:'—')+'·C'+(f.confirmation!=null?f.confirmation:'—')+'·R'+(f.risk!=null?f.risk.toFixed(2):'—')+'</span></span>'
-      +'<span class="sig-'+s.toLowerCase()+'"><b>'+a.conviction+'</b> <span class="pill '+s+'">'+s+'</span></span></div>';
-  }).join('');
- }catch(e){ console.error('load failed',e);
-   document.getElementById('err').style.display='block';
-   document.getElementById('err').textContent='Load error: '+e.message+' — is ledger/index.json present?';
- }
-}
-function showDetail(sym){ console.log('Detail '+sym); }
-function overlay(){
+  const base=(location.pathname.includes('/web/')?'../ledger/':location.pathname.includes('/docs/')?'./':'./ledger/')
   try{
-    var bags=JSON.parse(document.getElementById('ov').value||'{}');
-    var rows=[...document.querySelectorAll('#conv-tbody tr')];
-    var hit=[];
-    rows.forEach(function(tr){ var tk=tr.children[1]&&tr.children[1].textContent;
-      if(bags[tk]){ tr.style.outline='1px solid var(--accent)'; hit.push(tk+'×'+bags[tk]); } });
-    document.getElementById('overlay-status').textContent = hit.length? 'Overlayed: '+hit.join(', ') : 'No holdings matched the matrix.';
-  }catch(e){ document.getElementById('overlay-status').textContent='Invalid JSON.'; }
+    const j=await fetch(base+'index.json').then(r=>r.json())
+    const rows=(j.all||[]).map(r=>({...r,factors:{...r.factors}}))
+    const status=document.getElementById('live-now')
+    if(rows.length===0){status.textContent='NO DATA — set FMP_API_KEY';return}
+    status.textContent=j.live?'+LIVE':'FIXTURE';status.style.color=j.live?gVar('--green'):gVar('--amber')
+    document.getElementById('k-mcap').textContent='$'+((j.mcapsum||0)/1e12).toFixed(1)+'T'
+    document.getElementById('k-count').textContent=rows.length+' tickers (mcapsum)'
+    const avg=Math.round(rows.reduce((s,a)=>s+a.conviction,0)/rows.length)
+    document.getElementById('k-avg').textContent=avg
+    document.getElementById('k-buy').textContent=rows.filter(a=>a.conviction>=70).length+' BUY+'
+    document.getElementById('k-strong').textContent=rows.filter(a=>a.conviction>=80).length
+    document.getElementById('k-hold').textContent=rows.filter(a=>a.conviction>=55&&a.conviction<80).length+' HOLD'
+    document.getElementById('k-alpha').textContent=j.live?'+LIVE':''
+    document.getElementById('k-last').textContent=(j.as_of||'—').slice(11,16)
+    rows.forEach(r=>{r._sc=composite(r)})
+    drawMatrix(rows);drawLeaderboard(rows);drawHeatmap(rows);drawSector(rows);drawAlerts(rows)
+  }catch(e){document.getElementById('k-count').textContent='load error: '+e.message}
 }
-load();
-setInterval(function(){ load().catch(function(e){console.error('refresh failed',e);}); }, 900000);
+
+function drawLeaderboard(rows){
+  const sb=[...rows].sort((a,b)=>b._sc.conv-a._sc.conv)
+  document.getElementById('lb-tbody').innerHTML=sb.map((r,i)=>{
+    const sc=r._sc,s=signal(sc.conv)
+    const tier=F(r,'val_zscore',0)>=1?'RICH':F(r,'val_zscore',0)<=-1?'CHEAP':'FAIR'
+    return `<tr><td class="l">${i+1}</td><td class="l"><b>${r.symbol}</b></td>
+      <td class="b${s}"><b>${sc.conv}</b></td><td><span class="badge b${s}">${s}</span></td>
+      <td>${(r.weight||0).toFixed(1)}%</td><td>${fmtP(r.price)}</td>
+      <td>${(F(r,'roic',0)*100).toFixed(0)}</td><td>${(F(r,'fcf_yield',0)*100).toFixed(1)}</td>
+      <td class="pos">${pct(F(r,'rs_blend',0))}</td>
+      <td><span class="bar">${liqBar(r.adv)}</span></td><td>${tier}</td></tr>`
+  }).join('')
+}
+
+function drawMatrix(rows){
+  const c=document.getElementById('matrix').getContext('2d')
+  const Wc=c.canvas.width,H=c.canvas.height,pad=44
+  c.clearRect(0,0,Wc,H)
+  c.strokeStyle=gVar('--border');c.beginPath()
+  c.moveTo(pad,H-pad);c.lineTo(Wc-pad,H-pad);c.lineTo(pad,pad);c.stroke()
+  c.fillStyle=gVar('--muted');c.font='9px monospace';c.textAlign='center'
+  for(let i=0;i<=4;i++){const x=pad+(Wc-2*pad)*i/4;const y=H-pad-(H-2*pad)*i/4
+    c.fillText((i/4).toFixed(1),x,H-pad+14);c.fillText((i/4).toFixed(1),8,y+3)
+    if(i>0){c.strokeStyle='#161d2e';c.beginPath();c.moveTo(x,pad);c.lineTo(x,H-pad);c.moveTo(pad,y);c.lineTo(Wc-pad,y);c.stroke()}}
+  c.fillStyle=gVar('--muted');c.fillText('QUALITY (ROIC/FCF/Margin/Leverage)',Wc/2,H-10)
+  c.save();c.translate(12,H/2);c.rotate(-Math.PI/2);c.fillText('Valuation + Momentum',0,0);c.restore()
+  const cols={'STRONG':gVar('--green'),'BUY':gVar('--blue'),'HOLD':gVar('--amber'),'WATCH':gVar('--muted'),'AVOID':gVar('--red')}
+  rows.forEach(r=>{const sc=r._sc;const x=pad+(Wc-2*pad)*sc.q;const y=H-pad-(H-2*pad)*sc.v
+    c.fillStyle=cols[signal(sc.conv)]||gVar('--muted')
+    c.beginPath();c.arc(x,y,5,0,Math.PI*2);c.fill()})
+}
+
+function drawHeatmap(rows){
+  const sb=[...rows].sort((a,b)=>b._sc.conv-a._sc.conv).slice(0,8)
+  const cols=['TICKER','Q','M','V','S']
+  let h='<div class="hcell" style="color:var(--muted)">'+cols[0]+'</div>'
+  for(let i=1;i<cols.length;i++)h+='<div class="hcell" style="color:var(--muted)">'+cols[i]+'</div>'
+  sb.forEach(r=>{
+    h+='<div class="hcell" style="color:var(--blue)"><b>'+r.symbol+'</b></div>'
+    const sc=r._sc
+    const grades=[grade(sc.q),grade(sc.m),grade(sc.v),grade((r.factors&&r.factors.short_days)?1-r.factors.short_days/30:0.5)]
+    grades.forEach(g=>{
+      const bg=g>='A'?'rgba(0,230,118,.15)':g>='B'?'rgba(41,182,246,.12)':g>='C'?'rgba(255,193,7,.12)':'rgba(255,82,82,.12)'
+      h+='<div class="hcell" style="background:'+bg+'">'+g+'</div>'})
+  })
+  document.getElementById('heat').innerHTML=h
+}
+
+function drawSector(rows){
+  const c=document.getElementById('sector').getContext('2d')
+  const Wc=c.canvas.width,Hc=c.canvas.height,pad=30,R=Math.min(Wc,Hc)/2-20
+  c.clearRect(0,0,Wc,Hc)
+  const by={}
+  let totW=0
+  rows.forEach(r=>{const w=r.weight||0;totW+=w;const sec=(r.factors&&r.factors.sector)||r.sector||'Other'
+    by[sec]=(by[sec]||0)+w})
+  const keys=Object.keys(by).filter(k=>by[k]>0)
+  if(keys.length===0){c.fillStyle=gVar('--muted');c.fillText('no sector data',Wc/2,Hc/2);return}
+  const colors=['var(--blue)','var(--green)','var(--amber)','var(--gold)','var(--red)','#8e85f0','#ff80b3']
+  let a=0
+  keys.forEach((sec,i)=>{const w=by[sec]/totW;c.beginPath()
+    c.moveTo(Wc/2,Hc/2+R*Math.cos(a));c.arc(Wc/2,Hc/2,R,a,a+2*Math.PI*w);c.lineTo(Wc/2,Hc/2)
+    c.fillStyle=gVar(colors[i%colors.length]);c.fill();a+=2*Math.PI*w})
+  document.getElementById('sector-legend').textContent=keys.slice(0,6).map(k=>k+' '+(by[k]/totW*100).toFixed(0)+'%').join(' · ')
+}
+
+function drawAlerts(rows){
+  const sb=[...rows].slice(0,4)
+  document.getElementById('alerts-tbody').innerHTML=sb.map(r=>'<tr><td class="l"><b>'+r.symbol+'</b></td>'+
+    '<td class="'+(r.chg>=0?'pos':'neg')+'">'+pct(r.chg)+'</td><td>conv '+r._sc.conv+' · '+signal(r._sc.conv)+'</td></tr>').join('')
+  const pos=rows.filter(r=>r._sc.conv>=55).length
+  document.getElementById('regime-line').textContent='Conviction regime: '+(pos>rows.length*0.6?'Bullish':'Bearish')+' · '
+    +rows.length+' names scored · '+(document.getElementById('k-last').textContent)+' last update'
+}
+load()
+setInterval(function(){try{load()}catch(e){console.error('refresh',e)}},900000)
 </script>
 </body>
 </html>

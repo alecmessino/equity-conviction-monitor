@@ -53,6 +53,8 @@ def build(allow_fixture_fallback=True):
             "z_ath": None,
             "conviction": conv,
             "signal": sig,
+            "sector": f.get("sector", ""),
+            "beta": f.get("beta", 1.0),
             "factors": {
                 "quality": comp["quality"],
                 "confirmation": comp["confirmation"],
@@ -61,9 +63,20 @@ def build(allow_fixture_fallback=True):
                 "liquidity_fit": comp["liquidity_fit"],
                 "val_zscore": comp["val_zscore"],
                 "short_days": comp.get("short_days", 0.0),
+                # raw fundamentals in FRACTION units (matching model.py inputs so the
+                # browser JS port reproduces score() exactly — see frontend/backend parity)
+                "roic": round(f.get("roic", 0.0) or 0.0, 4),
+                "fcf_yield": round(f.get("fcf_yield", 0.0) or 0.0, 4),
+                "gross_margin": round(f.get("gross_margin", 0.0) or 0.0, 4),
+                "debt_ebitda": round(f.get("debt_ebitda", 5.0) or 5.0, 2),
+                "earnings_stability": round(f.get("earnings_stability", 0.5) or 0.5, 2),
             },
         })
     rows.sort(key=lambda x: x["conviction"], reverse=True)
+    # score-proportional weights (top names get larger weight; normalized to 100)
+    total_score = sum(max(r["conviction"], 1) for r in rows)
+    for r in rows:
+        r["weight"] = round(max(r["conviction"], 1) / total_score * 100.0, 2)
     mcapsum = sum(r["mcap"] for r in rows)
     if not rows:
         # live pull produced nothing (bad key / API down) — never ship an empty terminal
