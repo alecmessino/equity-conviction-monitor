@@ -11,7 +11,12 @@ import os, json, math, time
 from dataclasses import dataclass
 import requests
 
-FMP_BASE = "https://financialmodelingprep.com/api/v3"
+# NOTE: FMP migrated base URL from /api/v3 (legacy, now gated behind Aug-2025
+# paid subscriptions) to /stable/. A working free-tier key still returns real
+# data on /stable/. If FMP_API_KEY is absent the pipeline degrades gracefully
+# (no fabrication — Quality falls to the blue-chip floor, Confirmation to baseline
+# 0.55 sigmoid, signal tier AVOID/WATCH), exactly like the crypto terminal.
+FMP_BASE = "https://financialmodelingprep.com/stable/"
 POLY_BASE = "https://api.polygon.io/v2"
 FMP_KEY = os.environ.get("FMP_API_KEY", "")
 POLY_KEY = os.environ.get("POLYGON_API_KEY", "")
