@@ -33,9 +33,10 @@ jobs:
           python -c "import json;d=json.load(open('ledger/index.json'));print('LEDGER live=',d.get('live'),'rows=',len(d.get('all',[])))"
       - name: Assemble site
         run: |
-          mkdir -p site/web site/ledger site/docs
+          mkdir -p site/web site/ledger/history site/docs
           cp web/terminal.html site/web/
           cp ledger/index.json site/ledger/
+          cp -r ledger/history site/ledger/ 2>/dev/null || true
           cp docs/methodology.html site/docs/
           cat > site/index.html <<'EOF'
           <!DOCTYPE html><html lang="en"><head><meta charset="utf-8">

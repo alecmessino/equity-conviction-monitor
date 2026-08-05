@@ -52,6 +52,27 @@ def _get_yahoo_quote(sym: str) -> dict | None:
         return None
 
 
+def _get_yahoo_history(sym: str, days: int = 30) -> list[float]:
+    """Trailing daily closes for sparklines (Yahoo chart, keyless). Returns [] on failure."""
+    ysym = sym.replace(".", "-")
+    url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ysym}?range=3mo&interval=1d"
+    try:
+        d = _get_json(url)
+        res = d.get("chart", {}).get("result")
+        if not res:
+            return []
+        closes = res[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
+        closes = [c for c in closes if c is not None]
+        return closes[-days:] if closes else []
+    except Exception:
+        return []
+
+
+def history(sym: str, days: int = 30) -> list[float]:
+    """Public: trailing daily closes for sparklines."""
+    return _get_yahoo_history(sym, days)
+
+
 def _get_av_overview(sym: str) -> dict:
     """Fundamentals from Alpha Vantage /OVERVIEW (free key)."""
     if not AV_KEY:

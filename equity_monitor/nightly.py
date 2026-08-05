@@ -51,10 +51,21 @@ def build(allow_fixture_fallback=True):
 
     feats = rs.enrich(feats)
     rows = []
+    hist_dir = os.path.join(LEDGER, "history")
+    os.makedirs(hist_dir, exist_ok=True)
     for f in feats:
         q, c, r, conv, sig, comp = score(f, BENCH)
+        sym = f["symbol"]
+        # persist trailing closes for sparklines (best-effort; keyless Yahoo)
+        try:
+            closes = data.history(sym, 30)
+            if closes:
+                with open(os.path.join(hist_dir, f"{sym}.json"), "w") as hf:
+                    json.dump({"symbol": sym, "closes": closes}, hf)
+        except Exception as e:
+            print(f"  history {sym} skipped: {e}")
         rows.append({
-            "symbol": f["symbol"],
+            "symbol": sym,
             "price": round(f["price"], 2),
             "chg": round(f.get("chg24", 0.0), 2),
             "turnover": round(f.get("turnover", 0.0), 5),
@@ -113,6 +124,7 @@ def write_ledger(rows, mcapsum, skipped=None, live=False):
         "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
         "benchmark": "SPY",
         "live": live,
+        "hist_base": "history/",   # sparkline closes live at {hist_base}{SYMBOL}.json
         "universe": len(rows),
         "mcapsum": float(mcapsum),
         "skipped": skipped or [],

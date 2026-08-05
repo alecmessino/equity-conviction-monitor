@@ -29,6 +29,7 @@ tbody tr:hover{background:#171e32}
 .bar{display:inline-block;width:48px;height:6px;background:#0f1424;border-radius:3px;overflow:hidden;vertical-align:middle}
 .bar i{display:block;height:100%;background:linear-gradient(90deg,#1a6,#00e676)}
 .mini{width:50px;height:22px}
+.spark{width:90px;height:24px;vertical-align:middle}
 .heatmap{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;font-size:10px;font-family:monospace}
 .hcell{padding:6px;text-align:center;font-weight:700;border-radius:4px}
 canvas{background:transparent}
@@ -69,7 +70,7 @@ canvas{background:transparent}
   <h2>Conviction Leaderboard</h2>
   <table>
     <thead><tr>
-      <th class="l">#</th><th class="l">Ticker</th><th>Conv</th><th>Signal</th><th>Wt</th>
+      <th class="l">#</th><th class="l">Ticker</th><th class="l">30D Trend</th><th>Conv</th><th>Signal</th><th>Wt</th>
       <th>Price</th><th>ROIC%</th><th>FCF%</th><th>12M RS</th><th>Liquidity</th><th>Val Tier</th>
     </tr></thead>
     <tbody id="lb-tbody"></tbody>
@@ -137,6 +138,7 @@ async function load(){
   const base=(location.pathname.includes('/web/')?'../ledger/':location.pathname.includes('/docs/')?'./':'./ledger/')
   try{
     const j=await fetch(base+'index.json').then(r=>r.json())
+    window.__ledger=j
     const rows=(j.all||[]).map(r=>({...r,factors:{...r.factors}}))
     const status=document.getElementById('live-now')
     if(rows.length===0){status.textContent='NO DATA — set FMP_API_KEY';return}
@@ -161,12 +163,37 @@ function drawLeaderboard(rows){
     const sc=r._sc,s=signal(sc.conv)
     const tier=F(r,'val_zscore',0)>=1?'RICH':F(r,'val_zscore',0)<=-1?'CHEAP':'FAIR'
     return `<tr><td class="l">${i+1}</td><td class="l"><b>${r.symbol}</b></td>
+      <td class="l"><canvas class="spark" data-sym="${r.symbol}" width="90" height="24"></canvas></td>
       <td class="b${s}"><b>${sc.conv}</b></td><td><span class="badge b${s}">${s}</span></td>
       <td>${(r.weight||0).toFixed(1)}%</td><td>${fmtP(r.price)}</td>
       <td>${(F(r,'roic',0)*100).toFixed(0)}</td><td>${(F(r,'fcf_yield',0)*100).toFixed(1)}</td>
       <td class="pos">${pct(F(r,'rs_blend',0))}</td>
       <td><span class="bar">${liqBar(r.adv)}</span></td><td>${tier}</td></tr>`
   }).join('')
+  // lazy-load sparklines (history lives next to the ledger, not the page)
+  const hb=(window.__ledger&&window.__ledger.hist_base)||'history/'
+  const base=(location.pathname.includes('/web/')?'../ledger/'+hb:location.pathname.includes('/docs/')?hb:'./ledger/'+hb)
+  document.querySelectorAll('canvas.spark').forEach(cv=>{
+    const sym=cv.dataset.sym
+    fetch(base+sym+'.json').then(r=>r.json()).then(d=>{
+      const closes=(d&&d.closes)||[]
+      drawSpark(cv,closes)
+    }).catch(()=>{})
+  })
+}
+
+function drawSpark(cv,closes){
+  const c=cv.getContext('2d');const W=cv.width,H=cv.height
+  c.clearRect(0,0,W,H)
+  if(!closes||closes.length<2)return
+  const mn=Math.min(...closes),mx=Math.max(...closes),rng=(mx-mn)||1
+  const up=closes[closes.length-1]>=closes[0]
+  c.strokeStyle=up?gVar('--green'):gVar('--red')
+  c.lineWidth=1.4;c.beginPath()
+  closes.forEach((v,i)=>{const x=2+i/(closes.length-1)*(W-4);const y=H-2-(v-mn)/rng*(H-4);i?c.lineTo(x,y):c.moveTo(x,y)})
+  c.stroke()
+  // end dot
+  c.fillStyle=c.strokeStyle;c.beginPath();c.arc(W-2,H-2-(closes[closes.length-1]-mn)/rng*(H-4),1.6,0,Math.PI*2);c.fill()
 }
 
 function drawMatrix(rows){
