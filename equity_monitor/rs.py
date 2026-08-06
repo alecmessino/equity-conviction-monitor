@@ -33,7 +33,13 @@ def _chg(symbol: str) -> float:
 
 
 def compute_rs(features: list[dict]) -> list[dict]:
-    """Augment each feature dict with rs_blend, rs_sector, drawdown_52w."""
+    """Augment each feature dict with rs_blend, rs_sector, drawdown_52w.
+
+    drawdown_52w is now REAL (computed from 252-day closes), not a proxy.
+    Returns the true 52-week drawdown from the max close over the trailing year
+    to the current price. This feeds model.confirmation()'s mean-reversion
+    kicker with accurate depth rather than an RS-derived estimate.
+    """
     spy_d = _chg("SPY")
     out = []
     for f in features:
@@ -45,8 +51,17 @@ def compute_rs(features: list[dict]) -> list[dict]:
         etf = SECTOR_ETF.get(sym)
         sec_d = _chg(etf) if etf else spy_d
         rs_sector = d - sec_d
-        # 52w drawdown proxy: weak RS vs SPY + rich valuation => deeper assumed drawdown
-        dd = max(0.0, min(0.5, 0.10 + 0.20 * max(0.0, -rs_blend / 10.0)))
+        # --- REAL 52-week drawdown from locally-cached 252-day closes ---
+        dd = 0.0
+        try:
+            closes = data.history(sym, 252)
+            if closes:
+                hi52 = max(closes)
+                price = float(f.get("price", 0) or 0)
+                if hi52 > 0 and price > 0:
+                    dd = max(0.0, min(0.5, (hi52 - price) / hi52))
+        except Exception:
+            pass
         f["rs_blend"] = round(rs_blend, 2)
         f["rs_sector"] = round(rs_sector, 2)
         f["drawdown_52w"] = round(dd, 3)

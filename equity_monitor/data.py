@@ -28,6 +28,10 @@ UNIVERSE = [
     "SPY","QQQ","IWM","EFA","EEM","VWO","EWJ","QUAL","VLUE","MTUM","USMV","IWD",
 ]
 
+# in-memory cache for Yahoo history fetches (process-scoped, clears on exit).
+# Prevents duplicate 252-day fetches when rs.compute_rs() + nightly.build() both call data.history().
+_HIST_CACHE: dict[tuple[str, int], list[float]] = {}
+
 
 def _get_json(url: str) -> dict:
     req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 (equity-monitor)"})
@@ -53,10 +57,22 @@ def _get_yahoo_quote(sym: str) -> dict | None:
         return None
 
 
-def _get_yahoo_history(sym: str, days: int = 30) -> list[float]:
-    """Trailing daily closes for sparklines (Yahoo chart, keyless). Returns [] on failure."""
+def _get_yahoo_history(sym: str, days: int = 252) -> list[float]:
+    """Trailing daily closes for sparklines + drawdown/return math.
+
+    Extended window: 252 trading days (~1 year) so nightly.py can compute
+    real 52-week drawdown and 365-day return locally. Uses Yahoo's keyless
+    chart endpoint (range=2y, interval=1d, then sliced to ``days``).
+    Returns [] on failure.
+    """
     ysym = sym.replace(".", "-")
-    url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ysym}?range=3mo&interval=1d"
+    # Yahoo's max supported range for daily closes is 2y; 252d fits within '2y' interval=1d
+    url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ysym}?range=2y&interval=1d"
+    # check cache first (process-scoped, per symbol+days) — avoids double-fetch in nightly run
+    cache_key = (sym, days)
+    cached = _HIST_CACHE.get(cache_key)
+    if cached is not None:
+        return cached[-days:] if cached else []
     try:
         d = _get_json(url)
         res = d.get("chart", {}).get("result")
@@ -64,13 +80,15 @@ def _get_yahoo_history(sym: str, days: int = 30) -> list[float]:
             return []
         closes = res[0].get("indicators", {}).get("quote", [{}])[0].get("close", [])
         closes = [c for c in closes if c is not None]
-        return closes[-days:] if closes else []
+        closes = closes[-days:] if closes else []
+        _HIST_CACHE[cache_key] = closes
+        return closes
     except Exception:
         return []
 
 
-def history(sym: str, days: int = 30) -> list[float]:
-    """Public: trailing daily closes for sparklines."""
+def history(sym: str, days: int = 252) -> list[float]:
+    """Public: trailing daily closes for sparklines + drawdown/return math."""
     return _get_yahoo_history(sym, days)
 
 
@@ -196,10 +214,12 @@ def build_features(symbol: str) -> dict | None:
             "short_days": 0.0,
             "rs_blend": 0.0,          # filled by RS module (vs SPY) downstream
             "rs_sector": 0.0,
-            "drawdown_52w": (1 - price / hi) if hi else 0.0,
+            # NOTE: drawdown_52w is recomputed by rs.compute_rs() from real 252-day closes —
+            #       do NOT hardcode it here (stale 52w range would feed a fake value to confirmation())
             "sector": sector,
             "beta": beta,
             "dte": dte,
+            "pe": pe,   # None when no AV key -> UI shows "—"
         }
     except Exception as e:
         raise RuntimeError(f"{symbol}: {e}") from e

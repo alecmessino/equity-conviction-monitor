@@ -23,6 +23,27 @@ LEDGER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))
 BENCH = {"symbol": "SPY"}
 
 
+def _derived_metrics(closes: list, price: float, pe: float | None = None) -> dict:
+    """Compute locally-derived drawdown + return metrics from 252-day closes.
+
+    * return_365d: (last - 252-ago) / 252-ago     — trailing 1-yr total return
+    * drawdown_52w: (max - price) / max          — true 52w drawdown from peak
+    * pe: passthrough from AV /OVERVIEW (None if unavailable)
+    Returns {} when closes are insufficient (avoids fabricating signals).
+    """
+    out = {}
+    if closes and len(closes) >= 2 and price > 0:
+        ref = closes[0]                       # ~252 trading days ago
+        if ref > 0:
+            out["return_365d"] = round((price - ref) / ref, 4)
+        hi = max(closes)
+        if hi > 0:
+            out["drawdown_52w"] = round((hi - price) / hi, 4)
+    if pe is not None:
+        out["pe"] = round(pe, 2)
+    return out
+
+
 def build(allow_fixture_fallback=True):
     av_set = bool(data.AV_KEY)
     print(f"Alpha Vantage key: {'SET' if av_set else 'unset (neutral fundamentals, Yahoo prices only)'}")
@@ -56,14 +77,17 @@ def build(allow_fixture_fallback=True):
     for f in feats:
         q, c, r, conv, sig, comp = score(f, BENCH)
         sym = f["symbol"]
-        # persist trailing closes for sparklines (best-effort; keyless Yahoo)
+        # persist trailing closes (252-day, keyless Yahoo) for sparklines + drawdown/return math
+        closes = None
         try:
-            closes = data.history(sym, 30)
+            closes = data.history(sym, 252)
             if closes:
                 with open(os.path.join(hist_dir, f"{sym}.json"), "w") as hf:
                     json.dump({"symbol": sym, "closes": closes}, hf)
         except Exception as e:
             print(f"  history {sym} skipped: {e}")
+        # --- locally-derived drawdown + 1Y return + pe (additive metadata; NO scoring impact) ---
+        dm = _derived_metrics(closes or [], round(f["price"], 2), f.get("pe"))
         rows.append({
             "symbol": sym,
             "price": round(f["price"], 2),
@@ -77,6 +101,7 @@ def build(allow_fixture_fallback=True):
             "sector": f.get("sector", ""),
             "beta": f.get("beta"),  # None when unavailable (no AV key) -> UI shows "—"
             "dte": f.get("dte"),  # days to next earnings (None = n/a, e.g. ETFs)
+            "pe": f.get("pe"),   # None when no AV key -> UI shows "—"
             "factors": {
                 "quality": comp["quality"],
                 "confirmation": comp["confirmation"],
@@ -93,6 +118,9 @@ def build(allow_fixture_fallback=True):
                 "debt_ebitda": round(f.get("debt_ebitda", 5.0) or 5.0, 2),
                 "earnings_stability": round(f.get("earnings_stability", 0.5) or 0.5, 2),
             },
+            # additive metadata (NO scoring impact) — powers the Fallen Titan viz
+            "return_365d": dm.get("return_365d"),
+            "drawdown_52w": dm.get("drawdown_52w"),
         })
     rows.sort(key=lambda x: x["conviction"], reverse=True)
     # score-proportional weights (top names get larger weight; normalized to 100)
