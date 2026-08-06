@@ -6,546 +6,1291 @@
 <title>Equity Conviction Monitor</title>
 <link rel="icon" href="data:,">
 <style>
-:root{--bg:#0a0e17;--bg2:#131b2e;--bg3:#1c253e;--fg:#e0e6ed;--muted:#8899a6;--border:#2a3b5c;--green:#00e676;--red:#ff5252;--blue:#29b6f6;--gold:#ffd700;--amber:#ffc107;
-  --buy:#10B981;--sell:#EF4444;--hold:#F59E0B;--neutral:#94A3B8}
-*{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,monospace;font-size:12.5px;color:var(--fg);background:var(--bg)}
-header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0c1018,#07090d)}
-.brand{font-weight:700;font-size:15px}.brand small{color:var(--muted);font-weight:400;font-size:11px;margin-left:8px}
-.kpi{display:grid;grid-template-columns:repeat(auto-fit,minmax(165px,1fr));gap:12px;margin:18px 20px}
-.card{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px}
-.kpi-title{text-transform:uppercase;letter-spacing:.5px;font-size:9px;color:var(--muted);margin-bottom:5px}
-.kpi-value{font-size:20px;font-weight:700;font-family:monospace}
-.kpi-sub{font-size:10px;color:var(--muted);margin-top:2px}
-.grid2{display:grid;grid-template-columns:1.2fr 1fr;gap:18px;padding:0 20px;margin-bottom:18px}
-.section{background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;overflow:hidden}
-.section h2{margin:0 0 12px;font-size:11.5px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);border-bottom:1px solid var(--border);padding-bottom:6px}
-table{width:100%;border-collapse:collapse;font-variant-numeric:tabular-nums}
-th,td{padding:6px 10px;text-align:right;border-bottom:1px solid #161d2e;font-size:12px;white-space:nowrap}
-th{color:var(--muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.4px;font-weight:600}
-td.l,th.l{text-align:left}
-tbody tr:hover{background:#171e32}
-.badge{padding:2px 8px;border-radius:12px;font-size:9px;font-weight:700}
-.bSTRONG,.bBUY{color:var(--buy);background:rgba(16,185,129,.12)}.bHOLD{color:var(--hold);background:rgba(245,158,11,.12)}.bWATCH{color:var(--neutral);background:rgba(148,163,184,.12)}.bAVOID{color:var(--sell);background:rgba(239,68,68,.12)}
-.pos{color:var(--buy)}.neg{color:var(--sell)}.neu{color:var(--hold)}
-.num{text-align:right;font-variant-numeric:tabular-nums}
-.lt{text-align:left}
-.bar{display:inline-block;width:48px;height:6px;background:#0f1424;border-radius:3px;overflow:hidden;vertical-align:middle}
-.bar i{display:block;height:100%;background:linear-gradient(90deg,#1a6,#00e676)}
-.mini{width:50px;height:22px}
-.spark{width:90px;height:24px;vertical-align:middle}
-.heatmap{display:grid;grid-template-columns:repeat(8,1fr);gap:3px;font-size:10px;font-family:monospace}
-.hcell{padding:6px;text-align:center;font-weight:700;border-radius:4px}
-canvas{background:transparent}
-.muted-btn{background:var(--bg3);color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:6px 12px;font-size:11px;font-family:monospace;cursor:pointer;letter-spacing:.3px}
-.muted-btn:hover{color:var(--fg);border-color:var(--blue)}
-.earn-tag{color:var(--muted);font-weight:400;font-size:9.5px;margin-left:5px;letter-spacing:.2px}
-.note{color:var(--muted);font-size:10px;padding-top:8px;border-top:1px solid var(--border)}
-.completeness{display:inline-flex;align-items:center;gap:6px;font-size:10px;color:var(--muted);margin-left:10px}
-.completeness .dot{width:8px;height:8px;border-radius:50%}
-.completeness .full{color:var(--buy)}
-.completeness .missing{color:var(--sell)}
-.spark-legend{display:flex;gap:10px;font-size:9px;color:var(--muted);margin-top:2px}
-.filter-bar{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);margin-bottom:10px}
-.filter-bar select,.filter-bar button{cursor:pointer}
-/* Ticker drawer (P1) */
-.drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;visibility:hidden;transition:opacity .18s ease;pointer-events:none;z-index:999}
-.drawer-backdrop.open{opacity:1;visibility:visible;pointer-events:auto}
-.drawer{position:fixed;top:0;right:-20px;width:420px;max-width:90vw;height:100vh;background:var(--bg2);border-left:1px solid var(--border);box-shadow:0 0 40px rgba(0,0,0,.6);display:flex;flex-direction:column;transition:right .22s cubic-bezier(.25,.8,.25,1);z-index:1000}
-.drawer.open{right:0}
-.drawer-head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border)}
-.drawer-head h3{margin:0;font-size:14px;font-weight:700}
-.drawer-head button{cursor:pointer}
-.drawer-body{overflow-y:auto;padding:16px 18px;font-size:12px;line-height:1.6}
-.drawer-body ul{margin:0;padding-left:18px}
-.drawer-body li{margin-bottom:4px}
-.drawer-body table{width:100%;border-collapse:collapse;font-size:11.5px}
-.drawer-body th,.drawer-body td{padding:4px 8px;border-bottom:1px solid #161d2e;text-align:left}
-.drawer-body .kv td:first-child{color:var(--muted);font-weight:500}
-.drawer-close{display:none}
-#root{border-radius:8px}
+/* ---------------------------------------------------------------------------
+   Palette: validated categorical/diverging/status slots, stated for both modes.
+   Conviction uses the DIVERGING blue<->red pair with a neutral gray midpoint,
+   never green/red: the tiers are always rendered beside their text label, and a
+   green/red pair is the single worst choice for colour-vision deficiency in a
+   product whose entire job is ranking.
+   --------------------------------------------------------------------------- */
+:root{
+  color-scheme: light;
+  --surface:#fcfcfb; --plane:#f4f4f1; --raised:#ffffff;
+  --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
+  --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
+  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
+  --pos-pole:#2a78d6; --neg-pole:#e34948; --mid:#f0efec;
+  --good:#006300; --bad:#d03b3b; --warn:#fab219;
+  --seq-100:#cde2fb; --seq-250:#86b6ef; --seq-450:#2a78d6; --seq-650:#104281;
+  --shadow:0 1px 2px rgba(11,11,11,.06),0 8px 24px rgba(11,11,11,.08);
+}
+@media (prefers-color-scheme: dark){
+  :root:where(:not([data-theme="light"])){
+    color-scheme: dark;
+    --surface:#1a1a19; --plane:#0d0d0d; --raised:#212120;
+    --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+    --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+    --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+    --pos-pole:#3987e5; --neg-pole:#e66767; --mid:#383835;
+    --good:#0ca30c; --bad:#d03b3b; --warn:#fab219;
+    --seq-100:#104281; --seq-250:#184f95; --seq-450:#3987e5; --seq-650:#9ec5f4;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.5);
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme: dark;
+  --surface:#1a1a19; --plane:#0d0d0d; --raised:#212120;
+  --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
+  --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
+  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
+  --pos-pole:#3987e5; --neg-pole:#e66767; --mid:#383835;
+  --good:#0ca30c; --bad:#d03b3b; --warn:#fab219;
+  --seq-100:#104281; --seq-250:#184f95; --seq-450:#3987e5; --seq-650:#9ec5f4;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.5);
+}
+
+*{box-sizing:border-box}
+html,body{overflow-x:hidden}
+body{
+  margin:0;background:var(--plane);color:var(--ink);
+  font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
+  font-size:13px;line-height:1.45;-webkit-font-smoothing:antialiased;
+}
+.num{font-variant-numeric:tabular-nums}
+h1,h2,h3{margin:0;font-weight:600}
+a{color:var(--s1)}
+button{font:inherit;cursor:pointer}
+
+/* --- shell --- */
+header{
+  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
+  padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border);
+  position:sticky;top:0;z-index:40;
+}
+.brand{font-size:14px;font-weight:600;letter-spacing:-.01em}
+.brand span{color:var(--muted);font-weight:400}
+.spacer{margin-left:auto}
+.chip{
+  display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;
+  border:1px solid var(--border);background:var(--plane);
+  font-size:11px;color:var(--ink-2);white-space:nowrap;
+}
+.chip b{font-weight:600;color:var(--ink)}
+.dot{width:7px;height:7px;border-radius:50%;flex:none}
+.btn{
+  padding:5px 11px;border-radius:7px;border:1px solid var(--border);
+  background:var(--plane);color:var(--ink-2);font-size:12px;
+}
+.btn:hover{color:var(--ink);border-color:var(--axis)}
+.btn[aria-pressed="true"]{background:var(--s1);border-color:var(--s1);color:#fff}
+
+nav{
+  display:flex;gap:2px;padding:0 20px;background:var(--surface);
+  border-bottom:1px solid var(--border);position:sticky;top:53px;z-index:39;
+  overflow-x:auto;
+}
+nav button{
+  padding:9px 14px;border:0;background:none;color:var(--muted);font-size:12.5px;
+  border-bottom:2px solid transparent;white-space:nowrap;
+}
+nav button:hover{color:var(--ink-2)}
+nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--s1);font-weight:500}
+
+main{padding:16px 20px 48px;max-width:1680px;margin:0 auto}
+.view[hidden]{display:none}
+
+/* --- cards --- */
+.card{
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  padding:14px 16px;min-width:0;
+}
+.card>h2{
+  font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  font-weight:600;margin-bottom:10px;
+}
+.card-note{color:var(--muted);font-size:11px;margin-top:10px;line-height:1.5}
+.row{display:grid;gap:12px;margin-bottom:12px}
+.strip{grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
+.split{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}
+@media (max-width:1100px){.split{grid-template-columns:1fr}}
+
+.tile-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.tile-value{font-size:23px;font-weight:600;letter-spacing:-.02em;margin-top:1px}
+.tile-sub{font-size:11px;color:var(--muted)}
+.tile-row{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
+.delta{font-size:11px;font-variant-numeric:tabular-nums}
+.up{color:var(--good)}.down{color:var(--bad)}
+
+/* --- tables --- */
+.tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:70vh;border-radius:8px}
+table{width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
+th,td{padding:6px 9px;text-align:right;font-size:12px;white-space:nowrap}
+th{
+  position:sticky;top:0;z-index:2;background:var(--surface);
+  color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;
+  font-weight:600;border-bottom:1px solid var(--axis);cursor:pointer;user-select:none;
+}
+th:hover{color:var(--ink-2)}
+th[aria-sort]{color:var(--ink)}
+th.l,td.l{text-align:left}
+tbody td{border-bottom:1px solid var(--grid)}
+tbody tr{cursor:pointer}
+tbody tr:hover td{background:var(--plane)}
+.sym{font-weight:600}
+.co{color:var(--muted);font-size:11px;display:block;max-width:190px;overflow:hidden;text-overflow:ellipsis}
+
+.tier{
+  display:inline-block;padding:1px 7px;border-radius:5px;font-size:10px;
+  font-weight:600;letter-spacing:.02em;border:1px solid transparent;
+}
+.conv{font-weight:600;font-size:13px}
+
+/* percentile bar: sequential single hue, magnitude only */
+.pb{display:flex;align-items:center;gap:6px;justify-content:flex-end}
+.pb-track{width:44px;height:5px;border-radius:3px;background:var(--grid);overflow:hidden;flex:none}
+.pb-fill{height:100%;border-radius:3px;background:var(--seq-450);display:block}
+.pb-num{width:22px;text-align:right;font-size:11px;color:var(--ink-2)}
+
+.imputed{color:var(--muted);font-style:italic}
+
+/* --- filters --- */
+.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+select,input[type=search]{
+  font:inherit;font-size:12px;padding:5px 9px;border-radius:7px;
+  border:1px solid var(--border);background:var(--plane);color:var(--ink);
+}
+input[type=search]{min-width:150px}
+input[type=range]{width:110px;accent-color:var(--s1)}
+.count{color:var(--muted);font-size:11.5px;margin-left:auto}
+
+/* --- detail panel --- */
+.scrim{
+  position:fixed;inset:0;background:rgba(0,0,0,.42);z-index:60;
+  opacity:0;visibility:hidden;transition:opacity .16s;
+}
+.scrim.open{opacity:1;visibility:visible}
+.panel{
+  position:fixed;top:0;right:0;height:100dvh;width:560px;max-width:96vw;z-index:61;
+  background:var(--surface);border-left:1px solid var(--border);box-shadow:var(--shadow);
+  transform:translateX(102%);transition:transform .2s cubic-bezier(.22,.7,.3,1);
+  display:flex;flex-direction:column;
+}
+.panel.open{transform:none}
+.panel-head{
+  display:flex;align-items:center;gap:12px;padding:14px 18px;
+  border-bottom:1px solid var(--border);
+}
+.panel-body{overflow-y:auto;padding:16px 18px 40px;flex:1}
+.panel-body section{margin-bottom:20px}
+.panel-body h3{
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  margin-bottom:8px;
+}
+.kv{width:100%;font-size:12px}
+.kv td{border-bottom:1px solid var(--grid);padding:5px 0}
+.kv td:first-child{text-align:left;color:var(--ink-2)}
+.kv td:last-child{text-align:right;font-variant-numeric:tabular-nums}
+.src{font-size:10px;color:var(--muted)}
+
+svg{display:block;max-width:100%;overflow:visible}
+.tick{font-size:9.5px;fill:var(--muted)}
+.axis-title{font-size:10px;fill:var(--muted);letter-spacing:.04em;text-transform:uppercase}
+.gridline{stroke:var(--grid);stroke-width:1}
+.axisline{stroke:var(--axis);stroke-width:1}
+
+/* tooltip */
+#tip{
+  position:fixed;z-index:80;pointer-events:none;opacity:0;transition:opacity .1s;
+  background:var(--raised);border:1px solid var(--border);border-radius:8px;
+  box-shadow:var(--shadow);padding:8px 10px;font-size:11.5px;max-width:250px;
+}
+#tip.on{opacity:1}
+#tip b{font-size:12.5px}
+#tip .r{display:flex;justify-content:space-between;gap:14px;font-variant-numeric:tabular-nums}
+#tip .r span:last-child{color:var(--ink-2)}
+
+.legend{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:11px;color:var(--ink-2);margin-top:8px}
+.legend i{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:-1px}
+.ramp{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted)}
+.ramp-bar{width:104px;height:7px;border-radius:4px}
+
+.prose{max-width:74ch;font-size:13px;line-height:1.62;color:var(--ink-2)}
+.prose h3{font-size:13px;color:var(--ink);text-transform:none;letter-spacing:0;margin:20px 0 6px}
+.prose p{margin:0 0 10px}
+.prose code{
+  background:var(--plane);padding:1px 5px;border-radius:4px;font-size:12px;
+  border:1px solid var(--border);
+}
+.prose ul{margin:0 0 10px;padding-left:20px}
+.prose li{margin-bottom:4px}
+.banner{
+  border:1px solid var(--border);border-left:3px solid var(--warn);
+  background:var(--surface);border-radius:8px;padding:10px 14px;margin-bottom:12px;
+  font-size:12px;color:var(--ink-2);
+}
+.skip{position:absolute;left:-9999px}
+.skip:focus{left:8px;top:8px;z-index:99;background:var(--surface);padding:8px 12px;border-radius:6px}
 </style>
 </head>
 <body>
+<a class="skip" href="#screener">Skip to screener</a>
+
 <header>
-  <div class="brand">EQUITY CONVICTION MONITOR <small>v2 · 0.35Q·0.25M·0.40V·CapAlloc · FMP-free-tier</small></div>
-  <div style="display:flex;align-items:center;gap:14px">
-    <button id="export-btn" class="muted-btn" onclick="exportCSV()">CSV</button>
-    <div class="kpi-value" id="live-now" style="color:var(--blue)">—</div>
-    <span id="completeness" class="completeness"></span>
-  </div>
+  <div class="brand">Equity Conviction Monitor <span id="hdr-model">·</span></div>
+  <span class="chip" id="hdr-status"><span class="dot"></span><span>loading</span></span>
+  <span class="chip" id="hdr-universe"></span>
+  <span class="chip" id="hdr-coverage" title="Share of scored names carrying a real, filing-derived value for each quality input"></span>
+  <div class="spacer"></div>
+  <button class="btn" id="csv">Export CSV</button>
+  <button class="btn" id="theme" title="Toggle light/dark">Theme</button>
 </header>
 
-<div class="kpi">
-  <div class="card"><div class="kpi-title">Tracked Mkt Cap</div><div class="kpi-value" id="k-mcap">$—</div><div class="kpi-sub" id="k-count"></div></div>
-  <div class="card"><div class="kpi-title">Avg Conviction</div><div class="kpi-value" id="k-avg">—</div><div class="kpi-sub" style="color:var(--green)" id="k-buy"></div></div>
-  <div class="card"><div class="kpi-title">BUY+ (≥70)</div><div class="kpi-value" id="k-strong">—</div><div class="kpi-sub" id="k-hold"></div></div>
-  <div class="card"><div class="kpi-title">Live Alpha</div><div class="kpi-value" id="k-alpha">—</div><div class="kpi-sub" id="k-last"></div></div>
-</div>
+<nav role="tablist">
+  <button role="tab" aria-selected="true" data-view="screener">Screener</button>
+  <button role="tab" aria-selected="false" data-view="sectors">Sectors</button>
+  <button role="tab" aria-selected="false" data-view="portfolio">Portfolio</button>
+  <button role="tab" aria-selected="false" data-view="data">Data quality</button>
+  <button role="tab" aria-selected="false" data-view="method">Method</button>
+</nav>
 
-<div class="grid2">
-  <div class="section" id="sec-matrix">
-    <h2>Conviction Matrix — Value vs. 1-Year Drawdown (Bubble = Mcap)</h2>
-    <canvas id="matrix" width="520" height="380"></canvas>
-    <div class="note">X=Valuation z-score (cheap→rich) · Y=1Y return (beaten-down bottom→recovery top). Bubble=mcap. Bottom-left=red zone (cheap + deep drawdown).</div>
-  </div>
-  <div class="section" id="sec-alerts">
-    <h2>Blue-Chip Clearance Sale</h2>
-    <table style="font-size:12px">
-      <thead><tr><th class="l">Ticker</th><th>1Y Δ</th><th class="l">Signal</th><th>Detail</th></tr></thead>
-      <tbody id="alerts-tbody"></tbody>
-    </table>
-    <div class="note" id="regime-line">—</div>
-  </div>
-</div>
+<main>
+  <div id="alert"></div>
 
-<div class="section" style="margin:0 20px 18px">
-  <h2>Conviction Leaderboard</h2>
-  <div class="filter-bar" id="filter-bar">
-    <select id="f-sector" class="muted-btn"><option value="">Sector — all</option></select>
-    <select id="f-signal" class="muted-btn"><option value="">Signal — all</option>
-      <option value="STRONG">STRONG</option><option value="BUY">BUY</option>
-      <option value="HOLD">HOLD</option><option value="WATCH">WATCH</option><option value="AVOID">AVOID</option></select>
-    <select id="f-mcap" class="muted-btn"><option value="">Mkt Cap — all</option>
-      <option value="large">Large ($10B+)</option><option value="mid">Mid ($2-10B)</option>
-      <option value="small">Small (&lt;$2B)</option></select>
-    <button id="f-showall" class="muted-btn" style="margin-left:auto">Top 15</button>
-    <span id="f-count" class="muted" style="margin-left:12px"></span>
-  </div>
-  <table>
-    <thead><tr>
-      <th class="l">#</th><th class="l">Ticker</th><th class="l">30D Trend</th><th>Conv</th><th>Signal</th><th title="💧 Q×M×V waterfall (hover row): quality × confirmation × risk = 100·Q·M·V">Dec</th><th>Wt</th>
-      <th>Price</th><th>Beta</th><th>ROIC%</th><th>FCF%</th><th>12M RS</th><th>Liquidity</th><th>Val Tier</th>
-      <th>Size%</th><th>ATR Stop</th><th>ATR Target</th><th>1Y Return</th><th>52w Drawdn</th><th>P/E</th>
-    </tr></thead>
-    <tbody id="lb-tbody"></tbody>
-  </table>
-</div>
+  <!-- macro regime -->
+  <div class="row strip" id="macro"></div>
 
-<!-- Ticker detail slide-out drawer (P1) -->
-<div id="drawer-backdrop" class="drawer-backdrop"></div>
-<div id="drawer" class="drawer">
-  <div class="drawer-head">
-    <h3 id="drawer-title">—</h3>
-    <button id="drawer-close" class="muted-btn">✕</button>
-  </div>
-  <div id="drawer-body" class="drawer-body"></div>
-</div>
+  <!-- ================= SCREENER ================= -->
+  <div class="view" id="view-screener">
+    <div class="row strip" id="kpis"></div>
 
-<div class="grid2">
-  <div class="section" id="sec-heat">
-    <h2>Factor Grades (A+–F)</h2>
-    <div class="heatmap" id="heat"></div>
-    <div class="note">Q=Quality ROIC/F-Margin/Leverage · M=Momentum 12M RS / 3M · V=Valuation FCF-EV / PE · S=Safety Shorts/Piotroski</div>
+    <div class="row split">
+      <div class="card">
+        <h2>Factor map — quality vs. momentum</h2>
+        <div id="map"></div>
+        <div class="legend">
+          <span class="ramp">
+            <span>Low conviction</span>
+            <span class="ramp-bar" id="ramp"></span>
+            <span>High</span>
+          </span>
+          <span>Area ∝ market cap</span>
+        </div>
+        <p class="card-note">
+          Each name sits at its <b>sector percentile</b> for quality (x) and its universe
+          percentile for risk-adjusted relative strength (y). The upper-right quadrant is
+          quality that the market is already confirming; the lower-right is the
+          quality-mean-reversion thesis — good businesses the tape has not yet re-rated.
+        </p>
+      </div>
+
+      <div style="display:grid;gap:12px;align-content:start;min-width:0">
+        <div class="card">
+          <h2>Quality on sale — high quality, deep drawdown</h2>
+          <div class="tbl-wrap" style="max-height:250px"><table id="sale">
+            <thead><tr>
+              <th class="l">Ticker</th><th>Conv</th><th>Qual pct</th>
+              <th>Drawdown</th><th>12m</th>
+            </tr></thead><tbody></tbody>
+          </table></div>
+          <p class="card-note" id="sale-note"></p>
+        </div>
+        <div class="card">
+          <h2>Conviction distribution</h2>
+          <div id="dist"></div>
+          <p class="card-note" id="dist-note"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" id="screener">
+      <h2>Conviction screener</h2>
+      <div class="filters">
+        <input type="search" id="f-q" placeholder="Ticker or company" aria-label="Search">
+        <select id="f-sector" aria-label="Sector"><option value="">All sectors</option></select>
+        <select id="f-signal" aria-label="Signal">
+          <option value="">All signals</option>
+          <option>STRONG</option><option>BUY</option><option>HOLD</option>
+          <option>WATCH</option><option>AVOID</option>
+        </select>
+        <select id="f-conf" aria-label="Data confidence">
+          <option value="0">Any data confidence</option>
+          <option value="0.6">≥ 60% confidence</option>
+          <option value="0.9">≥ 90% confidence</option>
+        </select>
+        <span class="count" id="count"></span>
+      </div>
+      <div class="tbl-wrap"><table id="grid">
+        <thead><tr>
+          <th class="l" data-k="symbol">Ticker</th>
+          <th class="l" data-k="sector">Sector</th>
+          <th data-k="conviction" aria-sort="descending">Conv</th>
+          <th class="l" data-k="signal">Signal</th>
+          <th data-k="q_raw" title="Sector-relative percentile: ROIC, FCF yield, gross margin, leverage, earnings stability">Quality</th>
+          <th data-k="c_raw" title="Vol-adjusted excess return vs SPY over 1/3/6/12m, plus trend state">Momentum</th>
+          <th data-k="r_raw" title="Dollar liquidity, valuation, realised volatility">Risk</th>
+          <th data-k="weight">Weight</th>
+          <th data-k="price">Price</th>
+          <th data-k="chg_1d">1d</th>
+          <th data-k="ret_12m">12m</th>
+          <th data-k="drawdown_52w">Drawdn</th>
+          <th data-k="roic">ROIC</th>
+          <th data-k="fcf_yield">FCF yld</th>
+          <th data-k="pe">P/E</th>
+          <th data-k="market_cap">Mkt cap</th>
+          <th data-k="data_confidence" title="Share of model inputs observed rather than imputed from the sector median">Conf</th>
+        </tr></thead><tbody></tbody>
+      </table></div>
+      <p class="card-note">
+        Click any row for the full decomposition and its source filings. Italic values are
+        imputed from the sector median because the filing did not report them — they lower
+        the confidence score rather than silently counting as zero.
+      </p>
+    </div>
   </div>
-  <div class="section" id="sec-sector">
-    <h2>Sector Drawdown Barometer</h2>
-    <canvas id="sector" width="520" height="260"></canvas>
-    <div class="note" id="sector-legend"></div>
+
+  <!-- ================= SECTORS ================= -->
+  <div class="view" id="view-sectors" hidden>
+    <div class="row split">
+      <div class="card">
+        <h2>Median conviction by sector</h2>
+        <div id="sec-chart"></div>
+        <p class="card-note">
+          Median rather than mean, so one outlier cannot carry a sector. Quality inputs are
+          ranked <em>within</em> sector, so this compares momentum, valuation and liquidity
+          across sectors rather than re-running a margin comparison that would only ever
+          favour software.
+        </p>
+      </div>
+      <div class="card">
+        <h2>Sector detail</h2>
+        <div class="tbl-wrap" style="max-height:420px"><table id="sec-table">
+          <thead><tr>
+            <th class="l">Sector</th><th>Names</th><th>Median conv</th>
+            <th>Median 12m</th><th>Coverage</th>
+          </tr></thead><tbody></tbody>
+        </table></div>
+      </div>
+    </div>
   </div>
-</div>
+
+  <!-- ================= PORTFOLIO ================= -->
+  <div class="view" id="view-portfolio" hidden>
+    <div class="row strip" id="pf-kpis"></div>
+    <div class="row split">
+      <div class="card">
+        <h2>Held book</h2>
+        <div class="tbl-wrap" style="max-height:480px"><table id="pf">
+          <thead><tr>
+            <th class="l">Ticker</th><th class="l">Sector</th><th>Conv</th>
+            <th>Weight</th><th>12m</th><th>Vol</th>
+          </tr></thead><tbody></tbody>
+        </table></div>
+        <p class="card-note" id="pf-note"></p>
+      </div>
+      <div class="card">
+        <h2>Turnover vs. previous run</h2>
+        <div id="turnover"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= DATA QUALITY ================= -->
+  <div class="view" id="view-data" hidden>
+    <div class="card">
+      <h2>Input coverage</h2>
+      <div id="cov-chart"></div>
+      <p class="card-note">
+        Share of scored names carrying a real, filing-derived value. Anything below 100% is
+        imputed from the sector median for those names and reflected in their confidence
+        score. This panel exists because the previous version of this terminal published a
+        board of zeros for weeks while reporting success — nothing was measuring its own output.
+      </p>
+    </div>
+    <div class="row split" style="margin-top:12px">
+      <div class="card">
+        <h2>Names with the weakest inputs</h2>
+        <div class="tbl-wrap" style="max-height:360px"><table id="weak">
+          <thead><tr><th class="l">Ticker</th><th>Conf</th><th class="l">Imputed inputs</th></tr></thead>
+          <tbody></tbody>
+        </table></div>
+      </div>
+      <div class="card">
+        <h2>Run diagnostics</h2>
+        <table class="kv" id="diag"></table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= METHOD ================= -->
+  <div class="view" id="view-method" hidden>
+    <div class="card">
+      <h2>Methodology</h2>
+      <div class="prose">
+        <p><b>Conviction = 100 × (Q · C · R)<sup>1/3</sup></b>, where each pillar is built
+        from cross-sectional percentile ranks rather than absolute thresholds.</p>
+
+        <h3>Q — Quality (ranked within GICS sector)</h3>
+        <ul>
+          <li><b>ROIC</b> — NOPAT ÷ (debt + equity − cash), NOPAT = operating income × (1 − 21%)</li>
+          <li><b>FCF yield</b> — (operating cash flow − capex) ÷ market cap</li>
+          <li><b>Gross margin</b> — gross profit ÷ revenue, reconstructed from cost of revenue where a filer omits the tag</li>
+          <li><b>Leverage</b> — net debt ÷ EBITDA, ranked inverted</li>
+          <li><b>Earnings stability</b> — 1 − coefficient of variation of annual net income</li>
+        </ul>
+        <p>Ranking within sector is deliberate: a grocer's 25% gross margin is excellent for
+        a grocer, and ranking it against software would turn the quality score into an
+        unintended sector bet.</p>
+
+        <h3>C — Confirmation</h3>
+        <p>Excess return versus SPY at 1, 3, 6 and 12 months (weighted 0.15/0.25/0.30/0.30),
+        divided by realised volatility, plus a trend term for price relative to its 50- and
+        200-day averages. Dividing by volatility is what makes a utility's +6% comparable to
+        a semiconductor's +18%; without it a momentum ranking is a high-beta screen in disguise.</p>
+        <p>A name whose quality percentile clears 0.55 and which trades more than 15% below
+        its 52-week high receives a mean-reversion uplift of up to 30%. The quality gate is
+        the point — an identical uplift applied to a low-quality name rewards a falling knife.</p>
+
+        <h3>R — Risk</h3>
+        <p>Dollar liquidity (average daily traded value), valuation (earnings yield and
+        EBITDA/EV, ranked within sector), and realised volatility ranked inverted. Yields
+        rather than multiples, so the measure stays finite and correctly ordered through zero
+        and negative earnings.</p>
+
+        <h3>Why the geometric mean</h3>
+        <p>A product of three sub-unit factors puts a thoroughly median company at
+        0.5 × 0.5 × 0.5 ≈ 12/100, which places every name below a BUY threshold of 70 — the
+        tiers describe a structure the arithmetic cannot produce. The cube root restores the
+        scale while keeping the property that matters: a pillar near zero still vetoes the
+        score, because you cannot recover from a zero factor.</p>
+
+        <h3>Missing data</h3>
+        <p>An input the filings do not report is imputed at the sector median percentile and
+        lowers the name's <b>data confidence</b>, which is reported alongside the score.
+        Absent evidence is not negative evidence: scoring an unmeasured company as 0 emits a
+        confident sell recommendation on the basis of nothing.</p>
+
+        <h3>Sources</h3>
+        <ul>
+          <li><b>Fundamentals</b> — SEC EDGAR XBRL company facts. Every figure traces to an
+          accession number, linked from each name's detail panel.</li>
+          <li><b>Prices</b> — Nasdaq daily OHLCV, with Yahoo and a committed cache behind it.
+          All price features are derived locally from one series.</li>
+          <li><b>Macro</b> — FRED (10-year Treasury, 2s10s, VIX, high-yield OAS).</li>
+        </ul>
+
+        <h3>Limitations</h3>
+        <ul>
+          <li>Fundamentals are as-filed and lag the market by up to a quarter. Trailing
+          twelve-month figures roll the last fiscal year forward using the most recent
+          reported quarter where both legs share an XBRL tag.</li>
+          <li>Dual-class companies (e.g. BRK.B) report share counts as dimensional facts that
+          the bulk frames API omits, so market cap can be missing. It is shown as missing
+          rather than guessed.</li>
+          <li>Net debt / EBITDA is not meaningful for banks and insurers; those names take the
+          sector median and a lower confidence score.</li>
+          <li>Percentiles are relative to <em>this</em> universe. A conviction of 80 means top
+          of this list, not an absolute valuation claim.</li>
+          <li>This is a research tool, not investment advice.</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</main>
+
+<div class="scrim" id="scrim"></div>
+<aside class="panel" id="panel" aria-hidden="true">
+  <div class="panel-head">
+    <div><h1 id="p-sym" style="font-size:17px">—</h1><div class="src" id="p-name"></div></div>
+    <div class="spacer"></div>
+    <button class="btn" id="p-close" aria-label="Close">Close</button>
+  </div>
+  <div class="panel-body" id="p-body"></div>
+</aside>
+
+<div id="tip" role="tooltip"></div>
 
 <script>
-const W={Q:0.35,M:0.25,V:0.40}  // institutional weight narrative; the engine is multiplicative Q·C·R
-function clamp01(x){return Math.max(0,Math.min(1,x))}
-function signal(cv){return cv>=80?'STRONG':cv>=70?'BUY':cv>=55?'HOLD':cv>=40?'WATCH':'AVOID'}
-function grade(v){const g=['F','D','C','B','A','A+'];return g[Math.max(0,Math.min(5,Math.floor(clamp01(v)*6)))]}
-// Quality pillar = fundamentals blend (matches model.py quality(): fractional inputs)
-function F(t,k,d){return (t.factors&&t.factors[k]!=null?t.factors[k]:t[k])??d}
-function pillar_quality(t){
-  const roic=clamp01(F(t,'roic',0)/0.25), fcf=clamp01(F(t,'fcf_yield',0)/0.08),
-        bm=clamp01(F(t,'gross_margin',0)/0.50), lev=clamp01(1-(F(t,'debt_ebitda',5.0))/3.0),
-        es=clamp01(F(t,'earnings_stability',0.5))
-  const raw=0.30*roic+0.25*fcf+0.15*bm+0.20*lev+0.10*es
-  return clamp01((raw-0.20)/0.60)
-}
-// Confirmation pillar = momentum (multi-horizon RS vs SPY, soft tanh, NO clamp)
-function pillar_momentum(t){
-  const rs=F(t,'rs_blend',0)
-  const c=0.10+0.90*((Math.tanh(rs/25)+1)/2)
-  const dd=F(t,'drawdown_52w',0)
-  return dd>=0.15? Math.min(0.95,c*(1+0.15*(dd-0.10))): c
-}
-// Valuation/CapAlloc pillar = liquidity × short-interest × valuation-z (faithful to model.risk_adjustment)
-function pillar_valuation(t){
-  const adv=t.adv||0
-  let liq=adv>0?clamp01((Math.log10(adv)-6)/4):0.15
-  liq=Math.max(0.25,Math.min(1,liq))
-  const dtc=F(t,'short_days',0)
-  const short_mult=clamp01(1-Math.max(0,dtc-3)/30)
-  const val_z=F(t,'val_zscore',0)
-  const val_mult=clamp01(1+0.15*(-val_z))
-  const r=liq*short_mult*val_mult
-  return {r:Math.max(0.4,Math.min(1,r)),liq,short_mult,val_mult}
-}
-// faithful JS port of equity_monitor.model.score: conviction = clamp(100 * Q * C * R, 0, 100)
-function composite(t){
-  const q=pillar_quality(t), m=pillar_momentum(t), vr=pillar_valuation(t)
-  const conv=Math.round(Math.max(0,Math.min(100,100*q*m*vr.r)))
-  return {q,m,v:vr.r,conv:conv,liq:vr.liq,short_mult:vr.short_mult,val_mult:vr.val_mult}
-}
-function fmtP(p){if(p==null)p=0;return '$'+Number(p).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}
-function pct(v){if(v==null)v=0;return (v>=0?'+':'')+v.toFixed(2)+'%'}
-function liqBar(adv){const w=clamp01(adv>0?(Math.log10(adv)-6)/4:0);return '<i style="width:'+Math.max(3,w*100)+'%"></i>'}
-function gVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n)}
-function openDrawer(r){
-  const sc=r._sc||composite(r);const s=signal(sc.conv)
-  document.getElementById('drawer-title').textContent=r.symbol+' · '+s
-  document.getElementById('drawer-body').innerHTML=drawerContent(r,sc)
-  document.getElementById('drawer').classList.add('open');document.getElementById('drawer-backdrop').classList.add('open')
-  document.body.style.overflow='hidden'
-  // lazy-load history closes for the drawer sparkline
-  const hb=(window.__ledger&&window.__ledger.hist_base)||'history/'
-  const base=(location.pathname.includes('/web/')?'../ledger/'+hb:location.pathname.includes('/docs/')?hb:'./ledger/'+hb)
-  fetch(base+r.symbol+'.json').then(rq=>rq.json()).then(d=>{
-    const cv=document.getElementById('drawer-spark')
-    if(cv&&d&&d.closes)drawSpark(cv,d.closes)
-  }).catch(()=>{})
-}
-function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('drawer-backdrop').classList.remove('open');document.body.style.overflow=''}
-function drawerContent(r,sc){
-  const sz=window.__kellyCache&&window.__kellyCache[r.symbol],at=window.__atrCache&&window.__atrCache[r.symbol]
-  const sizeCell=sz!=null?sz.toFixed(2)+'%':'—',stopCell=at?fmtP(at.stop):'—',tgtCell=at?fmtP(at.target):'—'
-  const f=r.factors||{}
-  return `<ul>
-    <li><b>Price</b> ${fmtP(r.price)}  <b>Δ</b> ${pct(r.chg)}  <b>Mcap</b> $${(r.mcap||0).toLocaleString()}  <b>Sector</b> ${r.sector||f.sector||'—'}</li>
-    <li><b>Conviction</b> ${sc.conv}  <b>Q</b> ${(sc.q*100).toFixed(0)}%  <b>M</b> ${(sc.m*100).toFixed(0)}%  <b>V</b> ${(sc.v*100).toFixed(0)}%  <b>Risk</b> ${sc.v.toFixed(2)}</li>
-    <li><canvas id="drawer-spark" class="spark" width="180" height="34"></canvas></li>
-  </ul>
-  <table class="kv">
-    <tr><th>Beta</th><td>${(r.beta!=null)?Number(r.beta).toFixed(2):'—'}</td><th>30d Size%</th><td>${sizeCell}</td><th>ATR Stop</th><td>${stopCell}</td></tr>
-    <tr><th>ROIC%</th><td>${(F(r,'roic',0)*100).toFixed(0)}</td><th>DTE</th><td>${(r.dte!=null)?r.dte+'d':'—'}</td><th>ATR Target</th><td>${tgtCell}</td></tr>
-  </table>
-  <div class="note" style="margin-top:10px">💧 Waterfall: Q=${(sc.q*100).toFixed(0)}% × M=${(sc.m*100).toFixed(0)}% × V=${(sc.v*100).toFixed(0)}% → ${sc.conv}/100. Quality × Momentum × Confirmation × Risk-depth. Stop = entry − 2×ATR, Target = entry + 3×ATR.</div>`
-}
-document.getElementById('drawer-close').onclick=closeDrawer
-document.getElementById('drawer-backdrop').onclick=closeDrawer
+/* =====================================================================
+   MODEL PORT — must stay identical to equity_monitor/model.py.
+   Gated by tests/test_parity.py, which executes this exact block in node
+   and compares it to the Python implementation over randomised inputs.
+   ===================================================================== */
+const WEIGHTS = {
+  quality:      {p_roic:0.30, p_fcf_yield:0.25, p_gross_margin:0.15,
+                 p_leverage:0.15, p_earnings_stability:0.15},
+  confirmation: {p_rs:0.70, p_trend:0.30},
+  risk:         {p_liquidity:0.40, p_value:0.35, p_lowvol:0.25},
+};
+const Q_FLOOR=0.02, Q_SPAN=0.98, C_FLOOR=0.10, C_SPAN=0.85,
+      R_FLOOR=0.35, R_SPAN=0.75, C_CEILING=0.98,
+      MR_QUALITY_GATE=0.55, MR_DRAWDOWN_GATE=0.15,
+      MR_DRAWDOWN_SPAN=0.35, MR_MAX_UPLIFT=0.30, NEUTRAL=0.5;
+const SIGNAL_TIERS=[[80,'STRONG'],[70,'BUY'],[55,'HOLD'],[40,'WATCH']];
 
-function exportCSV(){
-  const j=window.__ledger; if(!j||!j.all){return}
-  const cols=['symbol','conviction','signal','weight','price','beta','dte','chg','sector','adv','mcap','pe','return_365d','drawdown_52w','roic','fcf_yield','rs_blend','val_zscore']
-  const head=cols.join(',')
-  const body=j.all.map(r=>cols.map(c=>{
-    let v=r[c]
-    if(c==='roic'||c==='fcf_yield') v=(r.factors&&r.factors[c]!=null)?r.factors[c]:r[c]
-    if(v==null) v=''
-    if(typeof v==='string') v='"'+v.replace(/"/g,'""')+'"'
-    return v
-  }).join(','))
-  const csv=[head].concat(body).join('\n')
-  const blob=new Blob([csv],{type:'text/csv'})
-  const url=URL.createObjectURL(blob)
-  const a=document.createElement('a'); a.href=url
-  const d=new Date(); const ds=d.getFullYear()+('0'+(d.getMonth()+1)).slice(-2)+('0'+d.getDate()).slice(-2)
-  a.download='conviction_state_'+ds+'.csv'; document.body.appendChild(a); a.click()
-  document.body.removeChild(a); URL.revokeObjectURL(url)
+function signal(c){
+  for(const [t,name] of SIGNAL_TIERS) if(c>=t) return name;
+  return 'AVOID';
+}
+function pillar(p,w){
+  let total=0, seen=0;
+  for(const k in w){
+    const v=p[k];
+    if(v===null||v===undefined) continue;
+    total+=w[k]*v; seen+=w[k];
+  }
+  return seen>0 ? total/seen : NEUTRAL;
+}
+function score(p, weights){
+  const w = weights || WEIGHTS;
+  const q_raw=pillar(p,w.quality), c_raw=pillar(p,w.confirmation), r_raw=pillar(p,w.risk);
+  const Q=Q_FLOOR+Q_SPAN*q_raw, R=R_FLOOR+R_SPAN*r_raw;
+  let C=C_FLOOR+C_SPAN*c_raw;
+  const dd=p.drawdown_52w||0;
+  let uplift=1;
+  if(q_raw>=MR_QUALITY_GATE && dd>MR_DRAWDOWN_GATE){
+    uplift=1+MR_MAX_UPLIFT*Math.min(1,(dd-MR_DRAWDOWN_GATE)/MR_DRAWDOWN_SPAN);
+  }
+  C=Math.min(C_CEILING, C*uplift);
+  const raw=100*Math.cbrt(Q*C*R);
+  // floor(x + 0.5), not Math.round(): Python's round() is banker's rounding, so the
+  // two ports would disagree on exact halves. Matched deliberately — see test_parity.
+  const conviction=Math.floor(Math.max(0,Math.min(100,raw))+0.5);
+  return {conviction, signal:signal(conviction), q:Q, c:C, r:R,
+          q_raw, c_raw, r_raw, mr_uplift:uplift};
+}
+/* ================= END MODEL PORT ================= */
+
+/* ---------- formatting ---------- */
+const $=s=>document.querySelector(s);
+const $$=s=>[...document.querySelectorAll(s)];
+const nz=v=>v!==null&&v!==undefined&&!Number.isNaN(v);
+const pct=(v,d=1)=>nz(v)?(v*100).toFixed(d)+'%':'—';
+const spct=(v,d=1)=>nz(v)?(v>=0?'+':'')+(v*100).toFixed(d)+'%':'—';
+const num=(v,d=2)=>nz(v)?v.toFixed(d):'—';
+const money=v=>nz(v)?'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
+function cap(v){
+  if(!nz(v)||v<=0) return '—';
+  const u=[[1e12,'T'],[1e9,'B'],[1e6,'M']];
+  for(const [d,s] of u) if(v>=d) return '$'+(v/d).toFixed(v/d>=100?0:1)+s;
+  return '$'+v.toFixed(0);
+}
+const cssVar=n=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* Diverging conviction ramp: red pole -> neutral -> blue pole, midpoint at HOLD.
+   Never green/red — the tiers always ship with their text label, and green/red is
+   the worst possible pair for colour-vision deficiency in a ranking product. */
+function mix(a,b,t){
+  const hx=h=>[1,3,5].map(i=>parseInt(h.slice(i,i+2),16));
+  const [r1,g1,b1]=hx(a),[r2,g2,b2]=hx(b);
+  const c=(x,y)=>Math.round(x+(y-x)*t).toString(16).padStart(2,'0');
+  return '#'+c(r1,r2)+c(g1,g2)+c(b1,b2);
+}
+function convColor(c){
+  if(!nz(c)) return cssVar('--muted');
+  const lo=cssVar('--neg-pole'), mid=cssVar('--mid'), hi=cssVar('--pos-pole');
+  const t=Math.max(0,Math.min(1,(c-25)/55));           // 25 -> 80 spans the ramp
+  return t<0.5 ? mix(lo,mid,t*2) : mix(mid,hi,(t-0.5)*2);
+}
+function tierStyle(sig,conv){
+  const c=convColor(conv);
+  return `color:${sig==='HOLD'?cssVar('--ink-2'):c};border-color:${c};`
+       + `background:color-mix(in srgb, ${c} 12%, transparent)`;
 }
 
-const $=s=>document.querySelector(s)
-async function load(){
-  const base=(location.pathname.includes('/web/')?'../ledger/':location.pathname.includes('/docs/')?'./':'./ledger/')
+/* ---------- tooltip ---------- */
+const tip=$('#tip');
+function showTip(html,x,y){
+  tip.innerHTML=html; tip.classList.add('on');
+  const r=tip.getBoundingClientRect();
+  tip.style.left=Math.min(x+13, innerWidth-r.width-10)+'px';
+  tip.style.top=Math.max(8, Math.min(y+13, innerHeight-r.height-10))+'px';
+}
+const hideTip=()=>tip.classList.remove('on');
+
+/* ---------- svg helpers ---------- */
+const NS='http://www.w3.org/2000/svg';
+function el(tag,attrs={},parent){
+  const n=document.createElementNS(NS,tag);
+  for(const k in attrs) n.setAttribute(k,attrs[k]);
+  if(parent) parent.appendChild(n);
+  return n;
+}
+function svgIn(host,w,h){
+  host.innerHTML='';
+  const s=el('svg',{viewBox:`0 0 ${w} ${h}`,width:'100%',
+                    preserveAspectRatio:'xMinYMid meet',role:'img'},host);
+  // Cap at the design width. A viewBox stretched to a wide container scales the
+  // whole coordinate system, so 9.5px tick labels render at 28px and the chart
+  // reads as a poster. Below the design width it still shrinks responsively.
+  s.style.maxWidth=w+'px';
+  return s;
+}
+function sparkline(values,w,h,stroke){
+  if(!values||values.length<2) return '';
+  const mn=Math.min(...values), mx=Math.max(...values), rng=(mx-mn)||1;
+  const pts=values.map((v,i)=>
+    `${(i/(values.length-1)*(w-2)+1).toFixed(1)},${(h-1-(v-mn)/rng*(h-2)).toFixed(1)}`).join(' ');
+  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">`
+       + `<polyline points="${pts}" fill="none" stroke="${stroke}" stroke-width="1.5" `
+       + `stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+}
+
+/* ---------- state ---------- */
+const S={ledger:null, rows:[], hist:{}, macro:null, sort:{k:'conviction',dir:-1}};
+
+async function boot(){
+  const p=location.pathname;
+  const base = p.includes('/web/') ? '../ledger/' : p.includes('/docs/') ? './' : './ledger/';
+  let j;
   try{
-    const j=await fetch(base+'index.json').then(r=>r.json())
-    window.__ledger=j
-    const rows=(j.all||[]).map(r=>({...r,factors:{...r.factors}}))
-    const status=document.getElementById('live-now')
-    if(rows.length===0){status.textContent='NO DATA — set FMP_API_KEY';return}
-    status.textContent=j.live?'+LIVE':'FIXTURE';status.style.color=j.live?gVar('--green'):gVar('--amber')
-    document.getElementById('k-mcap').textContent='$'+((j.mcapsum||0)/1e12).toFixed(1)+'T'
-    document.getElementById('k-count').textContent=rows.length+' tickers (mcapsum)'
-    const avg=Math.round(rows.reduce((s,a)=>s+a.conviction,0)/rows.length)
-    document.getElementById('k-avg').textContent=avg
-    document.getElementById('k-buy').textContent=rows.filter(a=>a.conviction>=70).length+' BUY+'
-    document.getElementById('k-strong').textContent=rows.filter(a=>a.conviction>=80).length
-    document.getElementById('k-hold').textContent=rows.filter(a=>a.conviction>=55&&a.conviction<80).length+' HOLD'
-    document.getElementById('k-alpha').textContent=j.live?'+LIVE':''
-    document.getElementById('k-last').textContent=(j.as_of||'—').slice(11,16)
-    drawCompleteness(rows)
-    rows.forEach(r=>{r._sc=composite(r)})
-    window.__rows=rows
-    populateSectors(rows)
-    bindFilters()
-    drawMatrix(rows);drawLeaderboard(rows,rows);drawHeatmap(rows);drawSector(rows);drawAlerts(rows)
-  }catch(e){document.getElementById('k-count').textContent='load error: '+e.message}
-}
-function populateSectors(rows){
-  const secs=[...new Set(rows.map(r=>(r.factors&&r.factors.sector)||r.sector||'').filter(Boolean))]
-  const sel=$('#f-sector');while(sel.childNodes.length>1)sel.removeChild(sel.firstChild)
-  secs.forEach(s=>{const o=document.createElement('option');o.value=s;o.textContent=s;o.className='muted-btn';sel.append(o)})
-}
-function bindFilters(){
-  const sh=$('#f-showall')
-  sh.onclick=()=>{sh.classList.toggle('all');sh.textContent=sh.classList.contains('all')?'All':'Top 15';drawLeaderboard(window.__rows||[],window.__rows||[])}
-  $('#f-sector').onchange=()=>drawLeaderboard(window.__rows||[],window.__rows||[])
-  $('#f-signal').onchange=()=>drawLeaderboard(window.__rows||[],window.__rows||[])
-  $('#f-mcap').onchange=()=>drawLeaderboard(window.__rows||[],window.__rows||[])
+    j=await fetch(base+'index.json',{cache:'no-cache'}).then(r=>{
+      if(!r.ok) throw new Error('HTTP '+r.status); return r.json();
+    });
+  }catch(e){
+    $('#alert').innerHTML=`<div class="banner">Could not load <code>${esc(base)}index.json</code>
+      — ${esc(e.message)}. The terminal renders only what the pipeline produced; it does not
+      substitute placeholder data.</div>`;
+    return;
+  }
+  S.ledger=j; S.base=base;
+  S.rows=(j.all||[]).filter(r=>nz(r.conviction));
+  S.bench=j.benchmarks||[];
+  try{ S.hist=await fetch(base+'history.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
+  try{ S.macro=await fetch(base+'macro.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
+
+  renderHeader(); renderMacro(); renderKPIs(); renderMap(); renderSale(); renderDist();
+  buildSectorFilter(); renderGrid(); renderSectors(); renderPortfolio(); renderData();
 }
 
-function kellyWeight(r, sc, closes){
-  // Volatility-targeted size: scale conviction into a % allocation, attenuated by
-  // realized vol (from closes) and capped. Null when closes/beta unavailable -> —.
-  if(!closes||closes.length<2||r.beta==null) return null
-  const vol=_realVol(closes)
-  if(!vol||vol<=0) return null
-  const edge=Math.max(0,sc.conv-55)/45  // conviction above WATCH threshold (55->100 maps to 0..1)
-  const raw=5*edge*(0.12/vol)  // target 12% annual vol -> scale size
-  return Math.min(5.0,Math.max(0.25,raw))
+/* ---------- header ---------- */
+function renderHeader(){
+  const j=S.ledger;
+  $('#hdr-model').textContent='· model '+(j.model_version||'?');
+  const age=(Date.now()-Date.parse(j.as_of))/36e5;
+  const fresh = age<40;
+  $('#hdr-status').innerHTML=
+    `<span class="dot" style="background:${fresh?cssVar('--good'):cssVar('--warn')}"></span>`
+    +`<span>${esc((j.as_of||'').replace('T',' ').replace('Z',' UTC'))}</span>`;
+  $('#hdr-status').title = fresh ? 'Data is current'
+    : `Last successful build was ${age.toFixed(0)}h ago — figures may be stale`;
+  $('#hdr-universe').innerHTML=`<b>${S.rows.length}</b>&nbsp;names`;
+  const cov=j.coverage||{};
+  const core=['roic','fcf_yield','market_cap'].map(k=>cov[k]).filter(nz);
+  const mean=core.length?core.reduce((a,b)=>a+b,0)/core.length:0;
+  $('#hdr-coverage').innerHTML=
+    `<span class="dot" style="background:${mean>0.8?cssVar('--good'):mean>0.5?cssVar('--warn'):cssVar('--bad')}"></span>`
+    +`<b>${(mean*100).toFixed(0)}%</b>&nbsp;fundamentals`;
 }
-function _realVol(closes){
-  if(!closes||closes.length<2) return null
-  let s=0;let p=null
-  for(const v of closes){ if(p!=null) s+=Math.log(v/p)**2; p=v }
-  return Math.sqrt(s/Math.max(1,closes.length-1))*Math.sqrt(252)
+
+/* ---------- macro strip ---------- */
+function renderMacro(){
+  const host=$('#macro');
+  if(!S.macro||!Object.keys(S.macro).length){
+    host.innerHTML=`<div class="card"><div class="tile-label">Macro regime</div>
+      <div class="tile-sub" style="margin-top:4px">FRED series unavailable in the last build.</div></div>`;
+    return;
+  }
+  host.innerHTML=Object.entries(S.macro).map(([id,m])=>{
+    const up=m.change_1m>=0;
+    const dec = id==='VIXCLS' ? 1 : 2;
+    return `<div class="card">
+      <div class="tile-label">${esc(m.label)}</div>
+      <div class="tile-row">
+        <div>
+          <div class="tile-value num">${m.value.toFixed(dec)}${esc(m.unit)}</div>
+          <div class="delta ${up?'up':'down'}">${up?'+':''}${m.change_1m.toFixed(dec)} 1m</div>
+        </div>
+        ${sparkline(m.series,74,30,cssVar('--s1'))}
+      </div>
+      <div class="tile-sub" style="margin-top:4px">as of ${esc(m.as_of)}</div>
+    </div>`;
+  }).join('');
 }
-function atrStopTarget(r, closes){
-  // ATR-based stop/target (client-side, real-close-derived). Null when closes missing.
-  if(!closes||closes.length<3) return null
-  const tr=[];for(let i=1;i<closes.length;i++){const hi=Math.max(closes[i],closes[i-1]),lo=Math.min(closes[i],closes[i-1]);tr.push(Math.abs(closes[i]-closes[i-1])||Math.abs(hi-lo))}
-  const atr=tr.reduce((s,v)=>s+v,0)/tr.length||0
-  if(!atr) return null
-  const price=r.price||0
-  return {stop:price-atr*2,target:price+atr*3,atr}
+
+/* ---------- KPIs ---------- */
+function median(a){
+  if(!a.length) return null;
+  const s=[...a].sort((x,y)=>x-y), m=s.length>>1;
+  return s.length%2 ? s[m] : (s[m-1]+s[m])/2;
 }
-function filterLeaderboard(sorted, allRows){
-  const sec=$('#f-sector')?.value||''
-  const sig=$('#f-signal')?.value||''
-  const cap=$('#f-mcap')?.value||''
-  let v=sorted.filter(r=>{
-    if(sec && ((r.factors&&r.factors.sector)||r.sector)!==sec) return false
-    if(sig && signal(r._sc.conv)!==sig) return false
-    if(cap){
-      const m=r.mcap||0
-      if(cap==='large'&&m<1e10)return false; if(cap==='mid'&&!(m>=2e9&&m<1e10))return false
-      if(cap==='small'&&m>=2e9)return false
+function tile(label,value,sub){
+  return `<div class="card"><div class="tile-label">${label}</div>
+    <div class="tile-value num">${value}</div><div class="tile-sub">${sub}</div></div>`;
+}
+function renderKPIs(){
+  const r=S.rows, convs=r.map(x=>x.conviction);
+  const buys=r.filter(x=>x.conviction>=70).length;
+  const conf=r.map(x=>x.data_confidence).filter(nz);
+  const spy=S.bench.find(b=>b.symbol===(S.ledger.benchmark||'SPY'));
+  $('#kpis').innerHTML=
+     tile('Median conviction', median(convs)?.toFixed(0)??'—',
+          `dispersion ${(S.ledger.dispersion??0).toFixed(1)} · range ${Math.min(...convs)}–${Math.max(...convs)}`)
+   + tile('BUY or better', buys, `${(buys/r.length*100).toFixed(0)}% of the universe`)
+   + tile('Mean data confidence', pct(conf.reduce((a,b)=>a+b,0)/(conf.length||1),0),
+          'share of inputs observed, not imputed')
+   + tile('Benchmark 12m', spy?spct(spy.ret_12m):'—',
+          esc(S.ledger.benchmark||'SPY')+' — the momentum reference');
+}
+
+/* ---------- factor map (scatter) ---------- */
+function renderMap(){
+  const host=$('#map'), W=860, H=470, m={t:16,r:20,b:48,l:54};
+  const s=svgIn(host,W,H);
+  s.setAttribute('aria-label','Scatter of quality percentile against momentum percentile');
+  const x=v=>m.l+v*(W-m.l-m.r), y=v=>H-m.b-v*(H-m.t-m.b);
+
+  for(let i=0;i<=4;i++){
+    const t=i/4;
+    el('line',{x1:x(t),y1:m.t,x2:x(t),y2:H-m.b,class:'gridline'},s);
+    el('line',{x1:m.l,y1:y(t),x2:W-m.r,y2:y(t),class:'gridline'},s);
+    const tx=el('text',{x:x(t),y:H-m.b+15,class:'tick','text-anchor':'middle'},s);
+    tx.textContent=(t*100).toFixed(0);
+    const ty=el('text',{x:m.l-8,y:y(t)+3,class:'tick','text-anchor':'end'},s);
+    ty.textContent=(t*100).toFixed(0);
+  }
+  el('line',{x1:m.l,y1:H-m.b,x2:W-m.r,y2:H-m.b,class:'axisline'},s);
+  el('line',{x1:m.l,y1:m.t,x2:m.l,y2:H-m.b,class:'axisline'},s);
+  const xt=el('text',{x:(m.l+W-m.r)/2,y:H-8,class:'axis-title','text-anchor':'middle'},s);
+  xt.textContent='Quality percentile (within sector)';
+  const yt=el('text',{transform:`rotate(-90 12 ${(m.t+H-m.b)/2})`,x:12,
+                      y:(m.t+H-m.b)/2,class:'axis-title','text-anchor':'middle'},s);
+  yt.textContent='Momentum percentile';
+
+  const caps=S.rows.map(r=>r.market_cap).filter(v=>nz(v)&&v>0);
+  const maxCap=Math.max(...caps,1);
+  // Area ∝ market cap, so radius ∝ sqrt — encoding value as radius would
+  // overstate large caps by squaring the difference.
+  const rad=v=>3.5+Math.sqrt((nz(v)&&v>0?v:maxCap*0.004)/maxCap)*22;
+
+  [...S.rows].sort((a,b)=>(b.market_cap||0)-(a.market_cap||0)).forEach(r=>{
+    const c=el('circle',{cx:x(r.q_raw??0.5), cy:y(r.c_raw??0.5), r:rad(r.market_cap),
+      fill:convColor(r.conviction), 'fill-opacity':0.75,
+      stroke:cssVar('--surface'), 'stroke-width':2, tabindex:0,
+      role:'button','aria-label':`${r.symbol}, conviction ${r.conviction}`},s);
+    c.style.cursor='pointer';
+    const show=ev=>showTip(
+      `<b>${esc(r.symbol)}</b> · ${esc(r.signal)}<br>`
+      +`<div class="r"><span>Conviction</span><span>${r.conviction}</span></div>`
+      +`<div class="r"><span>Quality pct</span><span>${pct(r.q_raw,0)}</span></div>`
+      +`<div class="r"><span>Momentum pct</span><span>${pct(r.c_raw,0)}</span></div>`
+      +`<div class="r"><span>Market cap</span><span>${cap(r.market_cap)}</span></div>`,
+      ev.clientX, ev.clientY);
+    c.addEventListener('mousemove',show);
+    c.addEventListener('mouseleave',hideTip);
+    c.addEventListener('focus',e=>{
+      const b=c.getBoundingClientRect(); show({clientX:b.x,clientY:b.y});
+    });
+    c.addEventListener('blur',hideTip);
+    c.addEventListener('click',()=>openPanel(r));
+    c.addEventListener('keydown',e=>{if(e.key==='Enter')openPanel(r);});
+  });
+
+  $('#ramp').style.background=
+    `linear-gradient(90deg,${convColor(25)},${convColor(55)},${convColor(85)})`;
+}
+
+/* ---------- quality-on-sale scanner ---------- */
+function renderSale(){
+  const hits=S.rows
+    .filter(r=>(r.q_raw??0)>=0.55 && (r.drawdown_52w??0)>=0.15)
+    .sort((a,b)=>b.conviction-a.conviction).slice(0,10);
+  const tb=$('#sale tbody');
+  if(!hits.length){
+    tb.innerHTML=`<tr><td colspan="5" class="l" style="color:var(--muted)">
+      No name currently clears both gates.</td></tr>`;
+  }else{
+    tb.innerHTML=hits.map(r=>`<tr data-sym="${esc(r.symbol)}">
+      <td class="l"><span class="sym">${esc(r.symbol)}</span></td>
+      <td class="conv" style="color:${convColor(r.conviction)}">${r.conviction}</td>
+      <td>${pct(r.q_raw,0)}</td>
+      <td class="down">−${pct(r.drawdown_52w,0)}</td>
+      <td class="${(r.ret_12m??0)>=0?'up':'down'}">${spct(r.ret_12m,0)}</td>
+    </tr>`).join('');
+    tb.onclick=e=>{
+      const tr=e.target.closest('tr[data-sym]');
+      if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+    };
+  }
+  $('#sale-note').innerHTML=
+    `Quality percentile ≥ 55 <em>and</em> at least 15% below the 52-week high — the two
+     conditions the mean-reversion uplift requires. The quality gate is what separates a
+     sale from a falling knife; ${hits.length} of ${S.rows.length} names clear both.`;
+}
+
+/* ---------- conviction distribution ----------
+   A histogram of the board's own output. It exists because the failure this rebuild
+   fixed was invisible in every other panel: a universe where every name scores the
+   same still fills a table and a scatter, but its distribution is a single spike. */
+function renderDist(){
+  const W=440,H=170,m={t:10,r:12,b:34,l:34};
+  const bins=new Array(10).fill(0);
+  S.rows.forEach(r=>bins[Math.min(9,Math.floor(r.conviction/10))]++);
+  const max=Math.max(...bins,1);
+  const s=svgIn($('#dist'),W,H);
+  s.setAttribute('aria-label','Histogram of conviction scores in ten-point bins');
+  const bw=(W-m.l-m.r)/10;
+  const y=v=>H-m.b-(v/max)*(H-m.t-m.b);
+  for(let i=0;i<=2;i++){
+    const v=max*i/2;
+    el('line',{x1:m.l,y1:y(v),x2:W-m.r,y2:y(v),class:'gridline'},s);
+    const t=el('text',{x:m.l-6,y:y(v)+3,class:'tick','text-anchor':'end'},s);
+    t.textContent=v.toFixed(0);
+  }
+  bins.forEach((n,i)=>{
+    const x=m.l+i*bw;
+    if(n>0){
+      // 2px surface gap between adjacent bars rather than a stroke around each.
+      const bar=el('rect',{x:x+1,y:y(n),width:bw-2,height:H-m.b-y(n),rx:3,
+                           fill:convColor(i*10+5),'fill-opacity':.9},s);
+      bar.addEventListener('mousemove',ev=>showTip(
+        `<b>${i*10}–${i*10+9}</b><div class="r"><span>Names</span><span>${n}</span></div>`,
+        ev.clientX,ev.clientY));
+      bar.addEventListener('mouseleave',hideTip);
     }
-    return true
-  })
-  // Top 15 default; toggle to all via the Show All button
-  const all=$('#f-showall')?.classList.contains('all')
-  return all?v:v.slice(0,15)
-}
-function drawCompleteness(rows){
-  const n=rows.length
-  const withBeta=rows.filter(r=>r.beta!=null&&r.beta!==0).length
-  const withDte=rows.filter(r=>r.dte!=null).length
-  const withFactors=rows.filter(r=>r.factors&&Object.keys(r.factors||{}).length>=8).length
-  const el=document.getElementById('completeness')
-  el.innerHTML='<span class="dot" style="background:'+(withBeta===n?gVar('--buy'):gVar('--sell'))+'"></span>'+(withBeta/n*100|0)+'% beta · '
-    +'<span class="dot" style="background:'+(withDte===n?gVar('--buy'):gVar('--sell'))+'"></span>'+(withDte/n*100|0)+'% earnings · '
-    +'<span class="dot" style="background:'+(withFactors===n?gVar('--buy'):gVar('--sell'))+'"></span>'+(withFactors/n*100|0)+'% fundamentals'
-}
-function drawLeaderboard(rows, allRows){
-  const SORTED=[...rows].sort((a,b)=>b._sc.conv-a._sc.conv)
-  const sb=filterLeaderboard(SORTED, allRows||rows)
-  document.getElementById('f-count').textContent=sb.length+' shown · '+(allRows||rows).length+' total'
-  // P2: load closes (for sparkline + sizing/ATR) so rows render fully in one pass
-  const hb=(window.__ledger&&window.__ledger.hist_base)||'history/'
-  const base=(location.pathname.includes('/web/')?'../ledger/'+hb:location.pathname.includes('/docs/')?hb:'./ledger/'+hb)
-  const closures={};const pend=[]
-  sb.forEach(r=>{
-    const p=fetch(base+r.symbol+'.json').then(rq=>rq.json()).then(d=>{closures[r.symbol]=(d&&d.closes)||[];return r}).catch(()=>{closures[r.symbol]=[];return r})
-    pend.push(p)
-  })
-  Promise.all(pend).then(()=>{
-    document.getElementById('lb-tbody').innerHTML=sb.map((r,i)=>{
-      const sc=r._sc,s=signal(sc.conv)
-      const tier=F(r,'val_zscore',0)>=1?'RICH':F(r,'val_zscore',0)<=-1?'CHEAP':'FAIR'
-      const earn=(r.dte!=null&&r.dte<=14)?`<span class="earn-tag">[E: ${r.dte}d]</span>`:''
-      const beta=(r.beta!=null)?Number(r.beta).toFixed(2):'—'
-      const cl=closures[r.symbol]||[]
-      const sz=kellyWeight(r,sc,cl)
-      const at=atrStopTarget(r,cl)
-      window.__kellyCache=window.__kellyCache||{};window.__atrCache=window.__atrCache||{}
-      window.__kellyCache[r.symbol]=sz;window.__atrCache[r.symbol]=at
-      const sizeCell=sz!=null?sz.toFixed(2)+'%':'—'
-      const sizeCls=sz!=null?(sz>=2?'pos':sz>=1?'neu':'neg'):''
-      const stopCell=at?fmtP(at.stop):'—'
-      const tgtCell=at?fmtP(at.target):'—'
-      const stopCls=at?(r.price-at.stop>=0?'pos':'neg'):''
-      const tgtCls=at?(at.target-r.price>=0?'pos':'neg'):''
-      // Fallen Titan derived metrics (locally computed in nightly.py; null when history unavailable)
-      const r365=r.return_365d,rdd=r.drawdown_52w,rpe=r.pe
-      const retCell=r365!=null?pct(r365*100):'—'
-      const ddCell=rdd!=null?pct(-rdd*100):'—'
-      const ddCls=rdd!=null?(rdd>=0.20?'neg':rdd>=0.10?'pos':'neu'):''
-      const peCell=rpe!=null?Number(rpe).toFixed(1):'—'
-      return `<tr><td class="l">${i+1}</td><td class="l"><b>${r.symbol}</b>${earn}</td>
-      <td class="l"><canvas class="spark" data-sym="${r.symbol}" width="90" height="24"></canvas></td>
-      <td class="b${s}"><b>${sc.conv}</b></td><td><span class="badge b${s}">${s}</span></td>
-      <td class="num" title="Waterfall: Q=${(sc.q*100).toFixed(0)}% · M=${(sc.m*100).toFixed(0)}% · V=${(sc.v*100).toFixed(0)}% · LAQ=${sc.liq.toFixed(2)} · short×${sc.short_mult.toFixed(2)} · val×${sc.val_mult.toFixed(2)}
-Conviction waterfall: quality (Q) × confirmation (M) × risk (V) = 100·Q·M·V, rounded">💧</td>
-      <td>${(r.weight||0).toFixed(1)}%</td><td>${fmtP(r.price)}</td><td>${beta}</td>
-      <td>${(F(r,'roic',0)*100).toFixed(0)}</td><td>${(F(r,'fcf_yield',0)*100).toFixed(1)}</td>
-      <td class="pos">${pct(F(r,'rs_blend',0))}</td>
-      <td><span class="bar">${liqBar(r.adv)}</span></td><td>${tier}</td>
-      <td class="num ${sizeCls}" title="vol-targeted size (null when beta/vol missing)">${sizeCell}</td>
-      <td class="num ${stopCls}" title="ATR×2 below entry">${stopCell}</td>
-      <td class="num ${tgtCls}" title="ATR×3 above entry">${tgtCell}</td>
-      <td class="${ddCls}">${retCell}</td>
-      <td class="neg">${ddCell}</td>
-      <td>${peCell}</td></tr>`
-    }).join('')
-    // draw sparklines now that closes are loaded
-    document.querySelectorAll('canvas.spark').forEach(cv=>{
-      const sym=cv.dataset.sym
-      const closes=closures[sym]||[]
-      drawSpark(cv,closes)
-    })
-    // P1: ticker row click -> slide-out drawer
-    sb.forEach((r,idx)=>{
-      const tr=document.querySelector(`#lb-tbody tr:nth-child(${idx+1})`)
-      if(tr){tr.style.cursor='pointer';const cell=tr.cells[1];if(cell)cell.onclick=()=>openDrawer(r)}
-    })
-  })
+    if(i%2===0){
+      const t=el('text',{x:x,y:H-m.b+14,class:'tick','text-anchor':'middle'},s);
+      t.textContent=i*10;
+    }
+  });
+  el('line',{x1:m.l,y1:H-m.b,x2:W-m.r,y2:H-m.b,class:'axisline'},s);
+  const xt=el('text',{x:(m.l+W-m.r)/2,y:H-6,class:'axis-title','text-anchor':'middle'},s);
+  xt.textContent='Conviction';
+  const convs=S.rows.map(r=>r.conviction);
+  $('#dist-note').innerHTML=
+    `Spread across ${bins.filter(b=>b>0).length} of 10 bins, standard deviation
+     ${(S.ledger.dispersion??0).toFixed(1)}, range ${Math.min(...convs)}–${Math.max(...convs)}.
+     A working cross-section spreads out; a broken one collapses to a single spike.`;
 }
 
-function drawSpark(cv,closes){
-  const c=cv.getContext('2d');const W=cv.width,H=cv.height
-  c.clearRect(0,0,W,H)
-  if(!closes||closes.length<2)return
-  const mn=Math.min(...closes),mx=Math.max(...closes),rng=(mx-mn)||1
-  const up=closes[closes.length-1]>=closes[0]
-  // price line
-  c.strokeStyle=up?gVar('--buy'):gVar('--sell')
-  c.lineWidth=1.4;c.beginPath()
-  closes.forEach((v,i)=>{const x=2+i/(closes.length-1)*(W-4);const y=H-2-(v-mn)/rng*(H-4);i?c.lineTo(x,y):c.moveTo(x,y) })
-  c.stroke()
-  // 200-day (or available) MA — dotted neutral line across the window
-  const half=Math.floor(closes.length/2)
-  const ma=closes.slice(-half).reduce((s,v)=>s+v,0)/half
-  const my=H-2-(ma-mn)/rng*(H-4)
-  c.strokeStyle=gVar('--muted');c.setLineDash([2,2]);c.lineWidth=1
-  c.beginPath();c.moveTo(2,my);c.lineTo(W-2,my);c.stroke();c.setLineDash([])
-  // 52w-high / 52w-low anchor dots (green = high, red = low)
-  const hiIdx=closes.indexOf(mx),loIdx=closes.indexOf(mn)
-  const dot=(idx,col)=>{
-    const x=2+idx/(closes.length-1)*(W-4);const y=H-2-(closes[idx]-mn)/rng*(H-4)
-    c.fillStyle=col;c.beginPath();c.arc(x,y,2.2,0,Math.PI*2);c.fill()}
-  dot(hiIdx,gVar('--buy'));dot(loIdx,gVar('--sell'))
+/* ---------- screener grid ---------- */
+function buildSectorFilter(){
+  const secs=[...new Set(S.rows.map(r=>r.sector).filter(Boolean))].sort();
+  $('#f-sector').insertAdjacentHTML('beforeend',
+    secs.map(s=>`<option>${esc(s)}</option>`).join(''));
+}
+function filtered(){
+  const q=$('#f-q').value.trim().toLowerCase();
+  const sec=$('#f-sector').value, sig=$('#f-signal').value;
+  const conf=parseFloat($('#f-conf').value)||0;
+  return S.rows.filter(r=>
+       (!q || r.symbol.toLowerCase().includes(q) || (r.name||'').toLowerCase().includes(q))
+    && (!sec || r.sector===sec)
+    && (!sig || r.signal===sig)
+    && ((r.data_confidence??1)>=conf));
+}
+function pbar(v){
+  if(!nz(v)) return '<span class="pb-num">—</span>';
+  return `<span class="pb"><span class="pb-track">
+    <span class="pb-fill" style="width:${(v*100).toFixed(0)}%"></span></span>
+    <span class="pb-num">${(v*100).toFixed(0)}</span></span>`;
+}
+function fmtImp(r,key,html){
+  return r.imputed && r.imputed.includes(key) ? `<span class="imputed">${html}</span>` : html;
+}
+function renderGrid(){
+  const rows=filtered();
+  const {k,dir}=S.sort;
+  rows.sort((a,b)=>{
+    let x=a[k], y=b[k];
+    if(typeof x==='string'||typeof y==='string')
+      return String(x??'').localeCompare(String(y??''))*dir;
+    x=nz(x)?x:-Infinity; y=nz(y)?y:-Infinity;
+    return (x-y)*dir;
+  });
+  $('#count').textContent=`${rows.length} of ${S.rows.length} names`;
+  $('#grid tbody').innerHTML=rows.map(r=>`<tr data-sym="${esc(r.symbol)}">
+    <td class="l"><span class="sym">${esc(r.symbol)}</span>
+        <span class="co">${esc(r.name||'')}</span></td>
+    <td class="l" style="color:var(--ink-2)">${esc(r.sector||'—')}</td>
+    <td class="conv" style="color:${convColor(r.conviction)}">${r.conviction}</td>
+    <td class="l"><span class="tier" style="${tierStyle(r.signal,r.conviction)}">${esc(r.signal)}</span></td>
+    <td>${pbar(r.q_raw)}</td>
+    <td>${pbar(r.c_raw)}</td>
+    <td>${pbar(r.r_raw)}</td>
+    <td>${r.weight?num(r.weight,2)+'%':'—'}</td>
+    <td>${money(r.price)}</td>
+    <td class="${(r.chg_1d??0)>=0?'up':'down'}">${spct(r.chg_1d,2)}</td>
+    <td class="${(r.ret_12m??0)>=0?'up':'down'}">${spct(r.ret_12m,0)}</td>
+    <td class="${nz(r.drawdown_52w)&&r.drawdown_52w>0.001?'down':''}">${
+      !nz(r.drawdown_52w)?'—':r.drawdown_52w<=0.001?'at high':'−'+pct(r.drawdown_52w,0)}</td>
+    <td>${fmtImp(r,'p_roic',pct(r.roic,0))}</td>
+    <td>${fmtImp(r,'p_fcf_yield',pct(r.fcf_yield,1))}</td>
+    <td>${nz(r.pe)?num(r.pe,1):'—'}</td>
+    <td>${cap(r.market_cap)}</td>
+    <td style="color:${(r.data_confidence??0)>=0.8?'var(--ink-2)':'var(--warn)'}">${pct(r.data_confidence,0)}</td>
+  </tr>`).join('');
+}
+$$('#grid thead th').forEach(th=>{
+  th.onclick=()=>{
+    const k=th.dataset.k; if(!k) return;
+    S.sort = S.sort.k===k ? {k,dir:-S.sort.dir} : {k,dir:-1};
+    $$('#grid thead th').forEach(t=>t.removeAttribute('aria-sort'));
+    th.setAttribute('aria-sort', S.sort.dir<0?'descending':'ascending');
+    renderGrid();
+  };
+});
+['#f-q','#f-sector','#f-signal','#f-conf'].forEach(sel=>{
+  const n=$(sel); n.addEventListener(n.tagName==='INPUT'?'input':'change',renderGrid);
+});
+$('#grid tbody').addEventListener('click',e=>{
+  const tr=e.target.closest('tr[data-sym]');
+  if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+});
+
+/* ---------- detail panel ---------- */
+function priceChart(bars,r){
+  const W=520,H=190,m={t:10,r:12,b:22,l:46};
+  const c=bars.close||[], d=bars.dates||[];
+  if(c.length<2) return '<div class="tile-sub">No price history available.</div>';
+  const ma=(win,i)=>{ if(i<win-1) return null;
+    let s=0; for(let k=i-win+1;k<=i;k++) s+=c[k]; return s/win; };
+  const ma50=c.map((_,i)=>ma(50,i));
+  const lo=Math.min(...c), hi=Math.max(...c), rng=(hi-lo)||1;
+  const X=i=>m.l+i/(c.length-1)*(W-m.l-m.r);
+  const Y=v=>H-m.b-(v-lo)/rng*(H-m.t-m.b);
+  const path=a=>a.map((v,i)=>v==null?null:`${i===0||a[i-1]==null?'M':'L'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`)
+                 .filter(Boolean).join(' ');
+  let g='';
+  for(let i=0;i<=3;i++){
+    const v=lo+rng*i/3;
+    g+=`<line x1="${m.l}" y1="${Y(v)}" x2="${W-m.r}" y2="${Y(v)}" class="gridline"/>`
+     + `<text x="${m.l-7}" y="${Y(v)+3}" class="tick" text-anchor="end">${v.toFixed(0)}</text>`;
+  }
+  const yrAgo=d[Math.max(0,d.length-252)]||d[0];
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
+     aria-label="Daily close with 50-day moving average">
+    ${g}
+    <line x1="${m.l}" y1="${H-m.b}" x2="${W-m.r}" y2="${H-m.b}" class="axisline"/>
+    <path d="${path(ma50)}" fill="none" stroke="${cssVar('--s2')}" stroke-width="2"
+          stroke-linejoin="round" opacity="0.9"/>
+    <path d="${path(c)}" fill="none" stroke="${cssVar('--s1')}" stroke-width="2"
+          stroke-linejoin="round"/>
+    <text x="${m.l}" y="${H-6}" class="tick">${esc(yrAgo)}</text>
+    <text x="${W-m.r}" y="${H-6}" class="tick" text-anchor="end">${esc(d[d.length-1]||'')}</text>
+  </svg>
+  <div class="legend">
+    <span><i style="background:${cssVar('--s1')}"></i>Close</span>
+    <span><i style="background:${cssVar('--s2')}"></i>50-day average</span>
+    <span>52w high ${money(r.hi_52w)} · low ${money(r.lo_52w)}</span>
+  </div>`;
+}
+const FACTOR_LABELS={
+  p_roic:'ROIC', p_fcf_yield:'FCF yield', p_gross_margin:'Gross margin',
+  p_leverage:'Leverage (inv.)', p_earnings_stability:'Earnings stability',
+  p_rs:'Relative strength', p_trend:'Trend', p_liquidity:'Dollar liquidity',
+  p_value:'Valuation', p_lowvol:'Low volatility',
+};
+function factorBars(r){
+  const groups=[['Quality',Object.keys(WEIGHTS.quality)],
+                ['Confirmation',Object.keys(WEIGHTS.confirmation)],
+                ['Risk',Object.keys(WEIGHTS.risk)]];
+  return groups.map(([name,keys])=>`
+    <div style="margin-bottom:10px">
+      <div class="src" style="margin-bottom:3px">${name}</div>
+      ${keys.map(k=>{
+        const v=r[k], imp=r.imputed&&r.imputed.includes(k);
+        return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+          <span style="flex:none;width:126px;font-size:11.5px;color:${imp?'var(--muted)':'var(--ink-2)'}">
+            ${FACTOR_LABELS[k]}${imp?' *':''}</span>
+          <span class="pb-track" style="flex:1;width:auto">
+            <span class="pb-fill" style="width:${((v??0.5)*100).toFixed(0)}%;
+              background:${imp?cssVar('--axis'):cssVar('--seq-450')}"></span></span>
+          <span class="pb-num num">${nz(v)?(v*100).toFixed(0):'—'}</span>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+}
+function openPanel(r){
+  if(!r) return;
+  $('#p-sym').textContent=r.symbol;
+  $('#p-name').textContent=[r.name,r.sector].filter(Boolean).join(' · ');
+  const sc=score(r);   // recomputed live so the panel reflects the current weights
+  const cik=(r.as_of&&Object.keys(r.as_of).length)
+    ? `<a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${encodeURIComponent(r.symbol)}&type=10-K&dateb=&owner=include&count=10"
+         target="_blank" rel="noopener">EDGAR filings</a>` : '';
+  const facts=Object.entries(r.as_of||{}).slice(0,8)
+    .map(([k,v])=>`<tr><td>${esc(k)}</td><td class="src">${esc(v.tag)} · ${esc(v.end)}</td></tr>`).join('');
+
+  $('#p-body').innerHTML=`
+    <section>
+      <div class="tile-row">
+        <div>
+          <div class="tile-value num" style="color:${convColor(sc.conviction)}">${sc.conviction}</div>
+          <div class="tile-sub">conviction ·
+            <span class="tier" style="${tierStyle(sc.signal,sc.conviction)}">${sc.signal}</span></div>
+        </div>
+        <div style="text-align:right">
+          <div class="tile-value num">${money(r.price)}</div>
+          <div class="delta ${(r.chg_1d??0)>=0?'up':'down'}">${spct(r.chg_1d,2)} today</div>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h3>Price · 2 years</h3>
+      ${priceChart(S.fullbars||{close:S.hist[r.symbol]||[],dates:[]},r)}
+    </section>
+
+    <section>
+      <h3>How the score is built</h3>
+      <table class="kv">
+        <tr><td>Quality (Q)</td><td>${pct(sc.q_raw,0)} pct → ${num(sc.q,3)}</td></tr>
+        <tr><td>Confirmation (C)</td><td>${pct(sc.c_raw,0)} pct → ${num(sc.c,3)}</td></tr>
+        <tr><td>Risk (R)</td><td>${pct(sc.r_raw,0)} pct → ${num(sc.r,3)}</td></tr>
+        ${sc.mr_uplift>1?`<tr><td>Mean-reversion uplift</td>
+          <td>×${num(sc.mr_uplift,3)} (${pct(r.drawdown_52w,0)} below high)</td></tr>`:''}
+        <tr><td><b>100 × (Q·C·R)<sup>1/3</sup></b></td><td><b>${sc.conviction}</b></td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h3>Factor percentiles</h3>
+      ${factorBars(r)}
+      <div class="src">* imputed from the sector median — the filing did not report it.
+        Data confidence ${pct(r.data_confidence,0)}.</div>
+    </section>
+
+    <section>
+      <h3>Fundamentals (trailing twelve months)</h3>
+      <table class="kv">
+        <tr><td>Market cap</td><td>${cap(r.market_cap)}</td></tr>
+        <tr><td>Revenue</td><td>${cap(r.revenue_ttm)}</td></tr>
+        <tr><td>Net income</td><td>${cap(r.net_income_ttm)}</td></tr>
+        <tr><td>Free cash flow</td><td>${cap(r.fcf_ttm)}</td></tr>
+        <tr><td>ROIC</td><td>${pct(r.roic,1)}</td></tr>
+        <tr><td>FCF yield</td><td>${pct(r.fcf_yield,2)}</td></tr>
+        <tr><td>Gross margin</td><td>${pct(r.gross_margin,1)}</td></tr>
+        <tr><td>Net debt / EBITDA</td><td>${nz(r.net_debt_ebitda)?num(r.net_debt_ebitda,2)+'×':'—'}</td></tr>
+        <tr><td>Earnings stability</td><td>${pct(r.earnings_stability,0)}</td></tr>
+        <tr><td>P/E</td><td>${nz(r.pe)?num(r.pe,1):'—'}</td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h3>Price &amp; risk</h3>
+      <table class="kv">
+        <tr><td>Return 1m / 3m / 12m</td>
+            <td>${spct(r.ret_1m,0)} / ${spct(r.ret_3m,0)} / ${spct(r.ret_12m,0)}</td></tr>
+        <tr><td>Excess vs ${esc(S.ledger.benchmark||'SPY')} (vol-adj.)</td><td>${num(r.rs_blend,2)}</td></tr>
+        <tr><td>Drawdown from 52w high</td><td>${nz(r.drawdown_52w)?'−'+pct(r.drawdown_52w,1):'—'}</td></tr>
+        <tr><td>Realised volatility (1y)</td><td>${pct(r.vol_1y,0)}</td></tr>
+        <tr><td>ATR(14)</td><td>${money(r.atr14)} (${pct(r.atr_pct,1)})</td></tr>
+        <tr><td>Dollar liquidity (63d avg)</td><td>${cap(r.adv_usd)}/day</td></tr>
+        <tr><td>Price vs 50d / 200d</td><td>${spct(r.px_vs_ma50,1)} / ${spct(r.px_vs_ma200,1)}</td></tr>
+      </table>
+    </section>
+
+    <section>
+      <h3>Source filings</h3>
+      <table class="kv">${facts||'<tr><td colspan="2" class="src">No filing facts resolved.</td></tr>'}</table>
+      <div class="src" style="margin-top:6px">${cik} · prices via ${esc(r.source||'—')},
+        last bar ${esc(r.last_date||'—')}</div>
+    </section>`;
+
+  // Load the full OHLCV series lazily, then upgrade the chart in place.
+  fetch(S.base+'history/'+encodeURIComponent(r.symbol)+'.json',{cache:'no-cache'})
+    .then(x=>x.json())
+    .then(b=>{
+      const host=$('#p-body section:nth-of-type(2)');
+      if(host && b && b.close) host.innerHTML='<h3>Price · 2 years</h3>'+priceChart(b,r);
+    }).catch(()=>{});
+
+  $('#panel').classList.add('open'); $('#panel').setAttribute('aria-hidden','false');
+  $('#scrim').classList.add('open');
+  $('#p-close').focus();
+}
+function closePanel(){
+  $('#panel').classList.remove('open'); $('#panel').setAttribute('aria-hidden','true');
+  $('#scrim').classList.remove('open');
+}
+$('#p-close').onclick=closePanel;
+$('#scrim').onclick=closePanel;
+addEventListener('keydown',e=>{if(e.key==='Escape')closePanel();});
+
+/* ---------- sectors ---------- */
+function sectorStats(){
+  const by={};
+  S.rows.forEach(r=>{
+    const k=r.sector||'Unclassified';
+    (by[k]=by[k]||[]).push(r);
+  });
+  return Object.entries(by).map(([sector,rows])=>({
+    sector, n:rows.length,
+    conv:median(rows.map(r=>r.conviction)),
+    ret:median(rows.map(r=>r.ret_12m).filter(nz)),
+    cov:rows.reduce((a,r)=>a+(r.data_confidence??0),0)/rows.length,
+  })).sort((a,b)=>b.conv-a.conv);
+}
+function renderSectors(){
+  const stats=sectorStats();
+  const W=700, rowH=27, H=stats.length*rowH+40, m={t:10,r:46,b:22,l:176};
+  const s=svgIn($('#sec-chart'),W,H);
+  s.setAttribute('aria-label','Median conviction by sector');
+  const max=Math.max(...stats.map(d=>d.conv),80);
+  const x=v=>m.l+v/max*(W-m.l-m.r);
+  for(let i=0;i<=4;i++){
+    const v=max*i/4;
+    el('line',{x1:x(v),y1:m.t,x2:x(v),y2:H-m.b,class:'gridline'},s);
+    const t=el('text',{x:x(v),y:H-m.b+14,class:'tick','text-anchor':'middle'},s);
+    t.textContent=v.toFixed(0);
+  }
+  stats.forEach((d,i)=>{
+    const y=m.t+i*rowH;
+    // One measure, one series -> one colour. A value-ramp across nominal
+    // categories would re-encode bar length as hue and say nothing new.
+    const bar=el('rect',{x:m.l,y:y+4,width:Math.max(2,x(d.conv)-m.l),height:rowH-11,
+                         rx:4,fill:cssVar('--s1'),'fill-opacity':.85},s);
+    bar.style.cursor='default';
+    bar.addEventListener('mousemove',ev=>showTip(
+      `<b>${esc(d.sector)}</b><br>
+       <div class="r"><span>Median conviction</span><span>${d.conv.toFixed(0)}</span></div>
+       <div class="r"><span>Names</span><span>${d.n}</span></div>
+       <div class="r"><span>Median 12m</span><span>${spct(d.ret,0)}</span></div>`,
+      ev.clientX,ev.clientY));
+    bar.addEventListener('mouseleave',hideTip);
+    const lbl=el('text',{x:m.l-8,y:y+rowH/2+1,class:'tick','text-anchor':'end'},s);
+    lbl.textContent=d.sector.length>24?d.sector.slice(0,23)+'…':d.sector;
+    const val=el('text',{x:x(d.conv)+6,y:y+rowH/2+1,class:'tick','text-anchor':'start',
+                         fill:cssVar('--ink-2')},s);
+    val.textContent=d.conv.toFixed(0);
+  });
+  el('line',{x1:m.l,y1:m.t,x2:m.l,y2:H-m.b,class:'axisline'},s);
+
+  $('#sec-table tbody').innerHTML=stats.map(d=>`<tr>
+    <td class="l">${esc(d.sector)}</td><td>${d.n}</td>
+    <td class="conv" style="color:${convColor(d.conv)}">${d.conv.toFixed(0)}</td>
+    <td class="${(d.ret??0)>=0?'up':'down'}">${spct(d.ret,0)}</td>
+    <td>${pct(d.cov,0)}</td></tr>`).join('');
 }
 
-function drawMatrix(rows){
-  // "Dip-Buyer's Value vs. Drawdown Matrix": X=Valuation (val_zscore, cheap->rich),
-  // Y=1Y Return (return_365d, beaten-down at bottom -> up at top), bubble=mcap, color=signal.
-  const c=document.getElementById('matrix').getContext('2d')
-  const Wc=c.canvas.width,H=c.canvas.height,pad=44
-  c.clearRect(0,0,Wc,H)
-  c.strokeStyle=gVar('--border');c.beginPath()
-  c.moveTo(pad,H-pad);c.lineTo(Wc-pad,H-pad);c.lineTo(pad,pad);c.stroke()
-  c.fillStyle=gVar('--muted');c.font='9px monospace';c.textAlign='center'
-  for(let i=0;i<=4;i++){const x=pad+(Wc-2*pad)*i/4
-    const y=H-pad-(H-2*pad)*i/4
-    c.fillText((i/2-1).toFixed(1),x,H-pad+14);c.fillText((1-i/2).toFixed(1),8,y+3)
-    if(i>0){c.strokeStyle='#161d2e';c.beginPath();c.lineTo(x,pad);c.lineTo(x,H-pad)}c.stroke()
-    c.beginPath();c.moveTo(pad,y);c.lineTo(Wc-pad,y);c.stroke()}
-  c.fillStyle=gVar('--muted');c.fillText('VALUATION z-score (low=P/E & P/B cheap)',Wc/2,H-10)
-  c.save();c.translate(12,H/2);c.rotate(-Math.PI/2);c.fillText('1-YEAR RETURN  (bottom = beaten down)',0,0);c.restore()
-  const cols={'STRONG':gVar('--buy'),'BUY':gVar('--blue'),'HOLD':gVar('--hold'),'WATCH':gVar('--neutral'),'AVOID':gVar('--sell')}
-  // normalize mcap for bubble radius (sqrt -> area)
-  const mcaps=rows.map(r=>r.mcap||0).filter(m=>m>0)
-  const mcHi=Math.max(...mcaps)||1
-  const mcLo=Math.min(...mcaps)||1
-  rows.forEach(r=>{
-    const sc=r._sc
-    const x=pad+(Wc-2*pad)*clamp01(F(r,'val_zscore',0)+1)   // val_z in [-1,1] -> [0,1]
-    const yRet=r.return_365d!=null?r.return_365d:0
-    const y=H-pad-(H-2*pad)*clamp01((yRet+1)/2)              // ret in [-1,1] -> bottom->top
-    const rad=3+Math.sqrt((r.mcap||mcLo)/mcHi)*8             // larger for mega-caps
-    c.fillStyle=cols[signal(sc.conv)]||gVar('--muted')
-    c.beginPath();c.arc(x,y,rad,0,Math.PI*2);c.fill()
-    c.strokeStyle='#161d2e';c.lineWidth=0.5;c.stroke()
-    // label mega-caps only
-    if((r.mcap||0)>=1e11){c.fillStyle=gVar('--fg');c.font='9px monospace';c.textAlign='center';c.fillText(r.symbol,x,y-2)}
-  })
+/* ---------- portfolio ---------- */
+function renderPortfolio(){
+  const held=S.rows.filter(r=>r.weight>0).sort((a,b)=>b.weight-a.weight);
+  const tw=held.reduce((a,r)=>a+r.weight,0);
+  const wRet=held.reduce((a,r)=>a+r.weight*(r.ret_12m||0),0)/(tw||1);
+  const wVol=held.reduce((a,r)=>a+r.weight*(r.vol_1y||0),0)/(tw||1);
+  const t=S.ledger.turnover||{};
+  $('#pf-kpis').innerHTML=
+     tile('Positions', held.length, `weights sum to ${tw.toFixed(1)}%`)
+   + tile('Weighted 12m return', spct(wRet,1), 'backward-looking, not a track record')
+   + tile('Weighted volatility', pct(wVol,0), 'realised, trailing 1 year')
+   + tile('One-way turnover', nz(t.one_way_pct)?t.one_way_pct.toFixed(1)+'%':'—',
+          'versus the previous build');
+
+  $('#pf tbody').innerHTML = held.length ? held.map(r=>`<tr data-sym="${esc(r.symbol)}">
+      <td class="l"><span class="sym">${esc(r.symbol)}</span></td>
+      <td class="l" style="color:var(--ink-2)">${esc(r.sector||'—')}</td>
+      <td class="conv" style="color:${convColor(r.conviction)}">${r.conviction}</td>
+      <td>${num(r.weight,2)}%</td>
+      <td class="${(r.ret_12m??0)>=0?'up':'down'}">${spct(r.ret_12m,0)}</td>
+      <td>${pct(r.vol_1y,0)}</td></tr>`).join('')
+    : `<tr><td colspan="6" class="l" style="color:var(--muted)">
+        No name currently scores at or above the hold threshold.</td></tr>`;
+  $('#pf tbody').onclick=e=>{
+    const tr=e.target.closest('tr[data-sym]');
+    if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+  };
+  $('#pf-note').innerHTML=
+    `Only names scoring 55 or better are held, weighted by conviction above 40 and capped
+     at 5%. Weighting the whole universe — including names the model rates AVOID — would
+     make this a market-cap tracker with extra steps.`;
+
+  const list=(title,arr,cls)=>`<div style="margin-bottom:12px">
+    <div class="src" style="margin-bottom:4px">${title}</div>
+    ${arr && arr.length
+      ? arr.map(s=>`<span class="chip ${cls}" style="margin:0 4px 4px 0">${esc(s)}</span>`).join('')
+      : '<span class="tile-sub">none</span>'}</div>`;
+  $('#turnover').innerHTML = (t.added||t.removed)
+    ? list('Entered the book',t.added,'up')+list('Left the book',t.removed,'down')
+    : `<div class="tile-sub">No previous build to compare against yet. Turnover appears
+       once two consecutive runs exist.</div>`;
 }
 
-function drawHeatmap(rows){
-  const sb=[...rows].sort((a,b)=>b._sc.conv-a._sc.conv).slice(0,8)
-  const cols=['TICKER','Q','M','V','S']
-  let h='<div class="hcell" style="color:var(--muted)">'+cols[0]+'</div>'
-  for(let i=1;i<cols.length;i++)h+='<div class="hcell" style="color:var(--muted)">'+cols[i]+'</div>'
-  sb.forEach(r=>{
-    h+='<div class="hcell" style="color:var(--blue)"><b>'+r.symbol+'</b></div>'
-    const sc=r._sc
-    const grades=[grade(sc.q),grade(sc.m),grade(sc.v),grade((r.factors&&r.factors.short_days)?1-r.factors.short_days/30:0.5)]
-    grades.forEach(g=>{
-      const bg=g>='A'?'rgba(0,230,118,.15)':g>='B'?'rgba(41,182,246,.12)':g>='C'?'rgba(255,193,7,.12)':'rgba(255,82,82,.12)'
-      h+='<div class="hcell" style="background:'+bg+'">'+g+'</div>'})
-  })
-  document.getElementById('heat').innerHTML=h
+/* ---------- data quality ---------- */
+function renderData(){
+  const cov=S.ledger.coverage||{};
+  const entries=Object.entries(cov).sort((a,b)=>a[1]-b[1]);
+  const W=880, rowH=24, H=entries.length*rowH+32, m={t:8,r:52,b:20,l:172};
+  const s=svgIn($('#cov-chart'),W,H);
+  s.setAttribute('aria-label','Input coverage by field');
+  const x=v=>m.l+v*(W-m.l-m.r);
+  [0,.25,.5,.75,1].forEach(v=>{
+    el('line',{x1:x(v),y1:m.t,x2:x(v),y2:H-m.b,class:'gridline'},s);
+    const t=el('text',{x:x(v),y:H-m.b+13,class:'tick','text-anchor':'middle'},s);
+    t.textContent=(v*100).toFixed(0)+'%';
+  });
+  entries.forEach(([k,v],i)=>{
+    const y=m.t+i*rowH;
+    el('rect',{x:m.l,y:y+3,width:Math.max(1.5,x(v)-m.l),height:rowH-9,rx:3,
+      fill: v>=0.9?cssVar('--s1') : v>=0.6?cssVar('--warn') : cssVar('--bad'),
+      'fill-opacity':.85},s);
+    const lbl=el('text',{x:m.l-8,y:y+rowH/2,class:'tick','text-anchor':'end'},s);
+    lbl.textContent=k;
+    const val=el('text',{x:x(v)+6,y:y+rowH/2,class:'tick',fill:cssVar('--ink-2')},s);
+    val.textContent=(v*100).toFixed(0)+'%';
+  });
+  el('line',{x1:m.l,y1:m.t,x2:m.l,y2:H-m.b,class:'axisline'},s);
+
+  const weak=[...S.rows].sort((a,b)=>(a.data_confidence??1)-(b.data_confidence??1)).slice(0,15);
+  $('#weak tbody').innerHTML=weak.map(r=>`<tr data-sym="${esc(r.symbol)}">
+    <td class="l"><span class="sym">${esc(r.symbol)}</span></td>
+    <td style="color:${(r.data_confidence??0)>=0.8?'var(--ink-2)':'var(--warn)'}">${pct(r.data_confidence,0)}</td>
+    <td class="l src">${esc((r.imputed||[]).map(k=>FACTOR_LABELS[k]||k).join(', ')||'none')}</td>
+  </tr>`).join('');
+  $('#weak tbody').onclick=e=>{
+    const tr=e.target.closest('tr[data-sym]');
+    if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+  };
+
+  const j=S.ledger, fails=j.price_failures||[];
+  $('#diag').innerHTML=`
+    <tr><td>Built</td><td>${esc((j.as_of||'').replace('T',' ').replace('Z',' UTC'))}</td></tr>
+    <tr><td>Model</td><td>${esc(j.model_version||'—')}</td></tr>
+    <tr><td>Universe source</td><td>${esc(j.universe_source||'—')}</td></tr>
+    <tr><td>Names scored</td><td>${S.rows.length}</td></tr>
+    <tr><td>Benchmarks tracked</td><td>${S.bench.length}</td></tr>
+    <tr><td>Conviction dispersion</td><td>${num(j.dispersion,1)}</td></tr>
+    <tr><td>Symbols with no price data</td>
+        <td>${fails.length?esc(fails.slice(0,6).join(', '))+(fails.length>6?` +${fails.length-6}`:''):'none'}</td></tr>`;
 }
 
-function drawSector(rows){
-  // "Sector Drawdown & Opportunity Barometer": avg 1Y return per sector (bar) +
-  // avg quality score badge. Bars extend right (green, positive) / left (red, negative).
-  const c=document.getElementById('sector').getContext('2d')
-  const Wc=c.canvas.width,Hc=c.canvas.height,pad=18
-  c.clearRect(0,0,Wc,Hc)
-  const byReturn={},byQual={},byCount={},keys=[]
-  const getKey=r=>(r.factors&&r.factors.sector)||r.sector||'Other'
-  rows.forEach(r=>{
-    const k=getKey(r);const mcap=r.mcap||0
-    if(mcap<=0)return
-    if(!(k in byReturn)){byReturn[k]=0;byQual[k]=0;byCount[k]=0;keys.push(k)}
-    byReturn[k]+=((r.return_365d!=null?r.return_365d:0)*mcap)
-    byQual[k]+=((r._sc?r._sc.q:0)*mcap); byCount[k]+=mcap
-  })
-  keys.forEach(k=>{byReturn[k]=byReturn[k]/byCount[k]; byQual[k]=byQual[k]/byCount[k]})
-  if(keys.length===0){c.fillStyle=gVar('--muted');c.fillText('no sector data',Wc/2,Hc/2);return}
-  const zeroX=pad+20
-  const maxRet=Math.max(...Object.values(byReturn).map(Math.abs),0.05)
-  const barH=Math.max(14,Math.floor((Hc-pad*2)/keys.length)-6)
-  c.fillStyle=gVar('--muted');c.font='10px monospace';c.textAlign='center'
-  c.fillText('Sector 1-Year Return (mcap-weighted)',Wc/2,pad-4)
-  keys.slice(0,9).forEach((k,i)=>{
-    const y=pad+10+i*(barH+8)
-    const ret=byReturn[k];const q=byQual[k]
-    const barW=Math.abs(ret)/maxRet*(Wc-pad*2-80)
-    const isPos=ret>=0
-    c.fillStyle=isPos?gVar('--buy'):gVar('--sell')
-    const x0=zeroX+(isPos?0:-barW)
-    c.fillRect(x0,y,barW,barH)
-    c.strokeStyle=gVar('--border');c.lineWidth=0.5;c.strokeRect(x0,y,barW,barH)
-    // sector label + return value
-    c.fillStyle=gVar('--muted');c.textAlign='left'
-    c.fillText(k.slice(0,12),zeroX,y+barH/2+3)
-    c.fillStyle=gVar('--fg');c.textAlign='right'
-    c.fillText((isPos?'+':'')+(ret*100).toFixed(1)+'%',zeroX+(isPos?barW+4:0)-4,y+barH/2+3)
-    // quality badge
-    c.fillStyle=gVar('--blue');c.textAlign='left'
-    c.fillText('Q:'+(q*100).toFixed(0),zeroX+(isPos?barW+8:-barW-8),y+barH/2+3)
-  })
-  // zero line
-  c.strokeStyle=gVar('--border');c.lineWidth=1;c.beginPath();c.moveTo(zeroX,pad+6);c.lineTo(zeroX,Hc-pad);c.stroke()
-  // sector drift overlay
-  const sd=(window.__ledger&&window.__ledger.sector_deltas)||{}
-  const sdKeys=Object.keys(sd).filter(k=>Math.abs(sd[k])>=0.05)
-  const el=document.getElementById('sector-legend')
-  if(sdKeys.length){
-    const lines=sdKeys.sort((a,b)=>Math.abs(sd[b])-Math.abs(sd[a])).slice(0,5).map(k=>{
-      const d=sd[k];const cls=d>0?'pos':'neg';const sign=d>0?'+':'';
-      return k+' <span class="'+cls+'">'+sign+d.toFixed(2)+'%</span>'})
-    el.innerHTML='<span class="muted">Δ vs prev run: </span>'+lines.join(' · ')
-  }else{el.innerHTML='<span class="muted">Δ vs prev run: — (first run / no baseline yet)</span>'}
-}
+/* ---------- chrome ---------- */
+$$('nav button').forEach(b=>{
+  b.onclick=()=>{
+    $$('nav button').forEach(o=>o.setAttribute('aria-selected', String(o===b)));
+    $$('.view').forEach(v=>{v.hidden = v.id!=='view-'+b.dataset.view;});
+  };
+});
+$('#theme').onclick=()=>{
+  const cur=document.documentElement.getAttribute('data-theme');
+  const next = cur==='dark' ? 'light' : cur==='light' ? 'dark'
+    : (matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark');
+  document.documentElement.setAttribute('data-theme',next);
+  try{ localStorage.setItem('ecm-theme',next); }catch{}
+  if(S.ledger){ renderMacro(); renderMap(); renderGrid(); renderSectors();
+                renderPortfolio(); renderData(); renderSale(); renderDist(); }
+};
+try{
+  const saved=localStorage.getItem('ecm-theme');
+  if(saved) document.documentElement.setAttribute('data-theme',saved);
+}catch{}
 
-function drawAlerts(rows){
-  // "Blue-Chip Clearance Sale" scanner: mcap>$100B, 1Y return <= -15%, conviction>=70.
-  // (conviction>=70 == BUY+/STRONG; filters out falling-knife failures.)
-  const scanned=[...rows].filter(r=>(r.mcap||0)>1e11 && (r.return_365d!=null&&r.return_365d<= -0.15) && r._sc.conv>=70)
-    .sort((a,b)=>(a.return_365d||0)-(b.return_365d||0))   // deepest drawdown first
-  const sb=scanned.slice(0,6)
-  document.getElementById('alerts-tbody').innerHTML=sb.map(r=>'<tr><td class="lt"><b>'+r.symbol+'</b></td>'+
-    '<td class="neg">'+pct((r.return_365d||0)*100)+'</td><td>'+pct((r.drawdown_52w||0)*-100)+' dd · conv '+r._sc.conv+
-    ' <span class="badge b'+signal(r._sc.conv)+'">'+signal(r._sc.conv)+'</span></td>'+
-    '<td><button class="muted-btn" onclick="openDrawer(window.__rows.find(x=>x.symbol=='+JSON.stringify(r.symbol)+'))" style="font-size:10px;padding:2px 6px">Open</button></td></tr>').join('')
-  // empty state
-  if(!sb.length){document.getElementById('alerts-tbody').innerHTML='<tr><td colspan="4" class="muted">No fallen titans yet. Criteria: cap>$100B, 1Y return ≤ -15%, conviction ≥70.</td></tr>'}
-  const pos=rows.filter(r=>r._sc.conv>=55).length
-  document.getElementById('regime-line').textContent='Conviction regime: '+(pos>rows.length*0.6?'Bullish':'Bearish')+' · '+
-    +rows.length+' names · '+(document.getElementById('k-last').textContent)+' last update'
-}
-load()
-setInterval(function(){try{load()}catch(e){console.error('refresh',e)}},900000)
+$('#csv').onclick=()=>{
+  const cols=['symbol','name','sector','conviction','signal','weight','q_raw','c_raw','r_raw',
+    'price','chg_1d','ret_1m','ret_3m','ret_12m','drawdown_52w','vol_1y','market_cap',
+    'roic','fcf_yield','gross_margin','net_debt_ebitda','earnings_stability','pe',
+    'earnings_yield','rs_blend','adv_usd','data_confidence'];
+  const cell=v=>v==null?'':typeof v==='string'?'"'+v.replace(/"/g,'""')+'"':v;
+  const csv=[cols.join(',')]
+    .concat(S.rows.map(r=>cols.map(c=>cell(r[c])).join(','))).join('\n');
+  const url=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
+  const a=document.createElement('a');
+  a.href=url; a.download='conviction_'+(S.ledger.as_of||'').slice(0,10)+'.csv';
+  document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+};
+
+boot();
 </script>
 </body>
 </html>

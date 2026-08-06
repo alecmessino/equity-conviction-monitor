@@ -619,7 +619,11 @@ function el(tag,attrs={},parent){
 function svgIn(host,w,h){
   host.innerHTML='';
   const s=el('svg',{viewBox:`0 0 ${w} ${h}`,width:'100%',
-                    preserveAspectRatio:'xMidYMid meet',role:'img'},host);
+                    preserveAspectRatio:'xMinYMid meet',role:'img'},host);
+  // Cap at the design width. A viewBox stretched to a wide container scales the
+  // whole coordinate system, so 9.5px tick labels render at 28px and the chart
+  // reads as a poster. Below the design width it still shrinks responsively.
+  s.style.maxWidth=w+'px';
   return s;
 }
 function sparkline(values,w,h,stroke){
@@ -731,7 +735,7 @@ function renderKPIs(){
 
 /* ---------- factor map (scatter) ---------- */
 function renderMap(){
-  const host=$('#map'), W=560, H=380, m={t:14,r:16,b:44,l:48};
+  const host=$('#map'), W=860, H=470, m={t:16,r:20,b:48,l:54};
   const s=svgIn(host,W,H);
   s.setAttribute('aria-label','Scatter of quality percentile against momentum percentile');
   const x=v=>m.l+v*(W-m.l-m.r), y=v=>H-m.b-v*(H-m.t-m.b);
@@ -757,7 +761,7 @@ function renderMap(){
   const maxCap=Math.max(...caps,1);
   // Area ∝ market cap, so radius ∝ sqrt — encoding value as radius would
   // overstate large caps by squaring the difference.
-  const rad=v=>3+Math.sqrt((nz(v)&&v>0?v:maxCap*0.004)/maxCap)*17;
+  const rad=v=>3.5+Math.sqrt((nz(v)&&v>0?v:maxCap*0.004)/maxCap)*22;
 
   [...S.rows].sort((a,b)=>(b.market_cap||0)-(a.market_cap||0)).forEach(r=>{
     const c=el('circle',{cx:x(r.q_raw??0.5), cy:y(r.c_raw??0.5), r:rad(r.market_cap),
@@ -1120,7 +1124,7 @@ function sectorStats(){
 }
 function renderSectors(){
   const stats=sectorStats();
-  const W=520, rowH=26, H=stats.length*rowH+40, m={t:10,r:44,b:22,l:150};
+  const W=700, rowH=27, H=stats.length*rowH+40, m={t:10,r:46,b:22,l:176};
   const s=svgIn($('#sec-chart'),W,H);
   s.setAttribute('aria-label','Median conviction by sector');
   const max=Math.max(...stats.map(d=>d.conv),80);
@@ -1146,7 +1150,7 @@ function renderSectors(){
       ev.clientX,ev.clientY));
     bar.addEventListener('mouseleave',hideTip);
     const lbl=el('text',{x:m.l-8,y:y+rowH/2+1,class:'tick','text-anchor':'end'},s);
-    lbl.textContent=d.sector.length>20?d.sector.slice(0,19)+'…':d.sector;
+    lbl.textContent=d.sector.length>24?d.sector.slice(0,23)+'…':d.sector;
     const val=el('text',{x:x(d.conv)+6,y:y+rowH/2+1,class:'tick','text-anchor':'start',
                          fill:cssVar('--ink-2')},s);
     val.textContent=d.conv.toFixed(0);
@@ -1207,7 +1211,7 @@ function renderPortfolio(){
 function renderData(){
   const cov=S.ledger.coverage||{};
   const entries=Object.entries(cov).sort((a,b)=>a[1]-b[1]);
-  const W=520, rowH=22, H=entries.length*rowH+30, m={t:8,r:48,b:18,l:158};
+  const W=880, rowH=24, H=entries.length*rowH+32, m={t:8,r:52,b:20,l:172};
   const s=svgIn($('#cov-chart'),W,H);
   s.setAttribute('aria-label','Input coverage by field');
   const x=v=>m.l+v*(W-m.l-m.r);

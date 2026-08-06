@@ -41,6 +41,9 @@ jobs:
           # SEC's fair-access policy rejects requests without a contact address.
           # Set SEC_CONTACT as a repository secret to an address you monitor.
           SEC_CONTACT: ${{ secrets.SEC_CONTACT }}
+          # Without this the progress and coverage lines are buffered and only appear
+          # if the job succeeds — exactly when you least need them.
+          PYTHONUNBUFFERED: "1"
         run: python -m equity_monitor.nightly
 
       - name: Validate ledger
