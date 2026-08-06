@@ -26,3 +26,6 @@ htmlcov/
 
 # rolling T-1 baseline (regenerated each nightly run)
 ledger/prev_index.json
+
+# HTTP response cache (local dev convenience; CI runs cold)
+.cache/
