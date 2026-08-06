@@ -75,7 +75,7 @@ def build(allow_fixture_fallback=True):
             "conviction": conv,
             "signal": sig,
             "sector": f.get("sector", ""),
-            "beta": f.get("beta", 1.0),
+            "beta": f.get("beta"),  # None when unavailable (no AV key) -> UI shows "—"
             "dte": f.get("dte"),  # days to next earnings (None = n/a, e.g. ETFs)
             "factors": {
                 "quality": comp["quality"],

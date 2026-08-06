@@ -145,7 +145,7 @@ def build_features(symbol: str) -> dict | None:
         earnings_stability = 0.6
         pe = 0.0
         sector = ""
-        beta = 1.0
+        beta = None  # None = not available (no AV key / no Beta field) -> UI shows "—", never a fake 1.00
 
         if AV_KEY:
             ov = _get_av_overview(symbol)

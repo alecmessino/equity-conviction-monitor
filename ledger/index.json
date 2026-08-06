@@ -1,5 +1,5 @@
 {
-  "as_of": "2026-08-05T21:50:06Z",
+  "as_of": "2026-08-06T02:21:49Z",
   "benchmark": "SPY",
   "live": true,
   "hist_base": "history/",
@@ -21,7 +21,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -50,7 +50,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -79,7 +79,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -108,7 +108,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -131,13 +131,13 @@
       "price": 272.65,
       "chg": 0.0,
       "turnover": 0.0,
-      "adv": 42366662,
+      "adv": 42332281,
       "mcap": 0,
       "z_ath": null,
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -166,7 +166,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -195,7 +195,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -224,7 +224,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -253,7 +253,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -282,7 +282,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -311,7 +311,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -340,7 +340,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -369,7 +369,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -398,7 +398,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -427,7 +427,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -456,7 +456,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -485,7 +485,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -514,7 +514,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -543,7 +543,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -572,7 +572,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -601,7 +601,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -630,7 +630,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -659,7 +659,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -688,7 +688,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -717,7 +717,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -746,7 +746,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -775,7 +775,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -804,7 +804,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -833,7 +833,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -856,13 +856,13 @@
       "price": 482.05,
       "chg": 0.0,
       "turnover": 0.0,
-      "adv": 47435209,
+      "adv": 47426772,
       "mcap": 0,
       "z_ath": null,
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -891,7 +891,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -920,7 +920,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -949,7 +949,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -978,7 +978,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1007,7 +1007,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1036,7 +1036,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1065,7 +1065,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1094,7 +1094,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1123,7 +1123,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1152,7 +1152,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1181,7 +1181,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1210,7 +1210,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1239,7 +1239,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1268,7 +1268,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1297,7 +1297,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1326,7 +1326,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1355,7 +1355,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1384,7 +1384,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1415,7 +1415,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1444,7 +1444,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1473,7 +1473,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1502,7 +1502,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1525,13 +1525,13 @@
       "price": 272.65,
       "chg": 0.0,
       "turnover": 0.0,
-      "adv": 42366662,
+      "adv": 42332281,
       "mcap": 0,
       "z_ath": null,
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1560,7 +1560,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1589,7 +1589,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1618,7 +1618,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1647,7 +1647,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,
@@ -1676,7 +1676,7 @@
       "conviction": 0,
       "signal": "AVOID",
       "sector": "",
-      "beta": 1.0,
+      "beta": null,
       "dte": null,
       "factors": {
         "quality": 0.0,

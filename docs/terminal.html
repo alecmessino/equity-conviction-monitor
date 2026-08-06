@@ -283,6 +283,9 @@ function drawSector(rows){
       return k+' <span class="'+cls+'">'+sign+d.toFixed(2)+'%</span>'})
     const el=document.getElementById('sector-legend')
     el.innerHTML+= '<br><span class="muted">Δ vs prev run: </span>'+lines.join(' · ')
+  } else {
+    const el=document.getElementById('sector-legend')
+    el.innerHTML+= '<br><span class="muted">Δ vs prev run: — (first run / no baseline yet)</span>'
   }
 }
 
