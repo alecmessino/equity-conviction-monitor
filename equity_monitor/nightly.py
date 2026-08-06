@@ -47,6 +47,33 @@ def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
+# Rounding happens once, here, on the way out. model.score() deliberately returns full
+# precision: rounding inside it made Python and JavaScript disagree in the last decimal
+# (banker's vs half-away-from-zero), which the parity gate flagged.
+_ROUND = {
+    "q": 4, "c": 4, "r": 4, "q_raw": 4, "c_raw": 4, "r_raw": 4, "mr_uplift": 4,
+    "price": 4, "chg_1d": 6, "ret_1m": 6, "ret_3m": 6, "ret_6m": 6, "ret_12m": 6,
+    "ret_ytd": 6, "vol_3m": 6, "vol_1y": 6, "atr14": 4, "atr_pct": 6,
+    "hi_52w": 4, "lo_52w": 4, "drawdown_52w": 6, "pct_off_low": 6,
+    "ma50": 4, "ma200": 4, "px_vs_ma50": 6, "px_vs_ma200": 6, "adv_usd": 0,
+    "rs_blend": 6, "rs_sector": 6, "trend": 6, "market_cap": 0,
+    "roic": 6, "fcf_yield": 6, "gross_margin": 6, "net_debt_ebitda": 4,
+    "earnings_stability": 6, "earnings_yield": 6, "ebitda_yield": 6, "pe": 4,
+    "value_metric": 6, "data_confidence": 3,
+    **{k: 6 for k in ("p_roic", "p_fcf_yield", "p_gross_margin", "p_leverage",
+                      "p_earnings_stability", "p_rs", "p_trend", "p_liquidity",
+                      "p_lowvol", "p_value")},
+}
+
+
+def round_row(row: dict) -> dict:
+    for key, places in _ROUND.items():
+        v = row.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            row[key] = round(v, places) if places else round(v)
+    return row
+
+
 def _downsample(values: list[float], target: int = 130) -> list[float]:
     if len(values) <= target:
         return [round(v, 4) for v in values]
@@ -132,6 +159,8 @@ def build(limit: int | None = None, skip_macro: bool = False,
     scored = [r for r in rows if r.get("conviction") is not None]
     scored.sort(key=lambda r: r["conviction"], reverse=True)
     assign_weights(scored)
+    for r in rows:
+        round_row(r)
 
     cov = features.coverage(rows, COVERAGE_FIELDS)
     print("coverage: " + "  ".join(f"{k}={v:.0%}" for k, v in cov.items()))

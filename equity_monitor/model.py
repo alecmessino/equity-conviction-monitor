@@ -131,18 +131,24 @@ def score(p: dict, weights: dict | None = None) -> dict:
     C = min(C_CEILING, C * uplift)
 
     raw = 100.0 * (Q * C * R) ** (1.0 / 3.0)
-    conviction = int(round(max(0.0, min(100.0, raw))))
+    # floor(x + 0.5), not round(). Python's round() is banker's rounding and
+    # JavaScript's Math.round() rounds half away from zero, so the two ports would
+    # disagree on exact halves. The parity gate caught this; the fix is to use a rule
+    # both languages implement identically rather than to loosen the gate's tolerance.
+    conviction = int(math.floor(max(0.0, min(100.0, raw)) + 0.5))
 
+    # Deliberately unrounded: rounding is presentation, and doing it here was a second
+    # source of cross-language drift. nightly.py rounds once, on serialisation.
     return {
         "conviction": conviction,
         "signal": signal(conviction),
-        "q": round(Q, 4),
-        "c": round(C, 4),
-        "r": round(R, 4),
-        "q_raw": round(q_raw, 4),
-        "c_raw": round(c_raw, 4),
-        "r_raw": round(r_raw, 4),
-        "mr_uplift": round(uplift, 4),
+        "q": Q,
+        "c": C,
+        "r": R,
+        "q_raw": q_raw,
+        "c_raw": c_raw,
+        "r_raw": r_raw,
+        "mr_uplift": uplift,
     }
 
 

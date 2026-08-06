@@ -382,9 +382,18 @@ def derive(comp: CompanyFacts, market_cap: float | None) -> dict:
     gross_margin = _safe_div(gross_profit, revenue)
 
     # Invested capital = interest-bearing debt + book equity - excess cash.
+    #
+    # Guard the denominator. Companies that have bought back stock aggressively can
+    # carry negative book equity, and a small or negative invested-capital base turns
+    # ROIC into a meaningless number with a confident sign — Booking Holdings scored
+    # -92% before this guard, which would have ranked a highly profitable business at
+    # the bottom of its sector. An unmeasurable ratio must read as unmeasured.
     invested = None
     if equity is not None and has_debt_tag:
-        invested = debt + equity - (cash or 0.0)
+        base = debt + equity - (cash or 0.0)
+        floor = max(1e6, 0.05 * abs(revenue)) if revenue else 1e6
+        if base > floor:
+            invested = base
     nopat = operating_income * (1.0 - TAX_RATE) if operating_income is not None else None
     roic = _safe_div(nopat, invested, floor=1e6)
 

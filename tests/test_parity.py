@@ -1,154 +1,158 @@
-"""Equity Conviction Monitor — parity + regression gates.
+"""Frontend/backend parity gate.
 
-Two gates (both must pass for `pytest -q` to be green):
+The terminal recomputes conviction in the browser so the detail panel can show a live
+decomposition. That means the scoring function exists twice — once in Python, once in
+JavaScript — and two implementations of one formula drift silently by default. The
+drift is invisible precisely because both sides keep producing plausible numbers.
 
-1. FRONTEND/BACKEND PARITY
-   Extract the v2 multiplicative `score(t)` port from web/terminal.html and execute
-   it in a JS sandbox (PyMiniRacer if present, else a minimal JS shim). Assert the
-   JS port and equity_monitor.model.score() agree on conviction + Q/C/R for every
-   fixture asset. Also assert the JS contains the v2 multiplicative formula and a
-   soft-tanh confirmation (no v1 additive clamp / cmRaw).
+This gate extracts the JS model port straight out of ``web/terminal.html``, runs it in
+node, and asserts it agrees with ``equity_monitor.model.score`` on hundreds of
+randomised inputs plus the edge cases that matter.
 
-2. FROZEN CONVICTION REGRESSION
-   The v2 engine must reproduce pinned convictions for the fixture basket. Pins are
-   (re)calibrated below; change them ONLY on a deliberate model change.
+Splitting cross-sectional ranking (Python only) from a pure ``score(percentiles)`` is
+what makes this tractable: there is exactly one pure function to keep in sync, and it
+takes plain numbers.
 """
-import json, re, math, pathlib
+from __future__ import annotations
+
+import json
+import pathlib
+import random
+import re
+import shutil
+import subprocess
+import tempfile
+
 import pytest
+
 from equity_monitor import model
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
-TERMINAL_HTML = ROOT / "web" / "terminal.html"
+TERMINAL = ROOT / "web" / "terminal.html"
 
-FMP_KEY = None  # tests are offline; static fixtures below
+MARKER_START = "MODEL PORT"
+MARKER_END = "END MODEL PORT"
 
-
-# ---- static fixture (offline, deterministic) ----
-# Representative names spanning quality/RS tiers. Inputs match the feature keys
-# produced by equity_monitor.data.build_features() so the model runs for real.
-FIXTURE = {
-    "AAPL": dict(symbol="AAPL", price=220.0, market_cap=3.4e12, chg24=1.2,
-                  adv=4.0e9, turnover=4.0e9/3.4e12, roic=0.30, fcf_yield=0.08,
-                  gross_margin=0.42, debt_ebitda=1.8, earnings_stability=0.85,
-                  val_zscore=-0.5, short_days=3.0, rs_blend=1.35, drawdown_52w=0.14),
-    "BRK.B": dict(symbol="BRK.B", price=520.0, market_cap=7.5e11, chg24=0.3,
-                  adv=2.2e9, turnover=2.2e9/7.5e11, roic=0.09, fcf_yield=0.035,
-                  gross_margin=0.50, debt_ebitda=0.2, earnings_stability=0.95,
-                  val_zscore=0.8, short_days=1.0, rs_blend=0.02, drawdown_52w=0.02),
-    "KO": dict(symbol="KO", price=62.0, market_cap=1.4e11, chg24=-0.5,
-               adv=1.0e9, turnover=1.0e9/1.4e11, roic=0.12, fcf_yield=0.07,
-               gross_margin=0.62, debt_ebitda=2.8, earnings_stability=0.98,
-               val_zscore=-1.2, short_days=9.0, rs_blend=-4.4, drawdown_52w=0.08),
-    "NVDA": dict(symbol="NVDA", price=1100.0, market_cap=2.7e12, chg24=3.1,
-                 adv=3.0e9, turnover=3.0e9/2.7e12, roic=0.28, fcf_yield=0.01,
-                 gross_margin=0.72, debt_ebitda=1.5, earnings_stability=0.60,
-                 val_zscore=2.4, short_days=2.5, rs_blend=24.25, drawdown_52w=0.05),
-}
-SPY = dict(symbol="SPY", price=550.0, market_cap=2.1e12, chg24=0.4,
-           adv=2.5e9, turnover=2.5e9/2.1e12, roic=0.0, fcf_yield=0.0,
-           gross_margin=0.0, debt_ebitda=0.0, earnings_stability=0.0,
-           val_zscore=0.0, short_days=0.0, rs_blend=0.0, drawdown_52w=0.0)
-
-def _asset(sym):
-    t = dict(FIXTURE[sym])
-    return t, SPY
+pytestmark = pytest.mark.skipif(shutil.which("node") is None,
+                                reason="node is required to execute the JS port")
 
 
-def _extract_js_score(html_path=TERMINAL_HTML):
-    """Return a callable score(t)->{q,c,r,conv} by evaluating the JS port in a shim."""
-    txt = html_path.read_text()
-    # pull the whole <script> block
-    m = re.search(r"<script>(.*?)</script>", txt, re.S)
-    if not m:
-        pytest.skip("terminal.html has no <script>")
-    js = m.group(1)
-    # sanity: v2 multiplicative structure present (Q·C·R ≡ Q·M·V blend)
-    assert "100*q*m*vr.r" in js or "100 * q * c * r" in js or "100*q*c*r" in js, "JS missing v2 multiplicative core"
-    assert "Math.tanh" in js, "JS confirmation must use soft-tanh"
-    assert "cmRaw" not in js, "JS still uses v1 additive clamp (cmRaw)"
+def extract_port() -> str:
+    """Pull the delimited model port out of the terminal's inline script.
 
-    # minimal JS eval via node if available, else PyMiniRacer
-    try:
-        import subprocess, tempfile, os, threading
-        # strip browser-only entrypoints so node can import the pure functions
-        js_clean = re.sub(r"load\(\);", "", js)
-        js_clean = re.sub(r"setInterval\([^;]*;", "", js_clean)
-        js_clean = re.sub(r"setTimeout\([^;]*;", "", js_clean)
-        with tempfile.NamedTemporaryFile("w", suffix=".cjs", delete=False) as f:
-            f.write(js_clean + "\nmodule.exports = { score };\n")
-            path = f.name
-        runner = path + ".run.cjs"
-        with open(runner, "w") as rf:
-            rf.write(
-                f"const m=require({path!r});\n"
-                f"const FIX={json.dumps(FIXTURE)};\n"
-                f"const res={{}}; for(const k in FIX){{res[k]=m.score(FIX[k]).conv;}}\n"
-                f"console.log(JSON.stringify(res));\n"
-                f"process.exit(0);\n"
-            )
-        result = {}
-        def _run():
-            try:
-                r = subprocess.run(["node", runner], capture_output=True, text=True, timeout=10)
-                if r.returncode == 0:
-                    result["data"] = json.loads(r.stdout.strip())
-            except Exception:
-                pass
-        t = threading.Thread(target=_run, daemon=True)
-        t.start(); t.join(12)   # never block the suite >12s
-        if "data" in result:
-            return result["data"], "node"
-    except Exception:
-        pass
-    # fallback: PyMiniRacer
-    try:
-        from py_mini_racer import py_mini_racer
-        ctx = py_mini_racer.MiniRacer()
-        ctx.eval(js)
-        def call(t):
-            return ctx.call("score", t)
-        return {k: call(v)["conv"] for k, v in FIXTURE.items()}, "miniracer"
-    except Exception:
-        pytest.skip("no JS runtime (node/PyMiniRacer) available to execute frontend port")
+    The markers sit inside comment blocks, so we slice from the *end* of the opening
+    comment to the *start* of the closing one — anything else hands node a fragment
+    of prose and fails with a syntax error rather than a parity result.
+    """
+    html = TERMINAL.read_text()
+    script = re.search(r"<script>(.*?)</script>", html, re.S)
+    assert script, "terminal.html has no inline <script> block"
+    body = script.group(1)
+    start = body.find(MARKER_START)
+    end = body.find(MARKER_END)
+    assert start != -1 and end != -1, (
+        f"could not find the {MARKER_START}/{MARKER_END} markers in terminal.html — "
+        "the parity gate cannot verify a port it cannot locate"
+    )
+    open_close = body.find("*/", start)
+    assert open_close != -1, "the opening MODEL PORT marker is not inside a /* */ comment"
+    close_open = body.rfind("/*", start, end)
+    assert close_open != -1, "the END MODEL PORT marker is not inside a /* */ comment"
+    return body[open_close + 2:close_open]
 
 
-def test_frontend_backend_parity():
-    js_conv, _ = _extract_js_score()
-    for sym in FIXTURE:
-        t, b = _asset(sym)
-        q, c, r, conv, sig, comp = model.score(t, b)
-        assert conv == js_conv[sym], f"{sym}: backend {conv} != frontend JS {js_conv[sym]}"
+def test_port_declares_the_v3_structure():
+    """Guard the shape, so a rewrite cannot quietly reintroduce a v2 formula."""
+    js = extract_port()
+    assert "Math.cbrt" in js, "conviction must use the geometric mean, not a raw product"
+    assert "MR_QUALITY_GATE" in js, "the mean-reversion uplift must be quality-gated"
+    assert "p_roic" in js and "p_value" in js, "port must consume percentile inputs"
+    # v2 artefacts that must not come back.
+    assert "cmRaw" not in js
+    assert "0.20) / 0.60" not in js and "(raw-0.20)/0.60" not in js
 
 
-def test_frozen_conviction():
-    for sym in FIXTURE:
-        t, b = _asset(sym)
-        q, c, r, conv, sig, comp = model.score(t, b)
-        assert sym in FROZEN_CONVICTION, f"{sym} missing from FROZEN_CONVICTION"
-        assert conv == FROZEN_CONVICTION[sym], f"{sym}: v2 conv {conv} != pinned {FROZEN_CONVICTION[sym]}"
-        assert "quality" in comp and "confirmation" in comp and "risk" in comp
-        assert sig in ("STRONG", "BUY", "HOLD", "WATCH", "AVOID")
+def run_js(cases: list[dict]) -> list[dict]:
+    """Execute the extracted port against `cases` in node and return its output."""
+    js = extract_port()
+    with tempfile.TemporaryDirectory() as tmp:
+        script = pathlib.Path(tmp) / "port.mjs"
+        script.write_text(
+            js
+            + "\nconst cases = " + json.dumps(cases) + ";\n"
+            + "console.log(JSON.stringify(cases.map(c => score(c))));\n"
+        )
+        proc = subprocess.run(["node", str(script)], capture_output=True, text=True,
+                              timeout=60)
+    if proc.returncode != 0:
+        raise AssertionError(f"node failed executing the port:\n{proc.stderr}")
+    return json.loads(proc.stdout)
 
 
-if __name__ == "__main__":
-    ok = True
-    for name, fn in [("parity", test_frontend_backend_parity),
-                     ("frozen", test_frozen_conviction)]:
-        try:
-            fn(); print(f"  PASS  {name}")
-        except Exception as e:
-            ok = False; print(f"  FAIL  {name}: {e}")
-    raise SystemExit(0 if ok else 1)
+def random_case(rng: random.Random) -> dict:
+    case = {k: round(rng.random(), 6) for k in model.ALL_PERCENTILES}
+    case["drawdown_52w"] = round(rng.random() * 0.6, 6)
+    # A quarter of the time, drop some inputs entirely — missing values take a
+    # different branch in both implementations and are where drift would hide.
+    if rng.random() < 0.25:
+        for key in rng.sample(model.ALL_PERCENTILES, rng.randint(1, 4)):
+            case[key] = None
+    return case
 
 
-# ---- v2 multiplicative fixture pins (Quality × Confirmation × RiskAdj) ----
-# Calibrated to range-normalised bands in model.py. Asserts the engine reproduces
-# itself byte-for-byte; update ONLY on a deliberate model change.
-# NOTE: bands are placeholder-calibrated (single-asset fixed thresholds); retune
-# against a real S&P 500/Russell 1000 universe before treating pins as signal truth.
-FROZEN_CONVICTION = {
-    "AAPL": 52,
-    "NVDA": 36,
-    "BRK.B": 30,
-    "KO": 20,
-}
+EDGE_CASES: list[dict] = [
+    {k: 0.0 for k in model.ALL_PERCENTILES},
+    {k: 1.0 for k in model.ALL_PERCENTILES},
+    {k: 0.5 for k in model.ALL_PERCENTILES},
+    # exactly on the mean-reversion gates
+    {**{k: 0.55 for k in model.ALL_PERCENTILES}, "drawdown_52w": 0.15},
+    {**{k: 0.55 for k in model.ALL_PERCENTILES}, "drawdown_52w": 0.1500001},
+    {**{k: 0.5499 for k in model.ALL_PERCENTILES}, "drawdown_52w": 0.4},
+    # drawdown beyond the span, so the uplift saturates
+    {**{k: 0.9 for k in model.ALL_PERCENTILES}, "drawdown_52w": 0.95},
+    # nothing observed at all
+    {k: None for k in model.ALL_PERCENTILES},
+    {},
+]
+
+
+def test_js_and_python_agree():
+    rng = random.Random(20260806)
+    cases = EDGE_CASES + [random_case(rng) for _ in range(400)]
+    js_results = run_js(cases)
+    assert len(js_results) == len(cases)
+
+    mismatches = []
+    for case, got in zip(cases, js_results):
+        want = model.score(dict(case))
+        for key in ("conviction", "signal"):
+            if want[key] != got[key]:
+                mismatches.append((case, key, want[key], got[key]))
+        for key in ("q", "c", "r", "q_raw", "c_raw", "r_raw", "mr_uplift"):
+            if abs(want[key] - got[key]) > 1e-9:
+                mismatches.append((case, key, want[key], got[key]))
+
+    assert not mismatches, (
+        f"{len(mismatches)} JS/Python disagreements; first three:\n"
+        + "\n".join(f"  {k}: python={w!r} js={g!r}  case={c}"
+                    for c, k, w, g in mismatches[:3])
+    )
+
+
+def test_weights_match_between_implementations():
+    """Weights live in both files; a change to one alone silently reweights the board."""
+    js = extract_port()
+    for pillar, weights in model.WEIGHTS.items():
+        block = re.search(rf"{pillar}:\s*\{{(.*?)\}}", js, re.S)
+        assert block, f"JS port has no '{pillar}' weight block"
+        found = {m.group(1): float(m.group(2))
+                 for m in re.finditer(r"(\w+)\s*:\s*([0-9.]+)", block.group(1))}
+        assert found == pytest.approx(weights), (
+            f"{pillar} weights differ — python={weights} js={found}"
+        )
+
+
+def test_signal_thresholds_match():
+    js = extract_port()
+    found = [(int(a), b) for a, b in re.findall(r"\[(\d+),\s*'([A-Z]+)'\]", js)]
+    assert found == model.SIGNAL_TIERS

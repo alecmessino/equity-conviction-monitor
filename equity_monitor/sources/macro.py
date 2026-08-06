@@ -11,6 +11,15 @@ from ._http import fetch
 
 FRED_CSV = "https://fred.stlouisfed.org/graph/fredgraph.csv?id={sid}"
 
+# FRED's edge silently stalls on browser-impersonating User-Agents (a request with a
+# Chrome UA hangs until timeout; the same request identifying itself as this tool
+# returns in ~2s). Declare what we are.
+_FRED_HEADERS = {
+    "User-Agent": "equity-conviction-monitor/3.0 "
+                  "(+https://github.com/alecmessino/equity-conviction-monitor)",
+    "Accept-Encoding": "gzip, deflate",
+}
+
 SERIES = {
     "DGS10": ("10Y Treasury", "%"),
     "T10Y2Y": ("2s10s Spread", "%"),
@@ -21,8 +30,9 @@ SERIES = {
 
 def _series(series_id: str, lookback: int = 260) -> list[tuple[str, float]]:
     """Trailing observations as [(date, value)], oldest first, gaps dropped."""
-    text = fetch(FRED_CSV.format(sid=series_id), throttle_key="fred",
-                 min_interval=0.2, retries=2).decode("utf-8", "replace")
+    text = fetch(FRED_CSV.format(sid=series_id), headers=_FRED_HEADERS,
+                 throttle_key="fred", min_interval=0.2, retries=2,
+                 timeout=25).decode("utf-8", "replace")
     out: list[tuple[str, float]] = []
     for line in text.splitlines()[1:]:
         parts = line.split(",")
