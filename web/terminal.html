@@ -26,7 +26,7 @@ td.l,th.l{text-align:left}
 tbody tr:hover{background:#171e32}
 .badge{padding:2px 8px;border-radius:12px;font-size:9px;font-weight:700}
 .bSTRONG,.bBUY{color:var(--buy);background:rgba(16,185,129,.12)}.bHOLD{color:var(--hold);background:rgba(245,158,11,.12)}.bWATCH{color:var(--neutral);background:rgba(148,163,184,.12)}.bAVOID{color:var(--sell);background:rgba(239,68,68,.12)}
-.pos{color:var(--buy)}.neg{color:var(--sell)}
+.pos{color:var(--buy)}.neg{color:var(--sell)}.neu{color:var(--hold)}
 .bar{display:inline-block;width:48px;height:6px;background:#0f1424;border-radius:3px;overflow:hidden;vertical-align:middle}
 .bar i{display:block;height:100%;background:linear-gradient(90deg,#1a6,#00e676)}
 .mini{width:50px;height:22px}
@@ -45,6 +45,21 @@ canvas{background:transparent}
 .spark-legend{display:flex;gap:10px;font-size:9px;color:var(--muted);margin-top:2px}
 .filter-bar{display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);margin-bottom:10px}
 .filter-bar select,.filter-bar button{cursor:pointer}
+/* Ticker drawer (P1) */
+.drawer-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.45);opacity:0;visibility:hidden;transition:opacity .18s ease;pointer-events:none;z-index:999}
+.drawer-backdrop.open{opacity:1;visibility:visible;pointer-events:auto}
+.drawer{position:fixed;top:0;right:-20px;width:420px;max-width:90vw;height:100vh;background:var(--bg2);border-left:1px solid var(--border);box-shadow:0 0 40px rgba(0,0,0,.6);display:flex;flex-direction:column;transition:right .22s cubic-bezier(.25,.8,.25,1);z-index:1000}
+.drawer.open{right:0}
+.drawer-head{display:flex;justify-content:space-between;align-items:center;padding:14px 18px;border-bottom:1px solid var(--border)}
+.drawer-head h3{margin:0;font-size:14px;font-weight:700}
+.drawer-head button{cursor:pointer}
+.drawer-body{overflow-y:auto;padding:16px 18px;font-size:12px;line-height:1.6}
+.drawer-body ul{margin:0;padding-left:18px}
+.drawer-body li{margin-bottom:4px}
+.drawer-body table{width:100%;border-collapse:collapse;font-size:11.5px}
+.drawer-body th,.drawer-body td{padding:4px 8px;border-bottom:1px solid #161d2e;text-align:left}
+.drawer-body .kv td:first-child{color:var(--muted);font-weight:500}
+.drawer-close{display:none}
 #root{border-radius:8px}
 </style>
 </head>
@@ -104,6 +119,16 @@ canvas{background:transparent}
   </table>
 </div>
 
+<!-- Ticker detail slide-out drawer (P1) -->
+<div id="drawer-backdrop" class="drawer-backdrop"></div>
+<div id="drawer" class="drawer">
+  <div class="drawer-head">
+    <h3 id="drawer-title">—</h3>
+    <button id="drawer-close" class="muted-btn">✕</button>
+  </div>
+  <div id="drawer-body" class="drawer-body"></div>
+</div>
+
 <div class="grid2">
   <div class="section" id="sec-heat">
     <h2>Factor Grades (A+–F)</h2>
@@ -160,6 +185,38 @@ function fmtP(p){if(p==null)p=0;return '$'+Number(p).toLocaleString(undefined,{m
 function pct(v){if(v==null)v=0;return (v>=0?'+':'')+v.toFixed(2)+'%'}
 function liqBar(adv){const w=clamp01(adv>0?(Math.log10(adv)-6)/4:0);return '<i style="width:'+Math.max(3,w*100)+'%"></i>'}
 function gVar(n){return getComputedStyle(document.documentElement).getPropertyValue(n)}
+function openDrawer(r){
+  const sc=r._sc||composite(r);const s=signal(sc.conv)
+  document.getElementById('drawer-title').textContent=r.symbol+' · '+s
+  document.getElementById('drawer-body').innerHTML=drawerContent(r,sc)
+  document.getElementById('drawer').classList.add('open');document.getElementById('drawer-backdrop').classList.add('open')
+  document.body.style.overflow='hidden'
+  // lazy-load history closes for the drawer sparkline
+  const hb=(window.__ledger&&window.__ledger.hist_base)||'history/'
+  const base=(location.pathname.includes('/web/')?'../ledger/'+hb:location.pathname.includes('/docs/')?hb:'./ledger/'+hb)
+  fetch(base+r.symbol+'.json').then(rq=>rq.json()).then(d=>{
+    const cv=document.getElementById('drawer-spark')
+    if(cv&&d&&d.closes)drawSpark(cv,d.closes)
+  }).catch(()=>{})
+}
+function closeDrawer(){document.getElementById('drawer').classList.remove('open');document.getElementById('drawer-backdrop').classList.remove('open');document.body.style.overflow=''}
+function drawerContent(r,sc){
+  const sz=window.__kellyCache&&window.__kellyCache[r.symbol],at=window.__atrCache&&window.__atrCache[r.symbol]
+  const sizeCell=sz!=null?sz.toFixed(2)+'%':'—',stopCell=at?fmtP(at.stop):'—',tgtCell=at?fmtP(at.target):'—'
+  const f=r.factors||{}
+  return `<ul>
+    <li><b>Price</b> ${fmtP(r.price)}  <b>Δ</b> ${pct(r.chg)}  <b>Mcap</b> $${(r.mcap||0).toLocaleString()}  <b>Sector</b> ${r.sector||f.sector||'—'}</li>
+    <li><b>Conviction</b> ${sc.conv}  <b>Q</b> ${(sc.q*100).toFixed(0)}%  <b>M</b> ${(sc.m*100).toFixed(0)}%  <b>V</b> ${(sc.v*100).toFixed(0)}%  <b>Risk</b> ${sc.v.toFixed(2)}</li>
+    <li><canvas id="drawer-spark" class="spark" width="180" height="34"></canvas></li>
+  </ul>
+  <table class="kv">
+    <tr><th>Beta</th><td>${(r.beta!=null)?Number(r.beta).toFixed(2):'—'}</td><th>30d Size%</th><td>${sizeCell}</td><th>ATR Stop</th><td>${stopCell}</td></tr>
+    <tr><th>ROIC%</th><td>${(F(r,'roic',0)*100).toFixed(0)}</td><th>DTE</th><td>${(r.dte!=null)?r.dte+'d':'—'}</td><th>ATR Target</th><td>${tgtCell}</td></tr>
+  </table>
+  <div class="note" style="margin-top:10px">Waterfall: Q=${(sc.q*100).toFixed(0)}% × M=${(sc.m*100).toFixed(0)}% × V=${(sc.v*100).toFixed(0)}% → ${sc.conv}/100. Valuation-Momentum-Confirmation × Risk-adjusted depth. Stop = entry − 2×ATR, Target = entry + 3×ATR.</div>`
+}
+document.getElementById('drawer-close').onclick=closeDrawer
+document.getElementById('drawer-backdrop').onclick=closeDrawer
 
 function exportCSV(){
   const j=window.__ledger; if(!j||!j.all){return}
@@ -295,6 +352,8 @@ function drawLeaderboard(rows, allRows){
       const cl=closures[r.symbol]||[]
       const sz=kellyWeight(r,sc,cl)
       const at=atrStopTarget(r,cl)
+      window.__kellyCache=window.__kellyCache||{};window.__atrCache=window.__atrCache||{}
+      window.__kellyCache[r.symbol]=sz;window.__atrCache[r.symbol]=at
       const sizeCell=sz!=null?sz.toFixed(2)+'%':'—'
       const sizeCls=sz!=null?(sz>=2?'pos':sz>=1?'neu':'neg'):''
       const stopCell=at?fmtP(at.stop):'—'
@@ -319,6 +378,11 @@ Conviction waterfall: quality (Q) × confirmation (M) × risk (V) = 100·Q·M·V
       const sym=cv.dataset.sym
       const closes=closures[sym]||[]
       drawSpark(cv,closes)
+    })
+    // P1: ticker row click -> slide-out drawer
+    sb.forEach((r,idx)=>{
+      const tr=document.querySelector(`#lb-tbody tr:nth-child(${idx+1})`)
+      if(tr){tr.style.cursor='pointer';const cell=tr.cells[1];if(cell)cell.onclick=()=>openDrawer(r)}
     })
   })
 }
