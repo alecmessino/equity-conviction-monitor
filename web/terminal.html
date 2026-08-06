@@ -6,7 +6,8 @@
 <title>Equity Conviction Monitor</title>
 <link rel="icon" href="data:,">
 <style>
-:root{--bg:#0a0e17;--bg2:#131b2e;--bg3:#1c253e;--fg:#e0e6ed;--muted:#8899a6;--border:#2a3b5c;--green:#00e676;--red:#ff5252;--blue:#29b6f6;--gold:#ffd700;--amber:#ffc107}
+:root{--bg:#0a0e17;--bg2:#131b2e;--bg3:#1c253e;--fg:#e0e6ed;--muted:#8899a6;--border:#2a3b5c;--green:#00e676;--red:#ff5252;--blue:#29b6f6;--gold:#ffd700;--amber:#ffc107;
+  --buy:#10B981;--sell:#EF4444;--hold:#F59E0B;--neutral:#94A3B8}
 *{box-sizing:border-box}body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,monospace;font-size:12.5px;color:var(--fg);background:var(--bg)}
 header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,#0c1018,#07090d)}
 .brand{font-weight:700;font-size:15px}.brand small{color:var(--muted);font-weight:400;font-size:11px;margin-left:8px}
@@ -24,8 +25,8 @@ th{color:var(--muted);font-size:9.5px;text-transform:uppercase;letter-spacing:.4
 td.l,th.l{text-align:left}
 tbody tr:hover{background:#171e32}
 .badge{padding:2px 8px;border-radius:12px;font-size:9px;font-weight:700}
-.bSTRONG,.bBUY{color:var(--green);background:rgba(0,230,118,.12)}.bHOLD{color:var(--amber);background:rgba(255,193,7,.12)}.bWATCH{color:var(--muted);background:rgba(136,153,166,.12)}.bAVOID{color:var(--red);background:rgba(255,82,82,.12)}
-.pos{color:var(--green)}.neg{color:var(--red)}
+.bSTRONG,.bBUY{color:var(--buy);background:rgba(16,185,129,.12)}.bHOLD{color:var(--hold);background:rgba(245,158,11,.12)}.bWATCH{color:var(--neutral);background:rgba(148,163,184,.12)}.bAVOID{color:var(--sell);background:rgba(239,68,68,.12)}
+.pos{color:var(--buy)}.neg{color:var(--sell)}
 .bar{display:inline-block;width:48px;height:6px;background:#0f1424;border-radius:3px;overflow:hidden;vertical-align:middle}
 .bar i{display:block;height:100%;background:linear-gradient(90deg,#1a6,#00e676)}
 .mini{width:50px;height:22px}
@@ -37,6 +38,11 @@ canvas{background:transparent}
 .muted-btn:hover{color:var(--fg);border-color:var(--blue)}
 .earn-tag{color:var(--muted);font-weight:400;font-size:9.5px;margin-left:5px;letter-spacing:.2px}
 .note{color:var(--muted);font-size:10px;padding-top:8px;border-top:1px solid var(--border)}
+.completeness{display:inline-flex;align-items:center;gap:6px;font-size:10px;color:var(--muted);margin-left:10px}
+.completeness .dot{width:8px;height:8px;border-radius:50%}
+.completeness .full{color:var(--buy)}
+.completeness .missing{color:var(--sell)}
+.spark-legend{display:flex;gap:10px;font-size:9px;color:var(--muted);margin-top:2px}
 #root{border-radius:8px}
 </style>
 </head>
@@ -46,6 +52,7 @@ canvas{background:transparent}
   <div style="display:flex;align-items:center;gap:14px">
     <button id="export-btn" class="muted-btn" onclick="exportCSV()">CSV</button>
     <div class="kpi-value" id="live-now" style="color:var(--blue)">—</div>
+    <span id="completeness" class="completeness"></span>
   </div>
 </header>
 
@@ -178,11 +185,22 @@ async function load(){
     document.getElementById('k-hold').textContent=rows.filter(a=>a.conviction>=55&&a.conviction<80).length+' HOLD'
     document.getElementById('k-alpha').textContent=j.live?'+LIVE':''
     document.getElementById('k-last').textContent=(j.as_of||'—').slice(11,16)
+    drawCompleteness(rows)
     rows.forEach(r=>{r._sc=composite(r)})
     drawMatrix(rows);drawLeaderboard(rows);drawHeatmap(rows);drawSector(rows);drawAlerts(rows)
   }catch(e){document.getElementById('k-count').textContent='load error: '+e.message}
 }
 
+function drawCompleteness(rows){
+  const n=rows.length
+  const withBeta=rows.filter(r=>r.beta!=null&&r.beta!==0).length
+  const withDte=rows.filter(r=>r.dte!=null).length
+  const withFactors=rows.filter(r=>r.factors&&Object.keys(r.factors||{}).length>=8).length
+  const el=document.getElementById('completeness')
+  el.innerHTML='<span class="dot" style="background:'+(withBeta===n?gVar('--buy'):gVar('--sell'))+'"></span>'+(withBeta/n*100|0)+'% beta · '
+    +'<span class="dot" style="background:'+(withDte===n?gVar('--buy'):gVar('--sell'))+'"></span>'+(withDte/n*100|0)+'% earnings · '
+    +'<span class="dot" style="background:'+(withFactors===n?gVar('--buy'):gVar('--sell'))+'"></span>'+(withFactors/n*100|0)+'% fundamentals'
+}
 function drawLeaderboard(rows){
   const sb=[...rows].sort((a,b)=>b._sc.conv-a._sc.conv)
   document.getElementById('lb-tbody').innerHTML=sb.map((r,i)=>{
@@ -216,12 +234,23 @@ function drawSpark(cv,closes){
   if(!closes||closes.length<2)return
   const mn=Math.min(...closes),mx=Math.max(...closes),rng=(mx-mn)||1
   const up=closes[closes.length-1]>=closes[0]
-  c.strokeStyle=up?gVar('--green'):gVar('--red')
+  // price line
+  c.strokeStyle=up?gVar('--buy'):gVar('--sell')
   c.lineWidth=1.4;c.beginPath()
-  closes.forEach((v,i)=>{const x=2+i/(closes.length-1)*(W-4);const y=H-2-(v-mn)/rng*(H-4);i?c.lineTo(x,y):c.moveTo(x,y)})
+  closes.forEach((v,i)=>{const x=2+i/(closes.length-1)*(W-4);const y=H-2-(v-mn)/rng*(H-4);i?c.lineTo(x,y):c.moveTo(x,y) })
   c.stroke()
-  // end dot
-  c.fillStyle=c.strokeStyle;c.beginPath();c.arc(W-2,H-2-(closes[closes.length-1]-mn)/rng*(H-4),1.6,0,Math.PI*2);c.fill()
+  // 200-day (or available) MA — dotted neutral line across the window
+  const half=Math.floor(closes.length/2)
+  const ma=closes.slice(-half).reduce((s,v)=>s+v,0)/half
+  const my=H-2-(ma-mn)/rng*(H-4)
+  c.strokeStyle=gVar('--muted');c.setLineDash([2,2]);c.lineWidth=1
+  c.beginPath();c.moveTo(2,my);c.lineTo(W-2,my);c.stroke();c.setLineDash([])
+  // 52w-high / 52w-low anchor dots (green = high, red = low)
+  const hiIdx=closes.indexOf(mx),loIdx=closes.indexOf(mn)
+  const dot=(idx,col)=>{
+    const x=2+idx/(closes.length-1)*(W-4);const y=H-2-(closes[idx]-mn)/rng*(H-4)
+    c.fillStyle=col;c.beginPath();c.arc(x,y,2.2,0,Math.PI*2);c.fill()}
+  dot(hiIdx,gVar('--buy'));dot(loIdx,gVar('--sell'))
 }
 
 function drawMatrix(rows){
