@@ -110,6 +110,7 @@ equity_monitor/
   model.py             v3 scoring: prepare() ranks, score() is pure
   snapshots.py         nightly factor-level history + score-change attribution
   monitor.py           self-grading: stability, coverage trend, regime, health
+  churn.py             why the board moved: information vs. model sensitivity
   nightly.py           orchestrator; writes ledger/
   sources/
     _http.py           retries, throttling, gzip, on-disk cache
@@ -138,6 +139,19 @@ Whether high-conviction names outperform is an Information Coefficient question 
 months of accumulated snapshots within a single specification hash — it is not measured
 here, and every panel that depends on history states its sample size and what it is still
 waiting for rather than rendering a default.
+
+### Diagnosing churn
+
+Stability says how much the ranking moved. `equity_monitor/churn.py` says why, which is
+what decides the response. Both sides are measured in percentile points — how far the
+inputs moved, against how far each name's standing in the ranking moved — so the ratio
+between them is meaningful. Alongside it: per-input attribution by counterfactual
+re-scoring (advance one input to tonight's values, hold the rest at last night's,
+re-score under the frozen spec), a count of tier changes caused by moves too small to
+mean anything, and per-name elasticity reported with the weakest pillar so the mechanism
+is nameable.
+
+It reports evidence, never a prescription. One night is a single reading.
 
 ## The parity gate
 

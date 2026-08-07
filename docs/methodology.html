@@ -297,6 +297,54 @@ reading. Whether high-conviction names outperform low-conviction names is an Inf
 Coefficient question requiring months of accumulated snapshots within a single
 specification; it is not measured here and no panel implies otherwise.</p>
 
+<h2>8c · Diagnosing churn</h2>
+
+<p>Self-monitoring reports <i>how much</i> the ranking moved overnight. That number alone
+does not say what to do about it. A rank correlation of 0.85 produced by inputs that
+genuinely reordered is the model working; the same 0.85 produced from inputs that barely
+moved is the model manufacturing turnover, and trading on it would be trading noise. The
+two are indistinguishable on a stability panel.</p>
+
+<p>The headline measure puts both sides in the same units — percentile points. Input
+movement is each name's weighted mean absolute percentile change, weighted by that
+factor's share of <code>d ln(conviction)</code>. Standing movement is the change in the
+name's own percentile position within the conviction ranking. Under a model that
+transmits, a one-point input move produces roughly a one-point move in standing. A ratio
+well above one is the specification moving the board further than its data did.</p>
+
+<div class="note">An earlier design compared rank correlations — each input's against
+conviction's. It does not survive contact with real data. Inputs move in opposing
+directions, so a weighted mean of <em>signed</em> correlations collapses toward zero and
+stops meaning anything; and rank statistics respond to how much model <em>weight</em>
+moves rather than how far it moves, so several correlated inputs moving together register
+as superadditivity that belongs to the statistic, not the model. Tested against a case
+where the momentum block inverts — unambiguously information — that aggregate reported
+amplification. The regression test for it is still in the suite.</div>
+
+<p>Two supporting readings run alongside:</p>
+
+<ul>
+  <li><b>Attribution by counterfactual.</b> Each input in turn is advanced to tonight's
+      values while the rest are held at last night's, and the board is re-scored under the
+      frozen specification. The reordering each single-input run produces gives that
+      input's share of the churn. The model is evaluated, never modified.</li>
+  <li><b>Boundary flapping.</b> Tiers are hard thresholds applied to a continuous score,
+      so a one-point move across 70 turns a HOLD into a BUY with no change of view. Tier
+      changes arising from moves of two points or less are counted separately, because a
+      name at 69 and a name at 71 are not meaningfully different holdings.</li>
+  <li><b>Elasticity.</b> Conviction points moved per unit of input movement, per name,
+      reported alongside that name's weakest pillar. Because
+      <code>d ln(conviction) = (d ln Q + d ln C + d ln R)/3</code>, a pillar near its floor
+      moves the score far harder than one near the middle — Q floors at 0.02, so a name
+      pinned there amplifies about an order of magnitude more than a median name. That is
+      the geometric mean working as designed, and it is also where turnover concentrates.
+      Naming the mechanism is the point.</li>
+</ul>
+
+<p>This is evidence, not a recommendation. One night is a single reading; the same result
+sustained over weeks is what would justify revisiting a specification, and the
+specification stays frozen in the meantime so that the history remains one dataset.</p>
+
 <h2>9 · Limitations</h2>
 <ul>
   <li>Fundamentals are as-filed and lag the market by up to a quarter.</li>
