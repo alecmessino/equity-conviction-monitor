@@ -1,205 +1,236 @@
-"""Nightly builder — Equity Conviction Monitor.
+"""Nightly build: universe -> prices + filings -> features -> scores -> ledger.
 
-Pulls features for the universe (Yahoo keyless prices + Alpha Vantage fundamentals),
-enriches with RS, scores via model.score(), and writes ledger/index.json.
+Writes:
+  ledger/index.json          scored universe, run metadata, coverage report
+  ledger/history.json        downsampled closes for every name (one fetch for the grid)
+  ledger/history/SYM.json    full OHLCV, lazily loaded by the detail view
+  ledger/macro.json          FRED regime series
 
-If ALPHAVANTAGE_API_KEY is absent, prices still pull keylessly from Yahoo and the
-terminal renders live prices with neutral Quality (never fabricated). If the pull
-produces zero rows (network/API down), it falls back to the committed fixture so
-the terminal never goes empty.
+Failure policy: this job would rather ship nothing than ship something wrong. It
+prints a coverage report on every run and exits non-zero if the result is degenerate,
+because the previous pipeline's defining property was that it "succeeded" for weeks
+while publishing a board of zeros.
 """
 from __future__ import annotations
-import json, os, sys, time
+
+import argparse
+import json
+import os
+import sys
 from datetime import datetime, timezone
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import equity_monitor.data as data
-import equity_monitor.rs as rs
-from equity_monitor import model
-from equity_monitor.model import score, signal
+from equity_monitor import features, model, universe as uni
+from equity_monitor.sources import edgar, macro
 
-LEDGER = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ledger")
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LEDGER = os.path.join(ROOT, "ledger")
+HISTORY = os.path.join(LEDGER, "history")
 
-BENCH = {"symbol": "SPY"}
+COVERAGE_FIELDS = [
+    "market_cap", "roic", "fcf_yield", "gross_margin", "net_debt_ebitda",
+    "earnings_stability", "earnings_yield", "rs_blend", "trend", "adv_usd",
+    "vol_1y", "drawdown_52w", "sector",
+]
 
-
-def _derived_metrics(closes: list, price: float, pe: float | None = None) -> dict:
-    """Compute locally-derived drawdown + return metrics from 252-day closes.
-
-    * return_365d: (last - 252-ago) / 252-ago     — trailing 1-yr total return
-    * drawdown_52w: (max - price) / max          — true 52w drawdown from peak
-    * pe: passthrough from AV /OVERVIEW (None if unavailable)
-    Returns {} when closes are insufficient (avoids fabricating signals).
-    """
-    out = {}
-    if closes and len(closes) >= 2 and price > 0:
-        ref = closes[0]                       # ~252 trading days ago
-        if ref > 0:
-            out["return_365d"] = round((price - ref) / ref, 4)
-        hi = max(closes)
-        if hi > 0:
-            out["drawdown_52w"] = round((hi - price) / hi, 4)
-    if pe is not None:
-        out["pe"] = round(pe, 2)
-    return out
+# Portfolio construction: only names the model actually likes are held, weighted by
+# conviction above the WATCH boundary and capped so no single position dominates.
+# v2 assigned a weight to every name including the ones it rated AVOID, which made the
+# "paper index" a market-cap tracker with extra steps.
+HOLD_THRESHOLD = 55
+WEIGHT_BASE = 40
+MAX_WEIGHT = 5.0
 
 
-def build(allow_fixture_fallback=True):
-    av_set = bool(data.AV_KEY)
-    print(f"Alpha Vantage key: {'SET' if av_set else 'unset (neutral fundamentals, Yahoo prices only)'}")
+def _now() -> str:
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
-    symbols = data.universe()
-    feats, skipped = [], []
-    for sym in symbols:
-        try:
-            f = data.build_features(sym)
-            if f:
-                feats.append(f)
-            else:
-                skipped.append(sym)
-        except Exception as e:
-            skipped.append(f"{sym}:{e}")
-        time.sleep(0.05)  # gentle on rate limits
 
-    if not feats:
-        # live pull produced nothing (network/API down) — never ship an empty terminal
-        print("live pull produced 0 rows — falling back to committed fixture.")
-        if allow_fixture_fallback:
-            _fallback_to_committed()
-        else:
-            write_ledger([], 0.0)
-        return
+# Rounding happens once, here, on the way out. model.score() deliberately returns full
+# precision: rounding inside it made Python and JavaScript disagree in the last decimal
+# (banker's vs half-away-from-zero), which the parity gate flagged.
+_ROUND = {
+    "q": 4, "c": 4, "r": 4, "q_raw": 4, "c_raw": 4, "r_raw": 4, "mr_uplift": 4,
+    "price": 4, "chg_1d": 6, "ret_1m": 6, "ret_3m": 6, "ret_6m": 6, "ret_12m": 6,
+    "ret_ytd": 6, "vol_3m": 6, "vol_1y": 6, "atr14": 4, "atr_pct": 6,
+    "hi_52w": 4, "lo_52w": 4, "drawdown_52w": 6, "pct_off_low": 6,
+    "ma50": 4, "ma200": 4, "px_vs_ma50": 6, "px_vs_ma200": 6, "adv_usd": 0,
+    "rs_blend": 6, "rs_sector": 6, "trend": 6, "market_cap": 0,
+    "roic": 6, "fcf_yield": 6, "gross_margin": 6, "net_debt_ebitda": 4,
+    "earnings_stability": 6, "earnings_yield": 6, "ebitda_yield": 6, "pe": 4,
+    "value_metric": 6, "data_confidence": 3,
+    **{k: 6 for k in ("p_roic", "p_fcf_yield", "p_gross_margin", "p_leverage",
+                      "p_earnings_stability", "p_rs", "p_trend", "p_liquidity",
+                      "p_lowvol", "p_value")},
+}
 
-    feats = rs.enrich(feats)
-    rows = []
-    hist_dir = os.path.join(LEDGER, "history")
-    os.makedirs(hist_dir, exist_ok=True)
-    for f in feats:
-        q, c, r, conv, sig, comp = score(f, BENCH)
-        sym = f["symbol"]
-        # persist trailing closes (252-day, keyless Yahoo) for sparklines + drawdown/return math
-        closes = None
-        try:
-            closes = data.history(sym, 252)
-            if closes:
-                with open(os.path.join(hist_dir, f"{sym}.json"), "w") as hf:
-                    json.dump({"symbol": sym, "closes": closes}, hf)
-        except Exception as e:
-            print(f"  history {sym} skipped: {e}")
-        # --- locally-derived drawdown + 1Y return + pe (additive metadata; NO scoring impact) ---
-        dm = _derived_metrics(closes or [], round(f["price"], 2), f.get("pe"))
-        rows.append({
-            "symbol": sym,
-            "price": round(f["price"], 2),
-            "chg": round(f.get("chg24", 0.0), 2),
-            "turnover": round(f.get("turnover", 0.0), 5),
-            "adv": int(f.get("adv", 0)),
-            "mcap": int(f.get("market_cap", 0)),
-            "z_ath": None,
-            "conviction": conv,
-            "signal": sig,
-            "sector": f.get("sector", ""),
-            "beta": f.get("beta"),  # None when unavailable (no AV key) -> UI shows "—"
-            "dte": f.get("dte"),  # days to next earnings (None = n/a, e.g. ETFs)
-            "pe": f.get("pe"),   # None when no AV key -> UI shows "—"
-            "factors": {
-                "quality": comp["quality"],
-                "confirmation": comp["confirmation"],
-                "risk": comp["risk"],
-                "rs_blend": comp["rs_blend"],
-                "liquidity_fit": comp["liquidity_fit"],
-                "val_zscore": comp["val_zscore"],
-                "short_days": comp.get("short_days", 0.0),
-                # raw fundamentals in FRACTION units (matching model.py inputs so the
-                # browser JS port reproduces score() exactly — see frontend/backend parity)
-                "roic": round(f.get("roic", 0.0) or 0.0, 4),
-                "fcf_yield": round(f.get("fcf_yield", 0.0) or 0.0, 4),
-                "gross_margin": round(f.get("gross_margin", 0.0) or 0.0, 4),
-                "debt_ebitda": round(f.get("debt_ebitda", 5.0) or 5.0, 2),
-                "earnings_stability": round(f.get("earnings_stability", 0.5) or 0.5, 2),
-            },
-            # additive metadata (NO scoring impact) — powers the Fallen Titan viz
-            "return_365d": dm.get("return_365d"),
-            "drawdown_52w": dm.get("drawdown_52w"),
-        })
-    rows.sort(key=lambda x: x["conviction"], reverse=True)
-    # score-proportional weights (top names get larger weight; normalized to 100)
-    total_score = sum(max(r["conviction"], 1) for r in rows)
+
+def round_row(row: dict) -> dict:
+    for key, places in _ROUND.items():
+        v = row.get(key)
+        if isinstance(v, (int, float)) and not isinstance(v, bool):
+            row[key] = round(v, places) if places else round(v)
+    return row
+
+
+def _downsample(values: list[float], target: int = 130) -> list[float]:
+    if len(values) <= target:
+        return [round(v, 4) for v in values]
+    step = len(values) / target
+    return [round(values[min(len(values) - 1, int(i * step))], 4) for i in range(target)]
+
+
+def assign_weights(rows: list[dict]) -> None:
+    held = [r for r in rows if (r.get("conviction") or 0) >= HOLD_THRESHOLD]
+    raw = {r["symbol"]: max(0.0, r["conviction"] - WEIGHT_BASE) for r in held}
+    total = sum(raw.values())
     for r in rows:
-        r["weight"] = round(max(r["conviction"], 1) / total_score * 100.0, 2)
-    mcapsum = sum(r["mcap"] for r in rows)
-    write_ledger(rows, mcapsum, skipped, live=True)
-    print(f"built {len(rows)} rows from live data, skipped {len(skipped)}: {skipped[:5]}")
+        r["weight"] = 0.0
+    if total <= 0:
+        return
+    # Cap, then redistribute the overflow across uncapped names until it settles.
+    weights = {s: v / total * 100.0 for s, v in raw.items()}
+    for _ in range(10):
+        excess = sum(max(0.0, w - MAX_WEIGHT) for w in weights.values())
+        if excess < 1e-9:
+            break
+        room = {s: MAX_WEIGHT - w for s, w in weights.items() if w < MAX_WEIGHT}
+        room_total = sum(room.values())
+        if room_total <= 0:
+            break
+        weights = {
+            s: (MAX_WEIGHT if w >= MAX_WEIGHT else w + excess * room[s] / room_total)
+            for s, w in weights.items()
+        }
+    for r in held:
+        r["weight"] = round(weights.get(r["symbol"], 0.0), 3)
 
 
-def _fallback_to_committed():
-    """Copy the committed ledger/index.json as-is so the terminal never goes empty."""
-    src = os.path.join(LEDGER, "index.json")
-    if os.path.exists(src):
-        with open(src) as fh:
-            payload = json.load(fh)
-        payload["as_of"] = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        payload["live"] = False
-        with open(src, "w") as fh:
-            json.dump(payload, fh, indent=2)
-        print(f"fallback: served committed fixture ({len(payload.get('all', []))} rows)")
-    else:
-        write_ledger([], 0.0)
+def turnover(prev: dict | None, rows: list[dict]) -> dict:
+    """One-way turnover and the names entering/leaving the held book."""
+    if not prev:
+        return {}
+    before = {r["symbol"]: r.get("weight", 0.0) for r in prev.get("all", [])
+              if r.get("weight")}
+    after = {r["symbol"]: r.get("weight", 0.0) for r in rows if r.get("weight")}
+    symbols = set(before) | set(after)
+    moved = sum(abs(after.get(s, 0.0) - before.get(s, 0.0)) for s in symbols)
+    return {
+        "one_way_pct": round(moved / 2.0, 2),
+        "added": sorted(set(after) - set(before)),
+        "removed": sorted(set(before) - set(after)),
+    }
 
 
-def compute_sector_deltas(prev_payload, rows):
-    """Score-weighted sector % now vs previous run. Additive metadata only."""
-    def sector_weights(payload):
-        by = {}
-        for r in (payload or {}).get("all", []):
-            w = r.get("weight", 0) or 0
-            sec = (r.get("factors") or {}).get("sector") or r.get("sector") or "Other"
-            by[sec] = by.get(sec, 0) + w
-        tot = sum(by.values()) or 1.0
-        return {k: v / tot * 100.0 for k, v in by.items()}
-    cur = sector_weights({"all": rows})
-    prev = sector_weights(prev_payload)
-    out = {}
-    for sec in set(cur) | set(prev):
-        out[sec] = round(cur.get(sec, 0.0) - prev.get(sec, 0.0), 2)
-    return out
+def build(limit: int | None = None, skip_macro: bool = False,
+          skip_fundamentals: bool = False, offline: bool = False) -> dict:
+    members, provenance = uni.load(limit)
+    equities = [m for m in members if not m.is_etf]
+    print(f"universe: {len(equities)} equities + {len(members) - len(equities)} ETFs "
+          f"({provenance})")
 
+    os.makedirs(HISTORY, exist_ok=True)
+    symbols = [m.symbol for m in members]
+    failures: list[str] = []
 
-def write_ledger(rows, mcapsum, skipped=None, live=False):
-    import glob
-    os.makedirs(LEDGER, exist_ok=True)
-    # archive previous run for drift comparison (rolling T-1)
-    prev_path = os.path.join(LEDGER, "prev_index.json")
-    prev_payload = None
+    def progress(i: int, total: int, sym: str, ok: bool) -> None:
+        if not ok:
+            failures.append(sym)
+        if i % 25 == 0 or i == total:
+            print(f"  prices {i}/{total} ({len(failures)} unavailable)")
+
+    print("fetching prices…")
+    bars = features.fetch_bars(symbols, cache_dir=HISTORY, on_progress=progress,
+                               prefer_cache=offline)
+    print(f"prices: {len(bars)}/{len(symbols)} symbols; unavailable: {failures[:8]}")
+    if uni.BENCHMARK not in bars:
+        raise RuntimeError(f"benchmark {uni.BENCHMARK} unavailable — aborting rather "
+                           "than publishing relative strength measured against nothing")
+
+    facts = {}
+    if not skip_fundamentals:
+        print("fetching SEC filings…")
+        scoreable = [m.symbol for m in members if not m.is_etf and m.symbol in bars]
+        facts = edgar.load(scoreable)
+        print(f"filings: {len(facts)}/{len(scoreable)} companies matched to a CIK")
+
+    rows = features.build(members, bars, fundamentals=facts)
+    model.score_rows(rows)
+    scored = [r for r in rows if r.get("conviction") is not None]
+    scored.sort(key=lambda r: r["conviction"], reverse=True)
+    assign_weights(scored)
+    for r in rows:
+        round_row(r)
+
+    cov = features.coverage(rows, COVERAGE_FIELDS)
+    print("coverage: " + "  ".join(f"{k}={v:.0%}" for k, v in cov.items()))
+    print(f"conviction: n={len(scored)} dispersion={model.dispersion(scored):.1f} "
+          f"range={min((r['conviction'] for r in scored), default=0)}–"
+          f"{max((r['conviction'] for r in scored), default=0)}")
+
+    # history: one bundled file for the grid, per-symbol OHLCV for the detail view
+    bundle = {}
+    for sym, b in bars.items():
+        bundle[sym] = _downsample(b.close)
+        with open(os.path.join(HISTORY, f"{sym}.json"), "w") as fh:
+            json.dump(b.to_dict(), fh, separators=(",", ":"))
+    with open(os.path.join(LEDGER, "history.json"), "w") as fh:
+        json.dump(bundle, fh, separators=(",", ":"))
+
+    if not skip_macro:
+        try:
+            with open(os.path.join(LEDGER, "macro.json"), "w") as fh:
+                json.dump(macro.load(), fh, separators=(",", ":"))
+            print("macro: FRED series written")
+        except Exception as exc:
+            print(f"macro: unavailable ({exc})")
+
+    prev = None
+    prev_path = os.path.join(LEDGER, "index.json")
     if os.path.exists(prev_path):
         try:
             with open(prev_path) as fh:
-                prev_payload = json.load(fh)
+                prev = json.load(fh)
         except Exception:
-            prev_payload = None
-    # sector deltas vs previous run
-    sector_deltas = compute_sector_deltas(prev_payload, rows) if prev_payload else {}
+            prev = None
+
+    benchmarks = [r for r in rows if r.get("asset_class") == "ETF"]
     payload = {
-        "as_of": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
-        "benchmark": "SPY",
-        "live": live,
-        "hist_base": "history/",   # sparkline closes live at {hist_base}{SYMBOL}.json
-        "sector_deltas": sector_deltas,  # additive metadata: today% - prev% per sector
-        "universe": len(rows),
-        "mcapsum": float(mcapsum),
-        "skipped": skipped or [],
-        "all": rows,
-        "top10": rows[:10],
+        "as_of": _now(),
+        "model_version": "v3",
+        "benchmark": uni.BENCHMARK,
+        "universe_source": provenance,
+        "universe": len(scored),
+        "weights": model.WEIGHTS,
+        "coverage": cov,
+        "dispersion": round(model.dispersion(scored), 2),
+        "price_failures": failures,
+        "turnover": turnover(prev, scored),
+        "all": scored,
+        "benchmarks": benchmarks,
+        "top": scored[:25],
     }
-    with open(os.path.join(LEDGER, "index.json"), "w") as fh:
-        json.dump(payload, fh, indent=2)
-    # archive this run as previous for next drift comparison
-    try:
-        with open(prev_path, "w") as fh:
-            json.dump(payload, fh, indent=2)
-    except Exception:
-        pass
+    with open(prev_path, "w") as fh:
+        json.dump(payload, fh, separators=(",", ":"))
+    print(f"wrote {prev_path} ({len(scored)} scored, {len(benchmarks)} benchmarks)")
+    return payload
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Build the conviction ledger.")
+    ap.add_argument("--limit", type=int, default=None,
+                    help="cap the number of equities (ETFs always included)")
+    ap.add_argument("--skip-macro", action="store_true")
+    ap.add_argument("--skip-fundamentals", action="store_true",
+                    help="prices only; useful for isolating a price-source problem")
+    ap.add_argument("--offline", action="store_true",
+                    help="replay committed price history instead of refetching, so a "
+                         "scoring change can be re-run in seconds against identical prices")
+    args = ap.parse_args()
+    build(args.limit, args.skip_macro, args.skip_fundamentals, args.offline)
+    return 0
 
 
 if __name__ == "__main__":
-    build()
+    raise SystemExit(main())

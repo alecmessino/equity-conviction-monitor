@@ -1,53 +1,101 @@
-name: Deploy Equity Terminal to GitHub Pages
+name: Build and deploy Equity Terminal
 
-# Pages serves a static site built from web/ + ledger/ + docs/. The terminal
-# fetches ../ledger/index.json relative to /web/, so the artifact must contain
-# both web/ and ledger/ at the served root. A small build step assembles them.
+# Two things this workflow now does that its predecessor did not:
+#   1. Runs on a schedule. The previous version only fired on push, so the job named
+#      "nightly" had never once run nightly.
+#   2. Refuses to publish a degenerate ledger. The previous version deployed a board
+#      on which all 48 names scored 0 and reported success, because nothing inspected
+#      the output. scripts/validate_ledger.py is now a hard gate between build and deploy.
 
 on:
   push:
     branches: ["master"]
+  schedule:
+    # 23:00 UTC on weekdays — comfortably after the US close in both EST and EDT.
+    - cron: "0 23 * * 1-5"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write      # the data job commits the refreshed ledger back
   pages: write
   id-token: write
 
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
+    outputs:
+      ledger_ok: ${{ steps.validate.outcome }}
     steps:
       - uses: actions/checkout@v4
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
-      - name: Live data pull (Yahoo keyless + Alpha Vantage fundamentals)
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build ledger (Nasdaq/Yahoo prices + SEC XBRL fundamentals)
         env:
-          ALPHAVANTAGE_API_KEY: ${{ secrets.ALPHAVANTAGE_API_KEY }}
+          # SEC's fair-access policy rejects requests without a contact address.
+          # Set SEC_CONTACT as a repository secret to an address you monitor.
+          SEC_CONTACT: ${{ secrets.SEC_CONTACT }}
+          # Without this the progress and coverage lines are buffered and only appear
+          # if the job succeeds — exactly when you least need them.
+          PYTHONUNBUFFERED: "1"
+        run: python -m equity_monitor.nightly
+
+      - name: Validate ledger
+        id: validate
+        run: python scripts/validate_ledger.py ledger/index.json
+
+      - name: Mirror terminal into docs/
         run: |
-          python -m equity_monitor.nightly
-          echo "--- nightly exit: $? ---"
-          python -c "import json;d=json.load(open('ledger/index.json'));print('LEDGER live=',d.get('live'),'rows=',len(d.get('all',[])))"
+          cp web/terminal.html docs/terminal.html
+
+      - name: Commit refreshed data
+        if: github.event_name != 'pull_request'
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          # Only the small artifacts. ledger/history/ is gitignored — it is
+          # regenerated every run and shipped in the Pages artifact instead.
+          git add ledger/index.json ledger/history.json ledger/macro.json docs/terminal.html
+          if git diff --cached --quiet; then
+            echo "no data changes to commit"
+          else
+            git commit -m "data: nightly ledger refresh [skip ci]"
+            git push origin HEAD:${GITHUB_REF_NAME}
+          fi
+
       - name: Assemble site
         run: |
-          mkdir -p site/web site/ledger/history site/docs
-          cp web/terminal.html site/web/
-          cp ledger/index.json site/ledger/
-          cp -r ledger/history site/ledger/ 2>/dev/null || true
-          cp docs/methodology.html site/docs/
-          cat > site/index.html <<'EOF'
+          mkdir -p site/web site/ledger site/docs
+          cp web/terminal.html      site/web/
+          cp ledger/index.json      site/ledger/
+          cp ledger/history.json    site/ledger/
+          cp ledger/macro.json      site/ledger/ 2>/dev/null || true
+          cp -r ledger/history      site/ledger/ 2>/dev/null || true
+          cp docs/methodology.html  site/docs/
+          cat > site/index.html <<'HTML'
           <!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
           <meta http-equiv="refresh" content="0;url=web/terminal.html">
           <title>Equity Conviction Monitor</title></head>
           <body><p>Loading <a href="web/terminal.html">Equity Conviction Monitor</a>…</p></body></html>
-          EOF
-      - name: Upload artifact
-        uses: actions/upload-pages-artifact@v3
+          HTML
+
+      - uses: actions/upload-pages-artifact@v3
         with:
           path: ./site
-      - name: Deploy to GitHub Pages
-        id: deployment
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/configure-pages@v5
+      - id: deployment
         uses: actions/deploy-pages@v4
