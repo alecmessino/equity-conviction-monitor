@@ -124,7 +124,7 @@ def turnover(prev: dict | None, rows: list[dict]) -> dict:
 
 
 def build(limit: int | None = None, skip_macro: bool = False,
-          skip_fundamentals: bool = False) -> dict:
+          skip_fundamentals: bool = False, offline: bool = False) -> dict:
     members, provenance = uni.load(limit)
     equities = [m for m in members if not m.is_etf]
     print(f"universe: {len(equities)} equities + {len(members) - len(equities)} ETFs "
@@ -141,7 +141,8 @@ def build(limit: int | None = None, skip_macro: bool = False,
             print(f"  prices {i}/{total} ({len(failures)} unavailable)")
 
     print("fetching prices…")
-    bars = features.fetch_bars(symbols, cache_dir=HISTORY, on_progress=progress)
+    bars = features.fetch_bars(symbols, cache_dir=HISTORY, on_progress=progress,
+                               prefer_cache=offline)
     print(f"prices: {len(bars)}/{len(symbols)} symbols; unavailable: {failures[:8]}")
     if uni.BENCHMARK not in bars:
         raise RuntimeError(f"benchmark {uni.BENCHMARK} unavailable — aborting rather "
@@ -223,8 +224,11 @@ def main() -> int:
     ap.add_argument("--skip-macro", action="store_true")
     ap.add_argument("--skip-fundamentals", action="store_true",
                     help="prices only; useful for isolating a price-source problem")
+    ap.add_argument("--offline", action="store_true",
+                    help="replay committed price history instead of refetching, so a "
+                         "scoring change can be re-run in seconds against identical prices")
     args = ap.parse_args()
-    build(args.limit, args.skip_macro, args.skip_fundamentals)
+    build(args.limit, args.skip_macro, args.skip_fundamentals, args.offline)
     return 0
 
 

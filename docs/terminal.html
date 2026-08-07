@@ -317,6 +317,11 @@ svg{display:block;max-width:100%;overflow:visible}
           <option value="0.6">≥ 60% confidence</option>
           <option value="0.9">≥ 90% confidence</option>
         </select>
+        <select id="f-limit" aria-label="Rows to show">
+          <option value="250">Show 250</option>
+          <option value="500">Show 500</option>
+          <option value="0">Show all</option>
+        </select>
         <span class="count" id="count"></span>
       </div>
       <div class="tbl-wrap"><table id="grid">
@@ -898,8 +903,17 @@ function renderGrid(){
     x=nz(x)?x:-Infinity; y=nz(y)?y:-Infinity;
     return (x-y)*dir;
   });
-  $('#count').textContent=`${rows.length} of ${S.rows.length} names`;
-  $('#grid tbody').innerHTML=rows.map(r=>`<tr data-sym="${esc(r.symbol)}">
+  // Sort over the full match set, then cap what reaches the DOM. At Russell 1000
+  // scale an uncapped render rebuilds ~17k cells on every keystroke; capping after
+  // the sort keeps the top of the list correct, which is the point of the cap.
+  // Not named `cap` — that is the market-cap formatter, and shadowing it here breaks
+  // every row template further down.
+  const rowLimit=parseInt($('#f-limit').value,10)||0;
+  const shown=rowLimit?rows.slice(0,rowLimit):rows;
+  $('#count').textContent = shown.length<rows.length
+    ? `${shown.length} shown · ${rows.length} match · ${S.rows.length} scored`
+    : `${rows.length} of ${S.rows.length} names`;
+  $('#grid tbody').innerHTML=shown.map(r=>`<tr data-sym="${esc(r.symbol)}">
     <td class="l"><span class="sym">${esc(r.symbol)}</span>
         <span class="co">${esc(r.name||'')}</span></td>
     <td class="l" style="color:var(--ink-2)">${esc(r.sector||'—')}</td>
@@ -930,7 +944,7 @@ $$('#grid thead th').forEach(th=>{
     renderGrid();
   };
 });
-['#f-q','#f-sector','#f-signal','#f-conf'].forEach(sel=>{
+['#f-q','#f-sector','#f-signal','#f-conf','#f-limit'].forEach(sel=>{
   const n=$(sel); n.addEventListener(n.tagName==='INPUT'?'input':'change',renderGrid);
 });
 $('#grid tbody').addEventListener('click',e=>{

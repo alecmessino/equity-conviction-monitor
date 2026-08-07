@@ -29,3 +29,9 @@ ledger/prev_index.json
 
 # HTTP response cache (local dev convenience; CI runs cold)
 .cache/
+
+# Per-symbol OHLCV: ~32KB x universe size, regenerated every run. At Russell 1000
+# scale that is ~33MB per nightly commit, which would bloat the repo beyond use
+# within a fortnight. The build regenerates it and ships it in the Pages artifact;
+# only the small bundled downsample (ledger/history.json) is committed.
+ledger/history/

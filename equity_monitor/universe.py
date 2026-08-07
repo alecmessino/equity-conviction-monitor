@@ -155,7 +155,14 @@ def parse_constituents(text: str) -> list[Member]:
         if not sym or sym in seen or not re.fullmatch(r"[A-Z][A-Z.\-]{0,6}", sym):
             continue
         asset_class = cell(row, idx_class) or "Equity"
-        if asset_class.lower() in {"cash", "cash and/or derivatives", "money market"}:
+        sector_raw = cell(row, idx_sector)
+        # Allowlist, not denylist. A holdings file carries cash, money-market,
+        # futures and collateral lines under labels that vary by vendor and change
+        # without notice ("Cash Collateral and Margins" is one this file uses), so
+        # enumerating what to reject leaks a new one in every time.
+        if asset_class.strip().lower() not in {"equity", "etf", "fund", "stock"}:
+            continue
+        if "derivative" in sector_raw.lower() or "cash" in sector_raw.lower():
             continue
         seen.add(sym)
         out.append(Member(

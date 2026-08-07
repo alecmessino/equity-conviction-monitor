@@ -29,19 +29,22 @@ RS_HORIZONS: list[tuple[str, float]] = [
 ]
 
 
-def fetch_bars(symbols: list[str], cache_dir: str = "", workers: int = 8,
-               on_progress=None) -> dict[str, prices.Bars]:
+def fetch_bars(symbols: list[str], cache_dir: str = "", workers: int = 24,
+               on_progress=None, prefer_cache: bool = False) -> dict[str, prices.Bars]:
     """Daily bars for every symbol, fetched concurrently.
 
-    The per-host throttle in ``sources._http`` serialises actual requests, so the
-    pool buys latency overlap without raising the request rate.
+    The per-host throttle in ``sources._http`` caps the actual request rate, so the
+    pool buys latency overlap without hitting the endpoint any harder. At Russell
+    1000 scale this is the difference between a 30-minute and a 10-minute build:
+    the work is latency-bound (each request costs seconds), not rate-bound.
     """
     etf_symbols = {s for s, _ in uni.ETFS}
     out: dict[str, prices.Bars] = {}
 
     def one(sym: str):
         ac = "etf" if sym in etf_symbols else "stocks"
-        return sym, prices.load(sym, asset_class=ac, cache_dir=cache_dir)
+        return sym, prices.load(sym, asset_class=ac, cache_dir=cache_dir,
+                                prefer_cache=prefer_cache)
 
     with ThreadPoolExecutor(max_workers=workers) as pool:
         for i, (sym, bars) in enumerate(pool.map(one, symbols), 1):
@@ -156,6 +159,17 @@ def build(members: list[uni.Member], bars: dict[str, prices.Bars],
         derived = edgar.derive(comp, None) if comp else {}
         shares = derived.get("shares")
         market_cap = shares * pf["price"] if (shares and pf["price"]) else None
+
+        # Sanity-check the share count against revenue. Dual-class filers report share
+        # counts as dimensional facts, and the bulk frames API can return a single
+        # class or a stub — Dillard's resolved to 15,655 shares against $6.5bn of
+        # revenue, implying a $9.7m market cap for a Russell 1000 constituent. A
+        # company trading below 2% of sales is effectively in liquidation and would
+        # not be in this index, so treat the figure as unknown rather than publish it.
+        revenue = derived.get("revenue_ttm")
+        if market_cap and revenue and revenue > 0 and market_cap < 0.02 * revenue:
+            market_cap = None
+
         if comp and market_cap:
             # FCF yield needs market cap, which needs price — so re-derive once we have it.
             derived = edgar.derive(comp, market_cap)

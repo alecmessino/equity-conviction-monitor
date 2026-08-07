@@ -150,18 +150,49 @@ def _from_cache(symbol: str, cache_dir: str) -> Bars | None:
     return bars
 
 
-def load(symbol: str, *, asset_class: str = "stocks", cache_dir: str = "") -> Bars | None:
+def _class_share_variants(symbol: str) -> list[str]:
+    """Alternate spellings for dual-class tickers.
+
+    Index files and quote vendors disagree about the separator: iShares writes
+    Berkshire as ``BRKB``, Nasdaq wants ``BRK.B``, Yahoo wants ``BRK-B``. Left
+    unhandled this silently drops some of the largest names in the index —
+    Berkshire, Brown-Forman, HEICO and U-Haul were all missing from a full run.
+
+    Only consulted after the plain symbol has already failed, so a real ticker that
+    happens to end in A or B is never rewritten out from under itself.
+    """
+    if len(symbol) < 3 or "." in symbol or "-" in symbol:
+        return []
+    if symbol[-1] not in "ABCK":
+        return []
+    stem, cls = symbol[:-1], symbol[-1]
+    return [f"{stem}.{cls}", f"{stem}-{cls}"]
+
+
+def load(symbol: str, *, asset_class: str = "stocks", cache_dir: str = "",
+         prefer_cache: bool = False) -> Bars | None:
     """Daily bars for `symbol`, trying each source until one yields a usable series.
 
     Returns None only if every source fails, which the caller must treat as
     "drop this name" rather than "this name is worth zero".
     """
-    for attempt in (
+    attempts = []
+    if prefer_cache and cache_dir:
+        # Offline mode: replay the committed series instead of refetching. Lets a
+        # model or scoring change be re-run in seconds against identical prices,
+        # which also makes the comparison a controlled one.
+        attempts.append(lambda: _from_cache(symbol, cache_dir))
+    attempts += [
         lambda: _from_nasdaq(symbol, asset_class),
         lambda: _from_nasdaq(symbol, "etf" if asset_class == "stocks" else "stocks"),
         lambda: _from_yahoo(symbol),
-        lambda: _from_cache(symbol, cache_dir) if cache_dir else None,
-    ):
+    ]
+    for variant in _class_share_variants(symbol):
+        attempts.append(lambda v=variant: _from_nasdaq(v, asset_class))
+        attempts.append(lambda v=variant: _from_yahoo(v))
+    attempts.append(lambda: _from_cache(symbol, cache_dir) if cache_dir else None)
+
+    for attempt in attempts:
         try:
             bars = attempt()
         except Exception:
