@@ -108,6 +108,8 @@ equity_monitor/
   universe.py          index constituents -> tickers, sectors, weights
   features.py          prices + filings -> one raw feature dict per name
   model.py             v3 scoring: prepare() ranks, score() is pure
+  snapshots.py         nightly factor-level history + score-change attribution
+  monitor.py           self-grading: stability, coverage trend, regime, health
   nightly.py           orchestrator; writes ledger/
   sources/
     _http.py           retries, throttling, gzip, on-disk cache
@@ -121,6 +123,21 @@ tests/                       model behaviour, v2 regressions, JS<->Python parity
 
 `ledger/index.json` is the published artifact; `ledger/history/` holds per-symbol OHLCV and
 `ledger/history.json` a bundled downsample for the grid.
+
+## Self-monitoring
+
+The validator blocks a bad ledger from shipping. `equity_monitor/monitor.py` grades the
+ledgers that did ship, writing `ledger/monitor.json` and driving the terminal's **Monitor**
+tab: pass/warn/fail health checks, ranking stability between consecutive snapshots, a tier
+migration matrix, a coverage trend, the observed macro regime, and which specification hash
+produced each stretch of history.
+
+It measures whether the machinery is working, never whether the scores are right. A board
+can be fresh, dispersed, fully covered and perfectly stable while predicting nothing at all.
+Whether high-conviction names outperform is an Information Coefficient question that needs
+months of accumulated snapshots within a single specification hash — it is not measured
+here, and every panel that depends on history states its sample size and what it is still
+waiting for rather than rendering a default.
 
 ## The parity gate
 

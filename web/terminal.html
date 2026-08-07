@@ -251,6 +251,36 @@ svg{display:block;max-width:100%;overflow:visible}
   background:var(--surface);border-radius:8px;padding:10px 14px;margin-bottom:12px;
   font-size:12px;color:var(--ink-2);
 }
+/* --- monitor --- */
+.check{
+  display:flex;align-items:baseline;gap:10px;padding:7px 0;
+  border-bottom:1px solid var(--grid);font-size:12px;
+}
+.check:last-child{border-bottom:0}
+.check .dot{align-self:center}
+.check-name{font-weight:500;min-width:150px}
+.check-detail{color:var(--ink-2);flex:1;min-width:0}
+.check-stat{
+  font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;
+  padding:1px 6px;border-radius:5px;border:1px solid currentColor;
+}
+.states{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.state{
+  border:1px solid var(--border);border-radius:8px;background:var(--plane);
+  padding:6px 10px;min-width:96px;
+}
+.state-k{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.state-v{font-size:13px;font-weight:600;text-transform:capitalize}
+.pending{
+  color:var(--muted);font-size:12px;line-height:1.6;border-left:2px solid var(--axis);
+  padding-left:12px;
+}
+.pending b{color:var(--ink-2);font-weight:600}
+table.mig td.diag{background:var(--plane)}
+table.mig th.l,table.mig td.l{color:var(--muted);font-size:10px}
+table.mig td{border-bottom:1px solid var(--grid);text-align:center;padding:5px 4px}
+table.mig th{cursor:default;text-align:center}
+
 .skip{position:absolute;left:-9999px}
 .skip:focus{left:8px;top:8px;z-index:99;background:var(--surface);padding:8px 12px;border-radius:6px}
 </style>
@@ -263,6 +293,7 @@ svg{display:block;max-width:100%;overflow:visible}
   <span class="chip" id="hdr-status"><span class="dot"></span><span>loading</span></span>
   <span class="chip" id="hdr-universe"></span>
   <span class="chip" id="hdr-coverage" title="Share of scored names carrying a real, filing-derived value for each quality input"></span>
+  <button class="chip" id="hdr-health" hidden></button>
   <div class="spacer"></div>
   <button class="btn" id="csv">Export CSV</button>
   <button class="btn" id="theme" title="Toggle light/dark">Theme</button>
@@ -274,6 +305,7 @@ svg{display:block;max-width:100%;overflow:visible}
   <button role="tab" aria-selected="false" data-view="research">Research</button>
   <button role="tab" aria-selected="false" data-view="portfolio">Portfolio</button>
   <button role="tab" aria-selected="false" data-view="data">Data quality</button>
+  <button role="tab" aria-selected="false" data-view="monitor">Monitor</button>
   <button role="tab" aria-selected="false" data-view="method">Method</button>
 </nav>
 
@@ -494,6 +526,59 @@ svg{display:block;max-width:100%;overflow:visible}
     </div>
   </div>
 
+  <!-- ================= MONITOR ================= -->
+  <div class="view" id="view-monitor" hidden>
+    <div class="banner" id="mon-scope"></div>
+
+    <div class="row split">
+      <div class="card">
+        <h2>Operational health</h2>
+        <div id="mon-checks"></div>
+        <p class="card-note">
+          Every check corresponds to a failure this project has actually had. None of them
+          says the scores are <i>right</i> — a board can be fresh, dispersed, fully covered
+          and stable while predicting nothing at all. That question is measured separately
+          and needs months of history.
+        </p>
+      </div>
+      <div class="card">
+        <h2>Observed macro regime</h2>
+        <div id="mon-regime"></div>
+      </div>
+    </div>
+
+    <div class="row split">
+      <div class="card">
+        <h2>Ranking stability</h2>
+        <div id="mon-stability"></div>
+      </div>
+      <div class="card">
+        <h2>Tier migration</h2>
+        <div id="mon-migration"></div>
+      </div>
+    </div>
+
+    <div class="row split">
+      <div class="card">
+        <h2>Input coverage over time</h2>
+        <div id="mon-covtrend"></div>
+      </div>
+      <div class="card">
+        <h2>Coverage by sector — latest run</h2>
+        <div id="mon-covsector"></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Specification history</h2>
+      <div id="mon-spec"></div>
+      <p class="card-note">
+        A series spanning two specification hashes is two datasets, not one. Any future
+        return study has to segment on these boundaries rather than regress across them.
+      </p>
+    </div>
+  </div>
+
   <!-- ================= METHOD ================= -->
   <div class="view" id="view-method" hidden>
     <div class="card">
@@ -541,6 +626,20 @@ svg{display:block;max-width:100%;overflow:visible}
         lowers the name's <b>data confidence</b>, which is reported alongside the score.
         Absent evidence is not negative evidence: scoring an unmeasured company as 0 emits a
         confident sell recommendation on the basis of nothing.</p>
+
+        <h3>What the Monitor tab does and does not claim</h3>
+        <p>The Monitor tab grades the pipeline, not the predictions. Freshness, dispersion,
+        coverage, ranking stability and specification continuity all measure whether the
+        machinery is working. A board can pass every one of them and still forecast nothing:
+        stability says the ordering is not being reshuffled by noise, it says nothing about
+        whether the ordering is correct.</p>
+        <p>The question the Monitor tab cannot answer — do high-conviction names outperform
+        low-conviction names — is an Information Coefficient measurement. It needs months of
+        accumulated nightly snapshots, and it has to be computed within a single
+        specification hash, because a scoring change mid-series makes the two halves
+        different datasets. That is why every snapshot records the hash of the frozen
+        specification that produced it, and why the specification history is displayed
+        rather than buried.</p>
 
         <h3>Sources</h3>
         <ul>
@@ -727,7 +826,8 @@ function sparkline(values,w,h,stroke){
 }
 
 /* ---------- state ---------- */
-const S={ledger:null, rows:[], hist:{}, macro:null, sort:{k:'conviction',dir:-1}};
+const S={ledger:null, rows:[], hist:{}, macro:null, mon:null,
+         sort:{k:'conviction',dir:-1}};
 
 async function boot(){
   const p=location.pathname;
@@ -749,6 +849,7 @@ async function boot(){
   try{ S.hist=await fetch(base+'history.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
   try{ S.macro=await fetch(base+'macro.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
   try{ S.trends=await fetch(base+'trends.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
+  try{ S.mon=await fetch(base+'monitor.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
 
   const moved=(j.attribution&&j.attribution.names)||{};
   S.rows.forEach(r=>{ r._delta = moved[r.symbol] ? moved[r.symbol].total : null; });
@@ -756,6 +857,7 @@ async function boot(){
   renderHeader(); renderMacro(); renderKPIs(); renderMap(); renderSale(); renderDist();
   renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
   buildSectorFilter(); renderGrid(); renderSectors(); renderPortfolio(); renderData();
+  renderMonitor();
 }
 
 /* ---------- header ---------- */
@@ -1647,6 +1749,271 @@ function renderData(){
         <td>${fails.length?esc(fails.slice(0,6).join(', '))+(fails.length>6?` +${fails.length-6}`:''):'none'}</td></tr>`;
 }
 
+/* ---------- monitor ----------
+   The board's report on its own condition. Everything here answers "is the machinery
+   working", never "are the scores right" — those are different questions and every
+   panel that could be misread as the second one says so explicitly. Panels that depend
+   on accumulated history state their sample size and what they are still waiting for
+   rather than rendering a default that would look like a real reading. */
+const STATUS_COLOR={pass:'--good', warn:'--warn', fail:'--bad', pending:'--muted'};
+const TIERS=['STRONG','BUY','HOLD','WATCH','AVOID'];
+
+function renderMonitor(){
+  const m=S.mon;
+  if(!m){
+    $('#mon-scope').innerHTML=`<code>ledger/monitor.json</code> was not produced by the
+      last build, so this view has nothing to report. It is not rendering defaults in
+      its place.`;
+    ['#mon-checks','#mon-regime','#mon-stability','#mon-migration',
+     '#mon-covtrend','#mon-covsector','#mon-spec'].forEach(s=>{ $(s).innerHTML=''; });
+    return;
+  }
+
+  $('#mon-scope').innerHTML=`<b>Scope.</b> ${esc(m.scope)} Nothing on this page is
+    evidence that the conviction score forecasts anything; it is evidence that the
+    pipeline that produces it is behaving. Recorded history:
+    <b>${m.observations}</b> snapshot${m.observations===1?'':'s'}${
+      m.first_observation?` since ${esc(m.first_observation)}`:''}.`;
+
+  // Header chip: the whole board's operational state in one glance, worst-first.
+  // Deliberately worded "checks", not "healthy" — it reports the pipeline, not the alpha.
+  const checks=m.health||[];
+  const count=st=>checks.filter(c=>c.status===st).length;
+  const worst = count('fail') ? 'fail' : count('warn') ? 'warn' : 'pass';
+  // Pending checks are excluded from the denominator rather than counted as failures:
+  // "6/7" beside a green dot reads as one broken check when in fact one is simply
+  // waiting on history it cannot have yet.
+  const gradable = checks.length - count('pending');
+  const chip=$('#hdr-health');
+  chip.hidden=false;
+  chip.innerHTML=`<span class="dot" style="background:${cssVar(STATUS_COLOR[worst])}"></span>`
+    +`<b>${count('pass')}/${gradable}</b>&nbsp;checks`;
+  chip.title = (worst==='pass'
+      ? 'All gradable operational checks passing — this says the pipeline is sound, not that the scores predict returns'
+      : `${count('fail')} failing, ${count('warn')} warning — open the Monitor tab`)
+    + (count('pending') ? ` · ${count('pending')} awaiting more history` : '');
+  chip.onclick=()=>$('nav button[data-view="monitor"]').click();
+
+  renderChecks(checks);
+  renderRegime(m.regime);
+  renderStability(m.stability, m.observations);
+  renderMigration(m.stability);
+  renderCovTrend(m.coverage||{});
+  renderCovSector(m.coverage||{});
+  renderSpecHistory((m.coverage||{}).spec_segments||{});
+}
+
+function renderChecks(checks){
+  $('#mon-checks').innerHTML=checks.map(c=>{
+    const col=cssVar(STATUS_COLOR[c.status]||'--muted');
+    return `<div class="check">
+      <span class="dot" style="background:${col}"></span>
+      <span class="check-name">${esc(c.name)}</span>
+      <span class="check-detail">${esc(c.detail||'')}</span>
+      <span class="check-stat" style="color:${col}">${esc(c.status)}</span>
+    </div>`;
+  }).join('') || '<div class="pending">No checks were recorded.</div>';
+}
+
+function renderRegime(r){
+  const host=$('#mon-regime');
+  if(!r||!r.available){
+    host.innerHTML=`<div class="pending">FRED series were unavailable in the last build,
+      so there is no regime reading to record.</div>`;
+    return;
+  }
+  const L=r.levels||{}, units={rates:'10y',curve:'2s10s',volatility:'VIX',credit:'HY OAS'};
+  const shown={rates:num(L.ten_year,2)+'%', curve:num(L.curve,2)+'%',
+               volatility:num(L.vix,1), credit:num(L.credit,2)+'%'};
+  host.innerHTML=
+    `<div class="states">`
+    + Object.entries(r.states||{}).map(([k,v])=>`<div class="state">
+        <div class="state-k">${esc(units[k]||k)}</div>
+        <div class="state-v">${esc(v)}</div>
+        <div class="tile-sub num">${esc(shown[k]??'')}</div>
+      </div>`).join('')
+    + `</div>`
+    + (r.risk_appetite
+        ? `<table class="kv"><tr><td>Composite risk appetite</td>
+             <td style="text-transform:capitalize">${esc(r.risk_appetite)}</td></tr></table>`
+        : '')
+    + `<p class="card-note">${esc(r.note||'')} Four independent readings rather than one
+        cycle label: "late-cycle" is an interpretation, and once printed it reads as a
+        forecast. These are measurements, recorded so that factor behaviour can later be
+        segmented by the conditions it occurred in.</p>`;
+}
+
+function renderStability(s, observations){
+  const host=$('#mon-stability');
+  if(!s){
+    host.innerHTML=`<div class="pending">
+      <b>Waiting on a second snapshot.</b> Stability is the change between two consecutive
+      runs, so it cannot be computed from ${observations||0}
+      observation${observations===1?'':'s'}. The first reading appears after the next
+      nightly build; it is left blank rather than filled with a placeholder.</div>`;
+    return;
+  }
+  const rhoCol = s.rank_correlation>=0.90 ? cssVar('--good')
+               : s.rank_correlation>=0.75 ? cssVar('--warn') : cssVar('--bad');
+  host.innerHTML=`
+    <div class="row strip" style="margin-bottom:12px">
+      <div class="card"><div class="tile-label">Rank correlation</div>
+        <div class="tile-value num" style="color:${rhoCol}">${num(s.rank_correlation,3)}</div>
+        <div class="tile-sub">Spearman, ${s.names_compared} shared names</div></div>
+      <div class="card"><div class="tile-label">Mean |Δ conviction|</div>
+        <div class="tile-value num">${num(s.mean_abs_move,1)}</div>
+        <div class="tile-sub">median ${num(s.median_abs_move,1)} · max ${s.max_abs_move}</div></div>
+      <div class="card"><div class="tile-label">Unchanged</div>
+        <div class="tile-value num">${s.unchanged}</div>
+        <div class="tile-sub">${pct(s.unchanged/(s.names_compared||1),0)} scored identically</div></div>
+      <div class="card"><div class="tile-label">Changed tier</div>
+        <div class="tile-value num">${s.tier_changes}</div>
+        <div class="tile-sub">${pct(s.tier_changes/(s.names_compared||1),0)} of the board</div></div>
+    </div>
+    <table class="kv">
+      <tr><td>Comparison window</td><td>${esc(s.from)} → ${esc(s.to)}</td></tr>
+      <tr><td>Entered the universe</td>
+          <td>${s.entered.length? esc(s.entered.slice(0,8).join(', '))
+                + (s.entered.length>8?` +${s.entered.length-8}`:'') : 'none'}</td></tr>
+      <tr><td>Left the universe</td>
+          <td>${s.left.length? esc(s.left.slice(0,8).join(', '))
+                + (s.left.length>8?` +${s.left.length-8}`:'') : 'none'}</td></tr>
+      <tr><td>Same specification</td><td>${s.spec_changed?'no — two models':'yes'}</td></tr>
+    </table>
+    <p class="card-note">A ranking that reshuffles overnight is fitting noise, however
+    good any single night looks. ${s.spec_changed
+      ? 'The specification changed between these runs, so part of this movement is the model, not the market.'
+      : 'Both runs used the same frozen specification, so this movement is data, not a rule change.'}</p>`;
+}
+
+function renderMigration(s){
+  const host=$('#mon-migration');
+  if(!s||!s.tier_migration){
+    host.innerHTML=`<div class="pending"><b>Nothing to migrate between yet.</b> This matrix
+      counts how names moved from one signal tier to another between consecutive runs, so
+      it needs two snapshots. The counts matter more than the average move: a board can
+      have a small mean change while quietly reclassifying half its BUY list.</div>`;
+    return;
+  }
+  const M=s.tier_migration;
+  const max=Math.max(1,...TIERS.flatMap(a=>TIERS.filter(b=>a!==b).map(b=>M[a][b])));
+  const cell=(a,b)=>{
+    const v=M[a][b]||0;
+    if(a===b) return `<td class="diag num" title="${a} held">${v||''}</td>`;
+    const t=v?Math.min(1,0.18+0.82*(v/max)):0;
+    return `<td class="num" title="${a} → ${b}: ${v}"
+      style="background:${v?`color-mix(in srgb, ${cssVar('--seq-450')} ${(t*100).toFixed(0)}%, transparent)`:'transparent'}">${v||''}</td>`;
+  };
+  host.innerHTML=`<div class="tbl-wrap"><table class="mig">
+    <thead><tr><th class="l">From ╲ to</th>${TIERS.map(t=>`<th>${t}</th>`).join('')}</tr></thead>
+    <tbody>${TIERS.map(a=>`<tr><td class="l">${a}</td>${TIERS.map(b=>cell(a,b)).join('')}</tr>`).join('')}</tbody>
+  </table></div>
+  <p class="card-note">Shaded cells are moves; the unshaded diagonal is names that held
+  their tier. Depth encodes count only — a single sequential hue, because these are
+  magnitudes with no natural midpoint. ${s.tier_changes} of ${s.names_compared} names
+  changed tier between ${esc(s.from)} and ${esc(s.to)}.</p>`;
+}
+
+function renderCovTrend(cov){
+  const host=$('#mon-covtrend');
+  const series=cov.series||[];
+  if(series.length<2){
+    host.innerHTML=`<div class="pending"><b>${series.length} observation${series.length===1?'':'s'}
+      on file.</b> A coverage trend needs at least two runs to be a trend. What is already
+      measurable — this run's coverage, by field and by sector — is on the Data quality tab
+      and in the panel below. Drift in the observed-versus-imputed share is the earliest
+      warning that a filing tag has changed underneath the pipeline, so this chart is worth
+      the wait.</div>`;
+    return;
+  }
+  const W=760,H=240,m={t:14,r:16,b:34,l:44};
+  const s=svgIn(host,W,H);
+  s.setAttribute('aria-label','Mean data confidence and fully-measured share by run date');
+  const n=series.length;
+  const x=i=>m.l+(n===1?0.5:i/(n-1))*(W-m.l-m.r);
+  const y=v=>H-m.b-v*(H-m.t-m.b);
+  [0,.25,.5,.75,1].forEach(v=>{
+    el('line',{x1:m.l,y1:y(v),x2:W-m.r,y2:y(v),class:'gridline'},s);
+    const t=el('text',{x:m.l-7,y:y(v)+3,class:'tick','text-anchor':'end'},s);
+    t.textContent=(v*100).toFixed(0)+'%';
+  });
+  const line=(key,color,dash)=>{
+    const pts=series.map((d,i)=>`${x(i).toFixed(1)},${y(d[key]).toFixed(1)}`).join(' ');
+    el('polyline',{points:pts,fill:'none',stroke:color,'stroke-width':1.8,
+      'stroke-linejoin':'round',...(dash?{'stroke-dasharray':'4 3'}:{})},s);
+    series.forEach((d,i)=>el('circle',{cx:x(i),cy:y(d[key]),r:2.6,fill:color},s));
+  };
+  line('mean_confidence',cssVar('--seq-450'),false);
+  line('fully_measured',cssVar('--seq-250'),true);
+  const step=Math.max(1,Math.ceil(n/10));
+  series.forEach((d,i)=>{
+    if(i%step && i!==n-1) return;
+    const t=el('text',{x:x(i),y:H-m.b+14,class:'tick','text-anchor':'middle'},s);
+    t.textContent=d.date.slice(5);
+  });
+  el('line',{x1:m.l,y1:H-m.b,x2:W-m.r,y2:H-m.b,class:'axisline'},s);
+  // The axis stays anchored at 0–100%: these are shares, and a truncated axis would
+  // turn ordinary run-to-run noise into an apparent collapse. The drift figure below
+  // carries the small movements that the full axis compresses.
+  const last=series[n-1], first=series[0];
+  const drift=last.mean_confidence-first.mean_confidence;
+  host.insertAdjacentHTML('beforeend',
+    `<div class="legend">
+       <span><i style="background:${cssVar('--seq-450')}"></i>Mean data confidence — ${pct(last.mean_confidence,0)}</span>
+       <span><i style="background:${cssVar('--seq-250')}"></i>Names with every input observed — ${pct(last.fully_measured,0)}</span>
+     </div>
+     <p class="card-note">${n} runs on file; ${spct(drift,1)} drift in mean confidence since
+     ${esc(first.date)}. Confidence is the share of a name's scoring inputs that came from a
+     filing rather than a sector-median substitution — so a sustained fall means a source
+     changed, not that companies got worse. The axis is held at 0–100% deliberately: these
+     are shares, and truncating it would render ordinary noise as a collapse.</p>`);
+}
+
+function renderCovSector(cov){
+  const host=$('#mon-covsector');
+  const series=cov.series||[];
+  const last=series[series.length-1];
+  const entries=Object.entries((last&&last.by_sector)||{}).sort((a,b)=>a[1]-b[1]);
+  if(!entries.length){ host.innerHTML=`<div class="pending">No sector coverage recorded.</div>`; return; }
+  const W=560,rowH=22,H=entries.length*rowH+26,m={t:6,r:44,b:18,l:150};
+  const s=svgIn(host,W,H);
+  s.setAttribute('aria-label','Mean data confidence by sector');
+  const x=v=>m.l+v*(W-m.l-m.r);
+  [0,.5,1].forEach(v=>{
+    el('line',{x1:x(v),y1:m.t,x2:x(v),y2:H-m.b,class:'gridline'},s);
+    const t=el('text',{x:x(v),y:H-m.b+12,class:'tick','text-anchor':'middle'},s);
+    t.textContent=(v*100).toFixed(0)+'%';
+  });
+  entries.forEach(([k,v],i)=>{
+    const y=m.t+i*rowH;
+    el('rect',{x:m.l,y:y+3,width:Math.max(1.5,x(v)-m.l),height:rowH-8,rx:3,
+      fill:cssVar('--seq-450'),'fill-opacity':.85},s);
+    const lbl=el('text',{x:m.l-8,y:y+rowH/2,class:'tick','text-anchor':'end'},s);
+    lbl.textContent=k;
+    const val=el('text',{x:x(v)+6,y:y+rowH/2,class:'tick',fill:cssVar('--ink-2')},s);
+    val.textContent=(v*100).toFixed(0)+'%';
+  });
+  el('line',{x1:m.l,y1:m.t,x2:m.l,y2:H-m.b,class:'axisline'},s);
+  host.insertAdjacentHTML('beforeend',
+    `<p class="card-note">Mean confidence by sector as of ${esc(last.date)}. Sectors score
+    on their own profile, so a low bar here is a filing-coverage gap in that sector's
+    inputs, not a verdict on the sector.</p>`);
+}
+
+function renderSpecHistory(spec){
+  const segs=spec.segments||[];
+  if(!segs.length){ $('#mon-spec').innerHTML=`<div class="pending">No snapshots recorded yet.</div>`; return; }
+  $('#mon-spec').innerHTML=`<table class="kv">
+    <tr><td style="color:var(--muted);font-size:10px;text-transform:uppercase">Spec</td>
+        <td style="color:var(--muted);font-size:10px;text-transform:uppercase">Span</td></tr>
+    ${segs.slice().reverse().map(g=>`<tr>
+      <td><code>${esc(g.spec_hash||'?')}</code> <span class="src">${esc(g.model_version||'')}</span>
+          ${g.spec_hash===spec.current?' <span class="src">· current</span>':''}</td>
+      <td>${esc(g.from)}${g.from===g.to?'':' → '+esc(g.to)} <span class="src">${g.days}d</span></td>
+    </tr>`).join('')}
+  </table>`;
+}
+
 /* ---------- chrome ---------- */
 $$('nav button').forEach(b=>{
   b.onclick=()=>{
@@ -1662,7 +2029,8 @@ $('#theme').onclick=()=>{
   try{ localStorage.setItem('ecm-theme',next); }catch{}
   if(S.ledger){ renderMacro(); renderMap(); renderGrid(); renderSectors();
                 renderPortfolio(); renderData(); renderSale(); renderDist();
-                renderObservations(); renderHeatmap(); renderMovers(); renderLeaders(); }
+                renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
+                renderMonitor(); }
 };
 try{
   const saved=localStorage.getItem('ecm-theme');

@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from equity_monitor import features, model, snapshots, universe as uni
+from equity_monitor import features, model, monitor, snapshots, universe as uni
 from equity_monitor.sources import edgar, macro
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -240,6 +240,30 @@ def build(limit: int | None = None, skip_macro: bool = False,
     }
     with open(prev_path, "w") as fh:
         json.dump(payload, fh, separators=(",", ":"))
+
+    # Model monitoring. Operational condition only — stability, coverage, regime,
+    # freshness. Explicitly NOT a claim about predictive power, which needs months of
+    # accumulated snapshots and is a separate question.
+    try:
+        macro_state = None
+        macro_path = os.path.join(LEDGER, "macro.json")
+        if os.path.exists(macro_path):
+            with open(macro_path) as fh:
+                macro_state = json.load(fh)
+        report = monitor.build(LEDGER, payload, macro_state)
+        with open(os.path.join(LEDGER, "monitor.json"), "w") as fh:
+            json.dump(report, fh, separators=(",", ":"))
+        counts: dict[str, int] = {}
+        for c in report["health"]:
+            counts[c["status"]] = counts.get(c["status"], 0) + 1
+        print("health: " + "  ".join(f"{k}={v}" for k, v in sorted(counts.items()))
+              + f"  (observations={report['observations']})")
+        for c in report["health"]:
+            if c["status"] in ("fail", "warn"):
+                print(f"  {c['status'].upper()}: {c['name']} — {c['detail']}")
+    except Exception as exc:
+        print(f"monitor: skipped ({exc})")
+
     print(f"wrote {prev_path} ({len(scored)} scored, {len(benchmarks)} benchmarks)")
     return payload
 
