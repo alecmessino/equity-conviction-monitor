@@ -118,7 +118,7 @@ equity_monitor/
     edgar.py           SEC XBRL frames -> fundamentals
     prices.py          OHLCV chain + all price-derived features
     macro.py           FRED series
-scripts/validate_ledger.py   CI gate — fails the build on a degenerate ledger
+scripts/validate_ledger.py   CI gate — degenerate ledger, and snapshot-history integrity
 web/terminal.html            the terminal (self-contained, no CDN)
 tests/                       model behaviour, v2 regressions, JS<->Python parity
 ```

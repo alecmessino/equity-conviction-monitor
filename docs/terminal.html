@@ -1940,7 +1940,7 @@ function renderWatchlist(){
   const d=S.wl;
   const hosts=['#wl-kpis','#wl-main','#wl-boundary','#wl-entered','#wl-left'];
   if(!d){
-    $('#wl-kpis').innerHTML='';
+    $('#wl-kpis').innerHTML=''; $('#wl-kpis').hidden=true;
     $('#wl-main').innerHTML=`<div class="card"><div class="pending">
       <b>Waiting on a second snapshot.</b> The diff compares tonight's board against the
       previous run, so it appears after the next nightly build. It is not back-filled:
@@ -1951,6 +1951,7 @@ function renderWatchlist(){
     return;
   }
   const c=d.counts||{};
+  $('#wl-kpis').hidden=false;
   $('#wl-kpis').innerHTML=
      tile('Upgrades', c.upgrades??0, `moved tier on more than ${num(d.marginal_move,0)} points`)
    + tile('Downgrades', c.downgrades??0, 'a real reclassification, not a boundary')
