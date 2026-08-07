@@ -397,6 +397,71 @@ assert that every scored input has an entry, that no entry describes an input th
 does not read, and that each carries both a formula and a plain-language note, so a new
 factor cannot ship undocumented.</p>
 
+<h2>8f · Reconstructing an earlier board</h2>
+
+<p>The snapshot series accumulates one observation per trading day and cannot be
+back-filled, so for its first weeks there is nothing to diff against. A reconstruction
+answers the same questions from the price history already cached:
+<code>python -m equity_monitor.rebuild --back 5</code>.</p>
+
+<p>The price side is genuine. Relative strength, trend, dollar liquidity and realised
+volatility are recomputed from the actual OHLCV bars truncated to the cutoff session, and
+re-ranked among the names that had history then — a percentile is a statement about a peer
+group, so ranking an earlier board against today's constituent list would be a subtler leak
+than the obvious one.</p>
+
+<div class="note warn"><b>The fundamentals are today's.</b> Filings are not stored
+as-of-date, so a reconstruction reads current values back onto an earlier board. That is
+look-ahead bias on the quality pillar: small over a few weeks, where most filers have not
+reported since the cutoff, and not small at all over a quarter. Every artifact the tool
+produces carries the disclosure.</div>
+
+<p>The tool therefore <b>refuses</b> to write into <code>ledger/snapshots/</code>. A
+reconstructed snapshot is structurally identical to a recorded one, so a mixed series cannot
+be un-mixed and the contamination is undetectable after the fact. The refusal is a
+<code>realpath</code> check covering nested and relative paths, with its own exit code so a
+script cannot mistake it for a build failure.</p>
+
+<h2>8g · Reading the terminal</h2>
+
+<p>Three presentation decisions are load-bearing enough to state.</p>
+
+<h3>The ledger is routed, not ruled</h3>
+<p>Eighteen columns over 250 rows with a 1px border under every one gives the eye 250
+competing anchors, so none of them anchors anything, and the ticker leaves the viewport
+the moment you reach for P/E. Rank and ticker are pinned, a routing rule falls every fifth
+row with a faint band on alternating blocks, and five vertical rules group the columns into
+identity, score, pillars, market, fundamentals and integrity. Numerics are monospaced so
+decimal points stack under a <code>$</code>, <code>%</code> or <code>−</code>.</p>
+
+<h3>The factor map is a density field, not a thousand circles</h3>
+<p>At 1014 marks on a square-root area scale the largest circle is r=25.5 on a 786px plot —
+6% of the plot width — and up to 29 names fall inside a single largest-mark footprint.
+Opacity does not fix that. The default view bins the universe into a hex lattice (magnitude
+only, single hue) and draws the top 40 by conviction as points, which separates the two
+questions the chart is being asked: <i>where is the universe</i> and <i>where are my
+names</i>. Bin assignment is by axial rounding rather than by rounding row and column
+independently — the latter puts points in the rhombic corners into a cell whose drawn
+hexagon does not contain them. Every hex is hoverable, so the ~974 names outside the focus
+layer stay reachable rather than becoming scenery. An "All points" mode keeps the full
+cross-section as unfilled rings with the radius capped at 13px, where overlap reads as
+intersection rather than occlusion.</p>
+
+<h3>Contrast</h3>
+<p>The small-caps label colour previously measured 3.50:1 on the light surface and 3.26:1
+on the raised plane — below AA for the 10px uppercase text carrying every table header and
+tile label. It is now 5.27:1 light and 7.23:1 dark. Segmented controls use the dark end of
+the sequential ramp for their pressed state, because white on the primary accent measures
+4.42:1 light and 3.64:1 dark and fails at 11px. Flagged statistics in the sizing sandbox
+carry a rule and an explicit threshold in words rather than a colour swap: the warning
+amber measures 1.66:1 on the plane and is unreadable as text, and colour alone was never
+an acceptable sole encoding.</p>
+
+<div class="note"><b>Client review mode.</b> Setting <code>data-audience="client"</code> on
+the root element hides every block tagged <code>data-desk-only</code> — the methodology
+notes, coverage disclosures and routing legends. One attribute and one rule; there is no
+second template to keep in sync, and nothing renders differently until it is set.</div>
+
 <h2>9 · Limitations</h2>
 <ul>
   <li>Fundamentals are as-filed and lag the market by up to a quarter.</li>
