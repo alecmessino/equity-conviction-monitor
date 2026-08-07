@@ -264,6 +264,8 @@ svg{display:block;max-width:100%;overflow:visible}
   font-size:9.5px;text-transform:uppercase;letter-spacing:.06em;font-weight:600;
   padding:1px 6px;border-radius:5px;border:1px solid currentColor;
 }
+.sub-h{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  font-weight:600;margin-bottom:8px}
 .states{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
 .state{
   border:1px solid var(--border);border-radius:8px;background:var(--plane);
@@ -556,6 +558,18 @@ table.mig th{cursor:default;text-align:center}
         <h2>Tier migration</h2>
         <div id="mon-migration"></div>
       </div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <h2>Why the board moved — information or model sensitivity</h2>
+      <div id="mon-churn"></div>
+      <p class="card-note">
+        The stability panel above says how much the ranking moved. This says why, which is
+        what decides the response: a board reordering because its inputs reordered is
+        working, while one reordering with its inputs sitting still is manufacturing
+        turnover. <b>One night is not a finding</b> either way — a single reading is
+        weather. The same reading sustained across weeks is the thing worth acting on.
+      </p>
     </div>
 
     <div class="row split">
@@ -1798,6 +1812,7 @@ function renderMonitor(){
   renderRegime(m.regime);
   renderStability(m.stability, m.observations);
   renderMigration(m.stability);
+  renderChurn(m.churn, m.observations);
   renderCovTrend(m.coverage||{});
   renderCovSector(m.coverage||{});
   renderSpecHistory((m.coverage||{}).spec_segments||{});
@@ -1912,6 +1927,119 @@ function renderMigration(s){
   their tier. Depth encodes count only — a single sequential hue, because these are
   magnitudes with no natural midpoint. ${s.tier_changes} of ${s.names_compared} names
   changed tier between ${esc(s.from)} and ${esc(s.to)}.</p>`;
+}
+
+/* Churn diagnosis. The distinction this panel exists to draw: a board that reorders
+   because its inputs reordered is working; one that reorders while its inputs sit still
+   is manufacturing turnover. Both look identical on the stability panel above. */
+const CHURN_LABEL={
+  'amplified':  {text:'Model sensitivity', tone:'--warn'},
+  'tracks-inputs':{text:'Information',      tone:'--good'},
+  'quiet':      {text:'Quiet',              tone:'--muted'},
+};
+
+function renderChurn(c, observations){
+  const host=$('#mon-churn');
+  if(!c){
+    host.innerHTML=`<div class="pending"><b>Waiting on a second snapshot.</b> This asks
+      whether an overnight move came from the data or from the scoring, which needs two
+      runs to compare — there ${observations===1?'is 1':'are '+(observations||0)}
+      on file. It is the question that decides what to do about a low stability reading,
+      so it is built and waiting rather than improvised on the night it is needed.</div>`;
+    return;
+  }
+  const L=CHURN_LABEL[c.assessment]||{text:c.assessment||'undetermined', tone:'--muted'};
+  const tone=cssVar(L.tone);
+  const b=c.boundary||{}, e=c.elasticity||{};
+  const ratio=c.amplification;
+
+  // Contribution shares: which input drove the reordering. Single sequential hue —
+  // these are magnitudes, and the sign lives in the attribution waterfall, not here.
+  const shares=Object.entries(c.contributions||{})
+    .filter(([,v])=>v.share!=null && v.share>0.001)
+    .sort((a,b)=>b[1].share-a[1].share).slice(0,8);
+  const maxShare=Math.max(0.001,...shares.map(([,v])=>v.share));
+  const shareRows=shares.map(([k,v])=>`<div class="check" style="padding:4px 0">
+      <span class="check-name" style="min-width:130px">${esc(FACTOR_LABELS[k]||k)}</span>
+      <span class="pb-track" style="width:120px"><span class="pb-fill"
+        style="width:${(v.share/maxShare*100).toFixed(1)}%"></span></span>
+      <span class="pb-num" style="width:38px">${pct(v.share,0)}</span>
+    </div>`).join('');
+
+  const amps=(e.amplifiers||[]).slice(0,8).map(x=>`<tr>
+      <td class="l"><span class="sym">${esc(x.symbol)}</span></td>
+      <td>${x.conviction_move>0?'+':''}${x.conviction_move}</td>
+      <td>${num(x.input_move,3)}</td>
+      <td>${num(x.elasticity,1)}</td>
+      <td>${esc(x.weakest_pillar||'—')} ${nz(x.weakest_pillar_value)?num(x.weakest_pillar_value,2):''}</td>
+    </tr>`).join('');
+
+  host.innerHTML=`
+    <div class="tile-row" style="align-items:center;margin-bottom:10px">
+      <div>
+        <span class="check-stat" style="color:${tone};font-size:11px">${esc(L.text)}</span>
+        <span class="tile-sub" style="margin-left:8px">${esc(c.from)} → ${esc(c.to)} ·
+          ${c.names_measured} names${c.largest_contributor
+            ? ` · led by <b>${esc(FACTOR_LABELS[c.largest_contributor.factor]
+                                || c.largest_contributor.factor)}</b>
+                (${pct(c.largest_contributor.share,0)} of the reordering)` : ''}</span>
+      </div>
+    </div>
+    <div class="row strip" style="margin-bottom:10px">
+      <div class="card"><div class="tile-label">Input movement</div>
+        <div class="tile-value num">${num(c.input_movement,3)}</div>
+        <div class="tile-sub">weighted mean |Δ percentile|</div></div>
+      <div class="card"><div class="tile-label">Standing movement</div>
+        <div class="tile-value num">${num(c.output_movement,3)}</div>
+        <div class="tile-sub">mean |Δ| in the conviction ranking</div></div>
+      <div class="card"><div class="tile-label">Ratio</div>
+        <div class="tile-value num" style="color:${tone}">${nz(ratio)?num(ratio,1)+'×':'—'}</div>
+        <div class="tile-sub">flags above ${num(c.threshold,1)}×</div></div>
+      <div class="card"><div class="tile-label">Marginal tier changes</div>
+        <div class="tile-value num">${b.marginal??'—'}${b.tier_changes?` / ${b.tier_changes}`:''}</div>
+        <div class="tile-sub">moved ≤${num(b.threshold,0)} pts across a threshold</div></div>
+    </div>
+    <p class="card-note" style="margin-top:0">${esc(c.basis||'')}.</p>
+    <div class="row split" style="margin-top:10px">
+      <div>
+        <h3 class="sub-h">What drove the reordering</h3>
+        ${shareRows||'<div class="pending">Nothing moved enough to attribute.</div>'}
+        <p class="card-note">Each input in turn is advanced to tonight's values while the
+        rest are held at last night's, and the board is re-scored. Shares of the
+        reordering those single-input runs account for — the frozen specification
+        evaluated, never modified.</p>
+        ${b.tier_changes ? `<h3 class="sub-h" style="margin-top:16px">Tier changes from a marginal move</h3>
+        ${(b.examples||[]).length?`<div class="tbl-wrap" style="max-height:190px"><table>
+          <thead><tr><th class="l">Ticker</th><th>From</th><th>To</th><th class="l">Reclassified</th></tr></thead>
+          <tbody>${(b.examples||[]).slice(0,8).map(x=>`<tr>
+            <td class="l"><span class="sym">${esc(x.symbol)}</span></td>
+            <td>${x.from}</td><td>${x.to}</td>
+            <td class="l src">${esc(x.from_tier)} → ${esc(x.to_tier)}</td></tr>`).join('')}
+          </tbody></table></div>`:''}
+        <p class="card-note">${b.marginal} of ${b.tier_changes} tier changes came from a
+        move of ${num(b.threshold,0)} points or less across a hard threshold${
+          b.marginal_share!=null&&b.marginal_share>=0.9
+            ? ' — on this run essentially every reclassification was the boundary, not a change of view'
+            : ''}. Tiers are labels applied to a continuous score; a name at 69 and a name
+        at 71 are not meaningfully different holdings, and the conviction number is the
+        honest reading.</p>` : ''}
+      </div>
+      <div>
+        <h3 class="sub-h">Names the model moved hardest</h3>
+        ${amps?`<div class="tbl-wrap" style="max-height:220px"><table>
+          <thead><tr><th class="l">Ticker</th><th>Δ conv</th><th>Δ input</th>
+            <th>Pts / unit</th><th class="l">Weakest pillar</th></tr></thead>
+          <tbody>${amps}</tbody></table></div>`
+        :'<div class="pending">No name moved on a measurable input change.</div>'}
+        <p class="card-note">${e.median===0
+          ? 'Median across the board is zero — most names did not move a published point at all, so the turnover is concentrated in the rows above rather than spread across the universe.'
+          : `Median across the board is ${num(e.median,1)} points per unit of input movement.`}
+        A pillar near its floor moves the score hardest, because conviction is a cube root
+        of a product — that is the geometric mean working as designed, and it is also
+        where turnover concentrates.</p>
+      </div>
+    </div>
+`;
 }
 
 function renderCovTrend(cov){

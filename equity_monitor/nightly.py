@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from equity_monitor import features, model, monitor, snapshots, universe as uni
+from equity_monitor import churn, features, model, monitor, snapshots, universe as uni
 from equity_monitor.sources import edgar, macro
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -251,6 +251,9 @@ def build(limit: int | None = None, skip_macro: bool = False,
             with open(macro_path) as fh:
                 macro_state = json.load(fh)
         report = monitor.build(LEDGER, payload, macro_state)
+        # Why the board moved, not just how much. Attached here rather than inside
+        # monitor.build because churn imports monitor for the rank correlation.
+        report["churn"] = churn.from_ledger(LEDGER)
         with open(os.path.join(LEDGER, "monitor.json"), "w") as fh:
             json.dump(report, fh, separators=(",", ":"))
         counts: dict[str, int] = {}
@@ -261,6 +264,11 @@ def build(limit: int | None = None, skip_macro: bool = False,
         for c in report["health"]:
             if c["status"] in ("fail", "warn"):
                 print(f"  {c['status'].upper()}: {c['name']} — {c['detail']}")
+        ch = report.get("churn")
+        if ch:
+            print(f"churn: {ch['assessment']} — {ch['basis']}")
+        else:
+            print("churn: pending (needs a second snapshot)")
     except Exception as exc:
         print(f"monitor: skipped ({exc})")
 
