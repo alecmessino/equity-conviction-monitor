@@ -112,6 +112,7 @@ equity_monitor/
   monitor.py           self-grading: stability, coverage trend, regime, health
   churn.py             why the board moved: information vs. model sensitivity
   watchlist.py         the overnight diff: what changed and whether it matters
+  rebuild.py           reconstruct an earlier board from cached prices (never committed)
   nightly.py           orchestrator; writes ledger/
   sources/
     _http.py           retries, throttling, gzip, on-disk cache
@@ -170,6 +171,41 @@ Every factor and pillar explains itself on hover — the pillar it feeds and its
 the arithmetic, and what the measure is for — from a single registry read by every
 surface. Tests assert that every scored input has an entry and that no entry describes an
 input the model does not read, so a new factor cannot ship undocumented.
+
+### Reconstructing an earlier board
+
+The snapshot series accumulates one observation per trading day and cannot be back-filled,
+so for its first weeks there is nothing to diff against. `equity_monitor/rebuild.py` answers
+the same questions from the price history already on disk:
+
+```bash
+python -m equity_monitor.rebuild --back 5            # board as of 5 sessions ago, diffed against today
+python -m equity_monitor.rebuild --back 20 --site    # …and a browsable terminal pointed at it
+```
+
+Price inputs are genuinely reconstructed — relative strength, trend, dollar liquidity and
+volatility recomputed from truncated OHLCV and re-ranked among the names that existed then.
+The **fundamentals are today's**, because filings are not stored as-of-date. That is
+look-ahead bias on the quality pillar, and it is printed on every output.
+
+Which is why the tool **refuses to write into `ledger/snapshots/`**. A reconstructed
+snapshot is structurally identical to a recorded one, so a mixed series cannot be un-mixed,
+and an Information Coefficient computed over it would be measuring the leak rather than the
+model. The refusal is a `realpath` check with its own exit code, not a convention.
+
+### Reading the terminal
+
+The screener ledger pins rank and ticker, rules every fifth row rather than every row, and
+groups its eighteen columns with five vertical dividers. The factor map bins 1014 names
+into a hex density field and draws the top 40 as points, because at that count a
+square-root area scale puts a 25.5px circle on a 786px plot and opacity does not save it;
+every hex is hoverable so nothing becomes unreachable. A **position-sizing sandbox** sizes
+a book from whatever the screener is showing, and a **factor exposure** panel reports the
+book's weighted percentile against the universe median for all fifteen model inputs,
+counting only the names whose sector profile actually reads each one.
+
+Contrast was measured, not assumed: the small-caps label colour was 3.50:1 on the light
+surface, below AA for 10px uppercase text, and is now 5.27:1 light / 7.23:1 dark.
 
 ## The parity gate
 

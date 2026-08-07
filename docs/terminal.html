@@ -104,14 +104,19 @@ main{padding:16px 20px 48px;max-width:1680px;margin:0 auto}
   background:var(--surface);border:1px solid var(--border);border-radius:10px;
   padding:14px 16px;min-width:0;
 }
-.card>h2{
+/* Both forms: several cards now put the heading inside .card-head beside a control,
+   at which point the direct-child selector stops matching and the heading silently
+   falls back to a 16px bold h2 — the one styling rule card titles have. */
+.card>h2,.card-head>h2{
   font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
   font-weight:600;margin-bottom:10px;
 }
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.card-head>h2{margin-bottom:0}
 .card-note{color:var(--muted);font-size:11px;margin-top:10px;line-height:1.5}
 .row{display:grid;gap:12px;margin-bottom:12px}
 .strip{grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
-.split{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr)}
+.split{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);align-items:start}
 @media (max-width:1100px){.split{grid-template-columns:1fr}}
 
 .tile-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
@@ -285,6 +290,180 @@ table.mig th{cursor:default;text-align:center}
 
 .skip{position:absolute;left:-9999px}
 .skip:focus{left:8px;top:8px;z-index:99;background:var(--surface);padding:8px 12px;border-radius:6px}
+
+/* ===========================================================================
+   LEDGER ROUTING, CONTRAST TOKENS AND THE NEW MODULES
+   ---------------------------------------------------------------------------
+   Contrast. --muted (#898781) was carrying every table header, tile label and
+   axis tick at 10px uppercase with .05em tracking. Measured against the WCAG
+   formula it is 3.50:1 on the light surface, 3.26:1 on --plane and 4.85:1 on
+   the dark surface — so it fails AA in light mode outright and clears it by a
+   hair in dark. --label replaces it for text at 5.27:1 light and 7.23:1 dark.
+   --muted survives for the dot glyphs and separator punctuation it was
+   introduced for, where contrast is not a legibility question.
+   ========================================================================= */
+:root{
+  --label:#6c6a64;                 /* 5.27:1 on --surface */
+  --lane:rgba(11,11,11,.026);      /* N-row tracking band */
+  --rule:#dedcd3;                  /* every-Nth-row horizontal routing anchor */
+  --divider:#c3c2b7;               /* column-group vertical routing anchor */
+  --pin:#fcfcfb;                   /* pinned-column plate, unbanded rows */
+  --pin-band:#f7f7f4;              /* pinned-column plate, banded rows */
+  --hover:#ebeae4;
+  --mono:ui-monospace,"SF Mono","JetBrains Mono",Menlo,Consolas,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:where(:not([data-theme="light"])){
+    --label:#a9a79f;               /* 7.23:1 on --surface #1a1a19 */
+    --lane:rgba(255,255,255,.022);
+    --rule:#3a3a35; --divider:#4a4944;
+    --pin:#1a1a19; --pin-band:#1e1e1c; --hover:#26261f;
+  }
+}
+:root[data-theme="dark"]{
+  --label:#a9a79f;
+  --lane:rgba(255,255,255,.022);
+  --rule:#3a3a35; --divider:#4a4944;
+  --pin:#1a1a19; --pin-band:#1e1e1c; --hover:#26261f;
+}
+
+/* Retire --muted for text in one place. `th` belongs here and is the single
+   largest such surface in the file; at (0,0,1) it does not outrank any of the
+   class rules that set a colour deliberately. */
+th,
+.card>h2,.card-head>h2,
+.tile-label,.tile-sub,.card-note,.state-k,.sub-h,.count,.src,.co,
+.panel-body h3,.legend .ramp,.pending,.imputed,
+nav button,.brand span,
+table.mig th.l,table.mig td.l,
+.hm th.rot{ color:var(--label); }
+.tick,.axis-title{ fill:var(--label); }
+
+/* --- ledger: 18 columns and 250 rows need routing, not more rules ---------
+   A 1px border under every row gives the eye 250 competing anchors, so none of
+   them anchors anything, and the ticker leaves the viewport the moment you
+   reach for P/E. Three fixes, in order of how much they buy: pin the identity
+   columns, rule every Nth row instead of all of them, and group the columns
+   with five vertical rules. Scoped to #grid so the other seven tables in the
+   terminal are untouched. */
+#grid thead th{
+  background:var(--raised);
+  font-size:9.5px;letter-spacing:.07em;padding:7px 9px;
+  border-bottom:1px solid var(--divider);
+  z-index:4;                        /* above the sticky body pins (3) */
+}
+#grid thead th:hover,#grid thead th[aria-sort]{color:var(--ink)}
+#grid thead th:focus-visible{outline:2px solid var(--s1);outline-offset:-2px}
+#grid thead th[aria-sort]::after{content:"▾";font-size:8px;margin-left:4px;opacity:.85}
+#grid thead th[aria-sort="ascending"]::after{content:"▴"}
+#grid thead .pin-rank{cursor:default}
+
+#grid tbody td{border-bottom:1px solid transparent}
+#grid tbody tr.rule > td{border-bottom-color:var(--rule)}
+#grid tbody tr.lane > td{background:var(--lane)}
+#grid tbody tr:hover > td{background:var(--hover)}
+
+#grid .pin{position:sticky;z-index:3;background:var(--pin)}
+#grid tbody tr.lane .pin{background:var(--pin-band)}
+#grid tbody tr:hover .pin{background:var(--hover)}
+/* 46px, not 38: the row limit goes to "Show all", so the gutter has to hold a
+   four-digit rank without the auto-layout table widening the cell out from
+   under the hard-coded sticky offset on the ticker beside it. */
+#grid .pin-rank{
+  left:0;width:46px;min-width:46px;max-width:46px;
+  text-align:right;font-family:var(--mono);font-size:10.5px;color:var(--label);
+}
+#grid .pin-sym{left:46px;border-right:1px solid var(--divider)}
+#grid thead .pin{z-index:5}        /* the corner cell outranks both */
+
+#grid .grp{border-left:1px solid var(--divider)}
+
+#grid tbody td.n,#grid tbody td.conv,#grid .pb-num{
+  font-family:var(--mono);font-variant-numeric:tabular-nums;
+}
+#grid tbody td.conv{font-size:14px}
+#grid .pb-num{width:20px;color:var(--ink-2)}
+#grid .pb-track{width:40px}
+#grid .co{font-size:10.5px;max-width:170px;color:var(--label)}
+#screener .tbl-wrap{border:1px solid var(--border);max-height:68vh}
+
+/* --- macro rail: four 90px cards collapsed to one strip ------------------- */
+.rail{
+  display:flex;flex-wrap:wrap;padding:0;overflow:hidden;margin-bottom:12px;
+  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+}
+.rail-tag{
+  display:flex;align-items:center;padding:10px 16px;border-right:1px solid var(--border);
+  font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--label);font-weight:600;
+}
+.rail-cell{
+  display:flex;align-items:center;gap:12px;padding:8px 18px;flex:1 1 210px;min-width:0;
+  border-right:1px solid var(--border);
+}
+.rail-cell:last-child{border-right:0}
+.rail-k{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--label);white-space:nowrap}
+.rail-v{font-family:var(--mono);font-size:19px;font-weight:600;letter-spacing:-.02em}
+.rail-d{font-family:var(--mono);font-size:11px}
+.rail-note{
+  display:flex;align-items:center;padding:8px 18px;font-size:10.5px;color:var(--label);
+  white-space:nowrap;
+}
+
+/* --- KPI tile with a position-in-range scale ------------------------------ */
+.kpi{display:flex;flex-direction:column;gap:9px}
+.kpi-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px}
+.kpi-tag{font-family:var(--mono);font-size:9.5px;color:var(--ink-2)}
+.kpi-v{font-family:var(--mono);font-size:30px;font-weight:600;letter-spacing:-.035em;line-height:1}
+.kpi-scale{height:4px;border-radius:2px;background:var(--grid);overflow:hidden}
+.kpi-scale i{display:block;height:100%;border-radius:2px;background:var(--s1)}
+
+/* --- segmented control ----------------------------------------------------
+   The pressed state is white on --seq-650, not on --s1: white on --s1 measures
+   4.42:1 light and 3.64:1 dark, both under AA for 11px text. --seq-650 is
+   9.91:1 in light mode; in dark it is a pale blue, so the ink flips. */
+.seg{display:flex;gap:2px;padding:2px;border:1px solid var(--border);border-radius:7px;background:var(--plane)}
+.seg button{padding:3px 10px;border:0;border-radius:5px;font-size:11px;background:none;color:var(--ink-2)}
+.seg button:hover{color:var(--ink)}
+.seg button[aria-pressed="true"]{background:var(--seq-650);color:#fff}
+@media (prefers-color-scheme: dark){
+  :root:where(:not([data-theme="light"])) .seg button[aria-pressed="true"]{color:var(--ink)}
+}
+:root[data-theme="dark"] .seg button[aria-pressed="true"]{color:var(--ink)}
+.seg button:focus-visible{outline:2px solid var(--s1);outline-offset:1px}
+
+/* --- position sizing sandbox --------------------------------------------- */
+.sbx{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+.sbx-ctl{display:flex;flex-direction:column;gap:14px}
+.sbx-k{
+  display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--label);font-weight:600;
+}
+.sbx-k b{font-family:var(--mono);font-size:12px;color:var(--ink);font-weight:600}
+.sbx-ctl input[type=range]{width:100%}
+.sbx-stats{display:grid;gap:8px;align-content:start;grid-template-columns:repeat(auto-fit,minmax(132px,1fr))}
+.sbx-stat{background:var(--plane);border:1px solid var(--border);border-radius:8px;padding:9px 11px}
+.sbx-stat .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--label);white-space:nowrap}
+.sbx-stat .v{font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-.02em}
+.sbx-stat .s{font-size:10.5px;color:var(--label)}
+/* Flagged state: a left rule and an explicit threshold in the sub-line, not a
+   colour swap. --warn on --plane measures 1.66:1 and is unreadable as text, and
+   colour alone was never an acceptable sole encoding here anyway. */
+.sbx-stat.flag{border-left:3px solid var(--warn)}
+.sbx-stat.flag .s{color:var(--ink-2)}
+
+.tag-new{
+  font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;font-weight:600;
+  color:var(--s1);border:1px solid var(--s1);border-radius:4px;padding:1px 5px;
+}
+
+/* ===========================================================================
+   CLIENT REVIEW MODE — reserved, not switched on. Set data-audience="client"
+   on <html> and every block tagged data-desk-only disappears. One attribute,
+   one rule; there is no second template to keep in sync.
+   ========================================================================= */
+[data-audience="client"] [data-desk-only]{display:none !important}
+[data-audience="client"] main{max-width:1180px}
+[data-audience="client"] #grid .pb-track{display:none}
 </style>
 </head>
 <body>
@@ -316,7 +495,10 @@ table.mig th{cursor:default;text-align:center}
   <div id="alert"></div>
 
   <!-- macro regime -->
-  <div class="row strip" id="macro"></div>
+  <!-- Global: shared by every view, not part of the screener. Four 90px cards
+       collapsed to one strip, which is ~110px above the fold — on a 13" screen the
+       difference between the factor map being visible on load and not. -->
+  <div class="rail" id="macro"></div>
 
   <!-- ================= SCREENER ================= -->
   <div class="view" id="view-screener">
@@ -324,15 +506,27 @@ table.mig th{cursor:default;text-align:center}
 
     <div class="row split">
       <div class="card">
-        <h2>Factor map — quality vs. momentum</h2>
+        <div class="card-head">
+          <h2>Factor map — quality vs. momentum</h2>
+          <div class="seg" id="map-mode" role="group" aria-label="Factor map mode">
+            <button type="button" data-mode="density" aria-pressed="true">Density + focus</button>
+            <button type="button" data-mode="points" aria-pressed="false">All points</button>
+          </div>
+        </div>
+        <p class="card-note" id="map-mode-note" style="margin:0 0 8px"></p>
         <div id="map"></div>
         <div class="legend">
+          <span class="ramp" id="legend-density">
+            <span>Sparse</span>
+            <span class="ramp-bar" id="ramp-density"></span>
+            <span>Dense</span>
+          </span>
           <span class="ramp">
             <span>Low conviction</span>
             <span class="ramp-bar" id="ramp"></span>
             <span>High</span>
           </span>
-          <span>Area ∝ market cap</span>
+          <span id="legend-area">Focus layer: area ∝ market cap</span>
         </div>
         <p class="card-note">
           Each name sits at its <b>sector percentile</b> for quality (x) and its universe
@@ -358,11 +552,27 @@ table.mig th{cursor:default;text-align:center}
           <div id="dist"></div>
           <p class="card-note" id="dist-note"></p>
         </div>
+
+        <div class="card" style="margin-top:12px">
+          <div class="card-head">
+            <h2>Factor exposure — book vs. universe</h2>
+            <span class="tag-new">New</span>
+          </div>
+          <p class="card-note" style="margin:0 0 12px">
+            Weighted percentile of the sized book minus the universe median, in percentile
+            points. Every input the model ranks, not just the three pillars.
+          </p>
+          <div id="exposure"></div>
+        </div>
       </div>
     </div>
 
     <div class="card" id="screener">
-      <h2>Conviction screener</h2>
+      <div class="card-head" style="margin-bottom:10px">
+        <h2>Conviction screener</h2>
+        <span class="count" style="margin:0" data-desk-only>Rank and ticker pinned ·
+          routing rule every 5 rows · six column groups</span>
+      </div>
       <div class="filters">
         <input type="search" id="f-q" placeholder="Ticker or company" aria-label="Search">
         <select id="f-sector" aria-label="Sector"><option value="">All sectors</option></select>
@@ -385,24 +595,25 @@ table.mig th{cursor:default;text-align:center}
       </div>
       <div class="tbl-wrap"><table id="grid">
         <thead><tr>
-          <th class="l" data-k="symbol">Ticker</th>
+          <th class="pin pin-rank" aria-label="Row position in the current sort"><span aria-hidden="true">#</span></th>
+          <th class="pin pin-sym l" data-k="symbol">Ticker</th>
           <th class="l" data-k="sector">Sector</th>
-          <th data-k="conviction" aria-sort="descending">Conv</th>
+          <th class="grp" data-k="conviction" aria-sort="descending">Conv</th>
           <th data-k="_delta" title="Change since the previous nightly snapshot">Δ</th>
           <th class="l" data-k="signal">Signal</th>
-          <th data-k="q_raw" data-pillar="quality">Quality</th>
+          <th class="grp" data-k="q_raw" data-pillar="quality">Quality</th>
           <th data-k="c_raw" data-pillar="confirmation">Momentum</th>
           <th data-k="r_raw" data-pillar="risk">Risk</th>
-          <th data-k="weight">Weight</th>
+          <th class="grp" data-k="weight">Weight</th>
           <th data-k="price">Price</th>
           <th data-k="chg_1d">1d</th>
           <th data-k="ret_12m">12m</th>
           <th data-k="drawdown_52w">Drawdn</th>
-          <th data-k="roic" data-def="p_roic">ROIC</th>
+          <th class="grp" data-k="roic" data-def="p_roic">ROIC</th>
           <th data-k="fcf_yield" data-def="p_fcf_yield">FCF yld</th>
           <th data-k="pe">P/E</th>
           <th data-k="market_cap">Mkt cap</th>
-          <th data-k="data_confidence" title="Share of model inputs observed rather than imputed from the sector median">Conf</th>
+          <th class="grp" data-k="data_confidence" title="Share of model inputs observed rather than imputed from the sector median">Conf</th>
         </tr></thead><tbody></tbody>
       </table></div>
       <p class="card-note">
@@ -410,6 +621,53 @@ table.mig th{cursor:default;text-align:center}
         imputed from the sector median because the filing did not report them — they lower
         the confidence score rather than silently counting as zero.
       </p>
+    </div>
+
+    <div class="card" id="sandbox" style="margin-top:12px">
+      <div class="card-head">
+        <h2>Position sizing — what-if sandbox</h2>
+        <span class="tag-new">New</span>
+      </div>
+      <p class="card-note" style="margin:0 0 14px">
+        Sizes a book from the currently filtered board, in the browser. Nothing is
+        persisted; this is a shape-of-portfolio question, not an order.
+      </p>
+
+      <div class="sbx">
+        <div class="sbx-ctl">
+          <div>
+            <label class="sbx-k" for="sbx-min"><span>Minimum conviction</span><b id="sbx-min-v">70</b></label>
+            <input type="range" id="sbx-min" min="50" max="85" step="1" value="70" aria-valuetext="70">
+          </div>
+          <div>
+            <label class="sbx-k" for="sbx-max"><span>Max single position</span><b id="sbx-max-v">6.0%</b></label>
+            <input type="range" id="sbx-max" min="2" max="15" step="0.5" value="6" aria-valuetext="6.0%">
+          </div>
+          <div>
+            <div class="sbx-k"><span>Sizing rule</span></div>
+            <div class="seg" id="sbx-rule" role="group" aria-label="Sizing rule">
+              <button type="button" data-rule="equal" aria-pressed="false">Equal</button>
+              <button type="button" data-rule="conv" aria-pressed="true">Conviction</button>
+              <button type="button" data-rule="conv2" aria-pressed="false">Conviction²</button>
+            </div>
+            <p class="card-note" id="sbx-rule-note"></p>
+          </div>
+        </div>
+
+        <div class="sbx-stats" id="sbx-stats"></div>
+
+        <div style="min-width:0">
+          <div class="sub-h">Sized book — top 12 by weight</div>
+          <div class="tbl-wrap" style="max-height:288px">
+            <table id="sbx-book">
+              <thead><tr>
+                <th class="l">Ticker</th><th class="l">Sector</th><th>Conv</th><th>Weight</th>
+              </tr></thead><tbody></tbody>
+            </table>
+          </div>
+          <p class="card-note" id="sbx-cap-note"></p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -932,25 +1190,24 @@ function renderHeader(){
 function renderMacro(){
   const host=$('#macro');
   if(!S.macro||!Object.keys(S.macro).length){
-    host.innerHTML=`<div class="card"><div class="tile-label">Macro regime</div>
-      <div class="tile-sub" style="margin-top:4px">FRED series unavailable in the last build.</div></div>`;
+    host.innerHTML=`<div class="rail-tag">Macro</div>
+      <div class="rail-note">FRED series unavailable in the last build.</div>`;
     return;
   }
-  host.innerHTML=Object.entries(S.macro).map(([id,m])=>{
-    const up=m.change_1m>=0;
-    const dec = id==='VIXCLS' ? 1 : 2;
-    return `<div class="card">
-      <div class="tile-label">${esc(m.label)}</div>
-      <div class="tile-row">
-        <div>
-          <div class="tile-value num">${m.value.toFixed(dec)}${esc(m.unit)}</div>
-          <div class="delta ${up?'up':'down'}">${up?'+':''}${m.change_1m.toFixed(dec)} 1m</div>
-        </div>
-        ${sparkline(m.series,74,30,cssVar('--s1'))}
-      </div>
-      <div class="tile-sub" style="margin-top:4px">as of ${esc(m.as_of)}</div>
-    </div>`;
-  }).join('');
+  const entries=Object.entries(S.macro);
+  const asOf=entries.map(([,m])=>m.as_of).filter(Boolean).sort().pop();
+  host.innerHTML='<div class="rail-tag">Macro</div>'
+    + entries.map(([id,m])=>{
+        const up=m.change_1m>=0, dec=id==='VIXCLS'?1:2;
+        return railCell({
+          label:m.label,
+          value:m.value.toFixed(dec)+(m.unit||''),
+          delta:(up?'+':'')+m.change_1m.toFixed(dec)+' 1m',
+          dir:up?'up':'down',
+          spark:sparkline(m.series,74,26,cssVar('--s1')),
+        });
+      }).join('')
+    + (asOf?`<div class="rail-note">FRED · as of ${esc(asOf)}</div>`:'');
 }
 
 /* ---------- KPIs ---------- */
@@ -965,17 +1222,29 @@ function tile(label,value,sub){
 }
 function renderKPIs(){
   const r=S.rows, convs=r.map(x=>x.conviction);
+  const med=median(convs);
   const buys=r.filter(x=>x.conviction>=70).length;
   const conf=r.map(x=>x.data_confidence).filter(nz);
+  const meanConf=conf.reduce((a,b)=>a+b,0)/(conf.length||1);
   const spy=S.bench.find(b=>b.symbol===(S.ledger.benchmark||'SPY'));
+  const ret=spy?spy.ret_12m:null;
   $('#kpis').innerHTML=
-     tile('Median conviction', median(convs)?.toFixed(0)??'—',
-          `dispersion ${(S.ledger.dispersion??0).toFixed(1)} · range ${Math.min(...convs)}–${Math.max(...convs)}`)
-   + tile('BUY or better', buys, `${(buys/r.length*100).toFixed(0)}% of the universe`)
-   + tile('Mean data confidence', pct(conf.reduce((a,b)=>a+b,0)/(conf.length||1),0),
-          'share of inputs observed, not imputed')
-   + tile('Benchmark 12m', spy?spct(spy.ret_12m):'—',
-          esc(S.ledger.benchmark||'SPY')+' — the momentum reference');
+     kpiTile({label:'Median conviction', tag:'/ 100', value:med?.toFixed(0)??'—',
+              pct:med??0, bar:convColor(med??50),
+              sub:`dispersion ${(S.ledger.dispersion??0).toFixed(1)} · range ${Math.min(...convs)}–${Math.max(...convs)}`})
+   + kpiTile({label:'BUY or better', tag:`of ${r.length}`, value:buys,
+              pct:buys/(r.length||1)*100,
+              sub:`${(buys/(r.length||1)*100).toFixed(0)}% of the universe`})
+   + kpiTile({label:'Mean data confidence', tag:'observed', value:pct(meanConf,0),
+              pct:meanConf*100,
+              bar:meanConf>=0.8?cssVar('--good'):meanConf>=0.6?cssVar('--warn'):cssVar('--bad'),
+              sub:'share of inputs observed, not imputed'})
+   // Scaled on ±40%, which covers every 12-month index return this benchmark has
+   // recorded. The bar is a position, not a claim about what is achievable.
+   + kpiTile({label:'Benchmark 12m', tag:esc(S.ledger.benchmark||'SPY'),
+              value:nz(ret)?spct(ret):'—',
+              pct:nz(ret)?(ret+0.4)/0.8*100:0,
+              sub:(S.ledger.benchmark||'SPY')+' — the momentum reference'});
 }
 
 /* ---------- factor map (scatter) ---------- */
@@ -1007,45 +1276,7 @@ function renderMap(){
   el('line',{x1:m.l,y1:y(0.5),x2:W-m.r,y2:y(0.5),stroke:cssVar('--axis'),
              'stroke-width':1,'stroke-opacity':0.6},s);
 
-  const caps=S.rows.map(r=>r.market_cap).filter(v=>nz(v)&&v>0);
-  const maxCap=Math.max(...caps,1);
-  // Area ∝ market cap, so radius ∝ sqrt — encoding value as radius would
-  // overstate large caps by squaring the difference.
-  const rad=v=>3.5+Math.sqrt((nz(v)&&v>0?v:maxCap*0.004)/maxCap)*22;
-
-  [...S.rows].sort((a,b)=>(b.market_cap||0)-(a.market_cap||0)).forEach(r=>{
-    const c=el('circle',{cx:x(r.q_raw??0.5), cy:y(r.c_raw??0.5), r:rad(r.market_cap),
-      fill:convColor(r.conviction), 'fill-opacity':0.75,
-      stroke:cssVar('--surface'), 'stroke-width':2, tabindex:0,
-      role:'button','aria-label':`${r.symbol}, conviction ${r.conviction}`},s);
-    c.style.cursor='pointer';
-    const show=ev=>showTip(
-      `<b>${esc(r.symbol)}</b> · ${esc(r.signal)}<br>`
-      +`<div class="r"><span>Conviction</span><span>${r.conviction}</span></div>`
-      +`<div class="r"><span>Quality pct</span><span>${pct(r.q_raw,0)}</span></div>`
-      +`<div class="r"><span>Momentum pct</span><span>${pct(r.c_raw,0)}</span></div>`
-      +`<div class="r"><span>Market cap</span><span>${cap(r.market_cap)}</span></div>`,
-      ev.clientX, ev.clientY);
-    c.addEventListener('mousemove',show);
-    c.addEventListener('mouseleave',hideTip);
-    c.addEventListener('focus',e=>{
-      const b=c.getBoundingClientRect(); show({clientX:b.x,clientY:b.y});
-    });
-    c.addEventListener('blur',hideTip);
-    c.addEventListener('click',()=>openPanel(r));
-    c.addEventListener('keydown',e=>{if(e.key==='Enter')openPanel(r);});
-  });
-
-  // Quadrant labels last, so the points cannot cover them, with a surface-coloured
-  // stroke underneath the glyphs — drawn first they were unreadable behind the cloud.
-  [[0.80,0.94,'Quality confirmed'],[0.80,0.06,'Quality on sale'],
-   [0.20,0.94,'Momentum without quality'],[0.20,0.06,'Weak on both']]
-  .forEach(([qx,qy,label])=>{
-    const t=el('text',{x:x(qx),y:y(qy),class:'axis-title','text-anchor':'middle',
-      fill:cssVar('--ink-2'), stroke:cssVar('--surface'), 'stroke-width':3.5,
-      'paint-order':'stroke fill','stroke-linejoin':'round'},s);
-    t.textContent=label;
-  });
+  drawPoints(s, x, y, m, W, H);
 
   $('#ramp').style.background=
     `linear-gradient(90deg,${convColor(25)},${convColor(55)},${convColor(85)})`;
@@ -1328,37 +1559,25 @@ function renderGrid(){
   $('#count').textContent = shown.length<rows.length
     ? `${shown.length} shown · ${rows.length} match · ${S.rows.length} scored`
     : `${rows.length} of ${S.rows.length} names`;
-  $('#grid tbody').innerHTML=shown.map(r=>`<tr data-sym="${esc(r.symbol)}">
-    <td class="l"><span class="sym">${esc(r.symbol)}</span>
-        <span class="co">${esc(r.name||'')}</span></td>
-    <td class="l" style="color:var(--ink-2)">${esc(r.sector||'—')}</td>
-    <td class="conv" style="color:${convInk(r.conviction)}">${r.conviction}</td>
-    <td class="${nz(r._delta)?(r._delta>0?'up':r._delta<0?'down':''):''}"
-        title="${deltaTitle(r)}">${deltaCell(r)}</td>
-    <td class="l"><span class="tier" style="${tierStyle(r.signal,r.conviction)}">${esc(r.signal)}</span></td>
-    <td>${pbar(r.q_raw)}</td>
-    <td>${pbar(r.c_raw)}</td>
-    <td>${pbar(r.r_raw)}</td>
-    <td>${r.weight?num(r.weight,2)+'%':'—'}</td>
-    <td>${money(r.price)}</td>
-    <td class="${(r.chg_1d??0)>=0?'up':'down'}">${spct(r.chg_1d,2)}</td>
-    <td class="${(r.ret_12m??0)>=0?'up':'down'}">${spct(r.ret_12m,0)}</td>
-    <td class="${nz(r.drawdown_52w)&&r.drawdown_52w>0.001?'down':''}">${
-      !nz(r.drawdown_52w)?'—':r.drawdown_52w<=0.001?'at high':'−'+pct(r.drawdown_52w,0)}</td>
-    <td>${fmtImp(r,'p_roic',pct(r.roic,0))}</td>
-    <td>${fmtImp(r,'p_fcf_yield',pct(r.fcf_yield,1))}</td>
-    <td>${nz(r.pe)?num(r.pe,1):'—'}</td>
-    <td>${cap(r.market_cap)}</td>
-    <td style="color:${(r.data_confidence??0)>=0.8?'var(--ink-2)':'var(--warn)'}">${pct(r.data_confidence,0)}</td>
-  </tr>`).join('');
+  $('#grid tbody').innerHTML=gridRows(shown);
+  S.shown=shown;
+  renderSandbox();
 }
 $$('#grid thead th').forEach(th=>{
-  th.onclick=()=>{
+  // A <th> is not focusable and has no default activation, so before this the only way
+  // to reorder the primary table in the product was a mouse. tabindex plus Enter/Space
+  // is the smallest fix that does not restructure the header markup.
+  if(th.dataset.k) th.setAttribute('tabindex','0');
+  const sort=()=>{
     const k=th.dataset.k; if(!k) return;
     S.sort = S.sort.k===k ? {k,dir:-S.sort.dir} : {k,dir:-1};
     $$('#grid thead th').forEach(t=>t.removeAttribute('aria-sort'));
     th.setAttribute('aria-sort', S.sort.dir<0?'descending':'ascending');
     renderGrid();
+  };
+  th.onclick=sort;
+  th.onkeydown=e=>{
+    if(e.key==='Enter'||e.key===' '){ e.preventDefault(); sort(); }
   };
 });
 ['#f-q','#f-sector','#f-signal','#f-conf','#f-limit'].forEach(sel=>{
@@ -1901,6 +2120,360 @@ function renderData(){
         <td>${fails.length?esc(fails.slice(0,6).join(', '))+(fails.length>6?` +${fails.length-6}`:''):'none'}</td></tr>`;
 }
 
+/* ---------- ledger rows, factor map, sizing sandbox, exposure ----------
+   LANE_N at 3 is tighter and more Bloomberg; at 8 it is calmer and better for a client
+   screen. FOCUS_N above ~60 reintroduces the occlusion the density layer removes. */
+const LANE_N = 5;
+const FOCUS_N = 40;
+
+/* Rank gutter, pinned identity, column-group hooks, monospace numerics. Everything
+   above this in renderGrid — filter, sort, row cap, count — is unchanged. */
+function gridRows(shown){
+  return shown.map((r,i)=>{
+    const n=i+1;
+    const cls=[(Math.floor(i/LANE_N)%2===1)?'lane':'',(n%LANE_N===0)?'rule':''].filter(Boolean).join(' ');
+    return `<tr data-sym="${esc(r.symbol)}"${cls?` class="${cls}"`:''}>
+    <td class="pin pin-rank">${n}</td>
+    <td class="pin pin-sym l"><span class="sym">${esc(r.symbol)}</span>
+        <span class="co">${esc(r.name||'')}</span></td>
+    <td class="l" style="color:var(--ink-2)">${esc(r.sector||'—')}</td>
+    <td class="grp conv n" style="color:${convInk(r.conviction)}">${r.conviction}</td>
+    <td class="n ${nz(r._delta)?(r._delta>0?'up':r._delta<0?'down':''):''}"
+        title="${deltaTitle(r)}">${deltaCell(r)}</td>
+    <td class="l"><span class="tier" style="${tierStyle(r.signal,r.conviction)}">${esc(r.signal)}</span></td>
+    <td class="grp">${pbar(r.q_raw)}</td>
+    <td>${pbar(r.c_raw)}</td>
+    <td>${pbar(r.r_raw)}</td>
+    <td class="grp n">${r.weight?num(r.weight,2)+'%':'—'}</td>
+    <td class="n">${money(r.price)}</td>
+    <td class="n ${(r.chg_1d??0)>=0?'up':'down'}">${spct(r.chg_1d,2)}</td>
+    <td class="n ${(r.ret_12m??0)>=0?'up':'down'}">${spct(r.ret_12m,0)}</td>
+    <td class="n ${nz(r.drawdown_52w)&&r.drawdown_52w>0.001?'down':''}">${
+      !nz(r.drawdown_52w)?'—':r.drawdown_52w<=0.001?'at high':'−'+pct(r.drawdown_52w,0)}</td>
+    <td class="grp n">${fmtImp(r,'p_roic',pct(r.roic,0))}</td>
+    <td class="n">${fmtImp(r,'p_fcf_yield',pct(r.fcf_yield,1))}</td>
+    <td class="n">${nz(r.pe)?num(r.pe,1):'—'}</td>
+    <td class="n">${cap(r.market_cap)}</td>
+    <td class="grp n" style="color:${(r.data_confidence??0)>=0.8?'var(--ink-2)':'var(--warn)'}">${
+      pct(r.data_confidence,0)}</td>
+  </tr>`;}).join('');
+}
+
+/* ---------- factor map: density substrate + focus layer ----------
+   Opacity does not solve this. At 1014 marks on a sqrt-area scale the largest circle is
+   r=25.5 on a 786px plot — 6% of the plot width — and up to 29 names sit inside a single
+   largest-mark footprint. Encoding the mass as a binned field and the actionable names as
+   points separates the two questions the chart is asked: where is the universe, and where
+   are my names. */
+S.mapMode='density';
+
+/* Pointy-top hex lattice. Assignment is by axial rounding, NOT by rounding row and column
+   independently: independent rounding assigns points in the rhombic corners to a bin whose
+   drawn hexagon does not contain them, which puts visible marks outside their own cell. */
+function hexbin(rows, px, py, R, x0, y0){
+  const bins=new Map();
+  for(const r of rows){
+    const dx=px(r)-x0, dy=py(r)-y0;
+    const q=(Math.sqrt(3)/3*dx - dy/3)/R, rr=(2/3*dy)/R;
+    // cube round
+    let cx=q, cz=rr, cy=-cx-cz;
+    let rx=Math.round(cx), ry=Math.round(cy), rz=Math.round(cz);
+    const dxr=Math.abs(rx-cx), dyr=Math.abs(ry-cy), dzr=Math.abs(rz-cz);
+    if(dxr>dyr && dxr>dzr) rx=-ry-rz; else if(dyr>dzr) ry=-rx-rz; else rz=-rx-ry;
+    const key=rx+':'+rz, e=bins.get(key);
+    if(e){ e.n++; e.rows.push(r); }
+    else bins.set(key,{cx:x0+Math.sqrt(3)*R*(rx+rz/2), cy:y0+1.5*R*rz, n:1, rows:[r]});
+  }
+  return [...bins.values()];
+}
+function hexPath(cx,cy,R){
+  let d='';
+  for(let i=0;i<6;i++){
+    const a=Math.PI/180*(60*i-30);
+    d+=(i?'L':'M')+(cx+R*Math.cos(a)).toFixed(1)+' '+(cy+R*Math.sin(a)).toFixed(1);
+  }
+  return d+'Z';
+}
+
+function drawPoints(s, x, y, m, W, H){
+  const rows=S.rows;
+  const caps=rows.map(r=>r.market_cap).filter(v=>nz(v)&&v>0);
+  const maxCap=Math.max(...caps,1);
+  const px=r=>x(r.q_raw??0.5), py=r=>y(r.c_raw??0.5);
+  const dense=S.mapMode==='density';
+
+  const bind=(node,r,focusable)=>{
+    node.style.cursor='pointer';
+    const show=ev=>showTip(
+        `<b>${esc(r.symbol)}</b> · ${esc(r.signal)}<br>`
+      + `<div class="r"><span>Conviction</span><span>${r.conviction}</span></div>`
+      + `<div class="r"><span>Quality pct</span><span>${pct(r.q_raw,0)}</span></div>`
+      + `<div class="r"><span>Momentum pct</span><span>${pct(r.c_raw,0)}</span></div>`
+      + `<div class="r"><span>Market cap</span><span>${cap(r.market_cap)}</span></div>`,
+      ev.clientX, ev.clientY);
+    node.addEventListener('mousemove',show);
+    node.addEventListener('mouseleave',hideTip);
+    node.addEventListener('click',()=>openPanel(r));
+    if(focusable){
+      // Only the focus layer takes a tab stop. 1014 sequential stops ahead of the
+      // ledger and the sandbox is not navigation, it is a wall.
+      node.setAttribute('tabindex',0);
+      node.setAttribute('role','button');
+      node.setAttribute('aria-label',`${r.symbol}, conviction ${r.conviction}`);
+      node.addEventListener('keydown',e=>{if(e.key==='Enter')openPanel(r);});
+      node.addEventListener('focus',()=>{
+        const b=node.getBoundingClientRect(); show({clientX:b.x,clientY:b.y});
+      });
+      node.addEventListener('blur',hideTip);
+    }
+  };
+
+  $('#legend-density').hidden=!dense;
+  $('#legend-area').textContent=dense?'Focus layer: area ∝ market cap':'Area ∝ market cap, capped';
+
+  if(!dense){
+    drawQuadrantLabels(s, m, W, H);
+    /* Unfilled rings, radius capped at 13px. Overlap reads as intersection rather than
+       occlusion, and no mega-cap hides the names behind it. */
+    [...rows].sort((a,b)=>(b.market_cap||0)-(a.market_cap||0)).forEach(r=>{
+      const rad=Math.min(3+Math.sqrt((r.market_cap||maxCap*0.004)/maxCap)*20,13);
+      bind(el('circle',{cx:px(r),cy:py(r),r:rad,fill:'none',
+        stroke:convColor(r.conviction),'stroke-opacity':0.55,'stroke-width':1.1},s), r, false);
+    });
+    $('#map-mode-note').textContent =
+      `All ${rows.length} as unfilled rings, radius capped at 13px — overlap reads as `
+      + `intersection, not occlusion. Hover or click any ring.`;
+    return;
+  }
+
+  const R=15;
+  const bins=hexbin(rows,px,py,R,m.l,m.t);
+  const maxN=Math.max(...bins.map(b=>b.n),1);
+  bins.forEach(b=>{
+    const h=el('path',{d:hexPath(b.cx,b.cy,R-1.1),fill:cssVar('--s1'),
+      'fill-opacity':(0.08+0.64*Math.sqrt(b.n/maxN)).toFixed(3)},s);
+    // The substrate stays interrogable, so the ~974 names outside the focus layer are
+    // not simply unreachable. A blank density field would be a downgrade, not a fix.
+    h.style.cursor='pointer';
+    const names=b.rows.slice().sort((p,q)=>q.conviction-p.conviction);
+    const show=ev=>showTip(
+        `<b>${b.n} name${b.n>1?'s':''}</b> in this cell<br>`
+      + names.slice(0,6).map(r=>`<div class="r"><span>${esc(r.symbol)}</span>`
+          +`<span>${r.conviction}</span></div>`).join('')
+      + (b.n>6?`<div class="src">+${b.n-6} more</div>`:''),
+      ev.clientX, ev.clientY);
+    h.addEventListener('mousemove',show);
+    h.addEventListener('mouseleave',hideTip);
+    if(b.n===1) h.addEventListener('click',()=>openPanel(names[0]));
+  });
+
+  drawQuadrantLabels(s, m, W, H);
+
+  const focus=[...rows].sort((a,b)=>b.conviction-a.conviction).slice(0,FOCUS_N);
+  focus.forEach(r=>{
+    const rad=Math.max(3.5,Math.min(12,3+Math.sqrt((r.market_cap||maxCap*0.004)/maxCap)*20));
+    bind(el('circle',{cx:px(r),cy:py(r),r:rad,fill:convColor(r.conviction),
+      'fill-opacity':0.95,stroke:cssVar('--surface'),'stroke-width':1.4},s), r, true);
+  });
+  focus.slice(0,8).forEach(r=>{
+    const nearRight = px(r) > W-m.r-150;   // clears the end-anchored corner label
+    const t=el('text',{x:px(r)+(nearRight?-12:12),y:py(r)+3.5,
+      'text-anchor':nearRight?'end':'start','font-size':10.5,
+      'font-family':cssVar('--mono'),fill:cssVar('--ink'),
+      stroke:cssVar('--surface'),'stroke-width':3,
+      'paint-order':'stroke fill','stroke-linejoin':'round'},s);
+    t.textContent=r.symbol;
+  });
+
+  $('#ramp-density').style.background=
+    `linear-gradient(90deg, color-mix(in srgb, ${cssVar('--s1')} 8%, transparent), ${cssVar('--s1')})`;
+  $('#map-mode-note').textContent =
+    `${rows.length} names as a hex-binned density field · top ${FOCUS_N} by conviction drawn `
+    + `as points, 8 labelled. Hover a cell for the names inside it.`;
+}
+
+/* Corner-anchored, so they no longer sit inside the point field. They keep the surface
+   halo anyway: in density mode a dark hex can still run under a corner. */
+function drawQuadrantLabels(s, m, W, H){
+  [[m.l+6,m.t+12,'start','MOMENTUM WITHOUT QUALITY'],
+   [W-m.r-4,m.t+12,'end','QUALITY CONFIRMED'],
+   [m.l+6,H-m.b-6,'start','WEAK ON BOTH'],
+   [W-m.r-4,H-m.b-6,'end','QUALITY ON SALE']]
+  .forEach(([tx,ty,anchor,label])=>{
+    const t=el('text',{x:tx,y:ty,'text-anchor':anchor,'font-size':9.5,
+      'letter-spacing':0.7,fill:cssVar('--label'),'fill-opacity':0.8,
+      'font-family':cssVar('--mono'),
+      stroke:cssVar('--surface'),'stroke-width':2.5,
+      'paint-order':'stroke fill','stroke-linejoin':'round'},s);
+    t.textContent=label;
+  });
+}
+
+/* ---------- position sizing sandbox ---------- */
+S.sbx={min:70,max:6,rule:'conv'};
+const SBX_RULES={
+  equal:'Every name the same weight. The score decides membership only, never size.',
+  conv :'Weight proportional to (conviction − threshold + 5), so a name sitting exactly at the floor still gets a real position rather than zero.',
+  conv2:'The same quantity squared. Concentrates into the top of the board, and the cap ends up doing most of the work.',
+};
+
+function sizeBook(rows,{min,max,rule}){
+  const held=rows.filter(r=>nz(r.conviction)&&r.conviction>=min);
+  if(!held.length) return {held:[],capped:0,cash:0,infeasible:false};
+  const raw=held.map(r =>
+    rule==='equal' ? 1 :
+    rule==='conv'  ? (r.conviction-min+5) :
+                     Math.pow(r.conviction-min+5,2));
+  const sum=raw.reduce((a,b)=>a+b,0);
+  let w=raw.map(v=>v/sum*100);
+  const atCap=new Set();
+  let infeasible=false;
+
+  /* Cap, then redistribute the excess pro-rata across everything still under the
+     ceiling. Six passes converge for any input this can be handed; an unbounded while()
+     would spin when every name is capped. */
+  for(let pass=0;pass<6;pass++){
+    const over=w.map((v,i)=>v>max+1e-9?i:-1).filter(i=>i>=0);
+    if(!over.length) break;
+    over.forEach(i=>{atCap.add(i);});
+    const excess=over.reduce((a,i)=>a+(w[i]-max),0);
+    over.forEach(i=>{w[i]=max;});
+    const under=w.map((v,i)=>v<max-1e-9?i:-1).filter(i=>i>=0);
+    const pool=under.reduce((a,i)=>a+w[i],0);
+    // No room left to redistribute into: held.length × max < 100, so the ceiling cannot
+    // be satisfied and the remainder is genuinely unallocated. Reporting it as cash is
+    // the honest answer; silently dropping it would show a book that does not sum to 100.
+    if(!pool){ infeasible=true; break; }
+    under.forEach(i=>{w[i]+=excess*(w[i]/pool);});
+  }
+  const total=w.reduce((a,b)=>a+b,0);
+  return {
+    held:held.map((r,i)=>({r,wt:w[i]})).sort((a,b)=>b.wt-a.wt),
+    capped:atCap.size, cash:Math.max(0,100-total), infeasible,
+  };
+}
+
+function renderSandbox(){
+  if(!$('#sandbox')) return;
+  const cfg=S.sbx;
+  // The rows the ledger is actually showing, so the sandbox answers "what would THIS
+  // screen look like as a book" rather than a different, larger slice.
+  const universe = S.shown || filtered();
+  const {held,capped,cash,infeasible}=sizeBook(universe,cfg);
+  const tot=held.reduce((a,b)=>a+b.wt,0)||1;
+  const top10=held.slice(0,10).reduce((a,b)=>a+b.wt,0);
+  const wConv=held.length?held.reduce((a,b)=>a+b.r.conviction*b.wt,0)/tot:null;
+  const medUniv=median(S.rows.map(r=>r.conviction).filter(nz));
+
+  const secs={};
+  held.forEach(b=>{ secs[b.r.sector||'—']=(secs[b.r.sector||'—']||0)+b.wt; });
+  const secTop=Object.entries(secs).sort((a,b)=>b[1]-a[1])[0]||['—',0];
+
+  const stat=(k,v,s,flag)=>`<div class="sbx-stat${flag?' flag':''}">
+      <div class="k">${esc(k)}</div><div class="v">${v}</div><div class="s">${esc(s)}</div></div>`;
+
+  $('#sbx-stats').innerHTML=
+      stat('Positions',held.length,`of ${universe.length} on screen`)
+    + stat('Largest',(held[0]?held[0].wt:0).toFixed(1)+'%',held[0]?held[0].r.symbol:'—')
+    + stat('Top 10',top10.toFixed(0)+'%',top10>55?'concentration · above 55%':'concentration',top10>55)
+    + stat('Wtd conviction',wConv==null?'—':wConv.toFixed(0),
+           medUniv==null?'':`universe median ${medUniv.toFixed(0)}`)
+    + stat('Largest sector',secTop[1].toFixed(0)+'%',
+           secTop[1]>35?`${secTop[0]} · above 35%`:secTop[0],secTop[1]>35)
+    + stat('At the ceiling',capped,capped?`pinned at ${cfg.max.toFixed(1)}%`:'cap not binding',capped>0);
+
+  $('#sbx-book tbody').innerHTML=held.slice(0,12).map((b,i)=>`
+    <tr data-sym="${esc(b.r.symbol)}"${(i+1)%LANE_N===0?' class="rule"':''}>
+      <td class="l"><span class="sym">${esc(b.r.symbol)}</span></td>
+      <td class="l" style="color:var(--label)">${esc(b.r.sector||'—')}</td>
+      <td class="n" style="color:${convInk(b.r.conviction)}">${b.r.conviction}</td>
+      <td><span class="pb"><span class="pb-track">
+        <span class="pb-fill" style="width:${Math.min(100,b.wt/cfg.max*100).toFixed(0)}%"></span>
+      </span><span class="pb-num" style="width:38px;color:var(--ink)">${b.wt.toFixed(2)}%</span></span></td>
+    </tr>`).join('') || '<tr><td colspan="4" class="l src">No name clears the threshold.</td></tr>';
+
+  $('#sbx-cap-note').textContent = infeasible
+    ? `Every name is pinned at the ${cfg.max.toFixed(1)}% ceiling and ${cash.toFixed(1)}% is `
+      + `unallocated — ${held.length} positions cannot fill a book at this cap. Raise the `
+      + `ceiling or lower the conviction floor.`
+    : capped
+    ? `${capped} name${capped>1?'s are':' is'} pinned at the ${cfg.max.toFixed(1)}% ceiling; `
+      + `the excess redistributes pro-rata across the rest.`
+    : `No name reaches the ${cfg.max.toFixed(1)}% ceiling — the cap is not binding here.`;
+  $('#sbx-rule-note').textContent=SBX_RULES[cfg.rule];
+
+  renderExposure(held, tot);
+}
+
+/* ---------- factor exposure ----------
+   Against the fifteen percentile inputs, not the three pillars. q_raw/c_raw/r_raw are
+   weighted MEANS of percentiles, so "percentile points versus the median" is not a
+   statement you can make about them; the p_* values are genuine cross-sectional
+   percentiles, and every one of them is already in index.json. */
+function renderExposure(held, tot){
+  const host=$('#exposure');
+  if(!host) return;
+  if(!held || !held.length){
+    host.innerHTML='<div class="pending">No positions at this threshold, so there is no book to measure exposure for.</div>';
+    return;
+  }
+  const rows=[];
+  for(const k of Object.keys(FACTOR_DEFS)){
+    let w=0, seen=0;
+    for(const b of held){
+      const v=b.r[k];
+      // Only names whose own sector profile reads the input. A bank has no p_roic, and
+      // averaging the imputed median in would report an exposure it does not have.
+      const used=weightsFor(b.r.profile||b.r.sector);
+      const inProfile=used.quality[k]!=null||used.confirmation[k]!=null||used.risk[k]!=null;
+      if(nz(v)&&inProfile){ w+=v*100*b.wt; seen+=b.wt; }
+    }
+    if(seen>0.5) rows.push([k, w/seen-50, seen/tot]);
+  }
+  rows.sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
+  host.innerHTML='<div class="wf">'+rows.map(([k,d,cov])=>{
+    const mag=Math.min(Math.abs(d),50)/50*50;
+    const col=d>=0?cssVar('--pos-pole'):cssVar('--neg-pole');
+    return `<div class="wf-row">
+      <div class="wf-name" data-def="${esc(k)}" style="cursor:help">${esc(FACTOR_LABELS[k]||k)}${
+        cov<0.999?` <span class="src">${(cov*100).toFixed(0)}%</span>`:''}</div>
+      <div class="wf-track">
+        <div class="wf-zero" style="left:50%"></div>
+        <div class="wf-bar" style="background:${col};left:${d>=0?50:50-mag}%;width:${mag}%"></div>
+      </div>
+      <div class="wf-val" style="color:${col}">${d>=0?'+':'−'}${Math.abs(d).toFixed(1)}</div>
+    </div>`;
+  }).join('')+'</div>'
+  + `<p class="card-note">Each input averaged over the book's weights, across only the
+     names whose sector profile actually reads it — a percentage beside a label is the
+     share of the book that input covers.</p>`;
+}
+
+/* ---------- macro rail and KPI tiles ---------- */
+function railCell(m){
+  return `<div class="rail-cell">
+    <div style="min-width:0;flex:1">
+      <div class="rail-k">${esc(m.label)}</div>
+      <div style="display:flex;align-items:baseline;gap:8px">
+        <span class="rail-v">${esc(m.value)}</span>
+        <span class="rail-d ${m.dir}">${esc(m.delta)}</span>
+      </div>
+    </div>${m.spark||''}
+  </div>`;
+}
+function kpiTile(k){
+  return `<div class="card kpi">
+    <div class="kpi-head">
+      <span class="tile-label">${esc(k.label)}</span>
+      <span class="kpi-tag">${esc(k.tag||'')}</span>
+    </div>
+    <div class="kpi-v">${esc(k.value)}</div>
+    <div class="kpi-scale"><i style="width:${Math.max(0,Math.min(100,k.pct||0)).toFixed(1)}%;
+      background:${k.bar||cssVar('--s1')}"></i></div>
+    <div class="tile-sub">${esc(k.sub)}</div>
+  </div>`;
+}
+
 /* ---------- watchlist diff ----------
    The morning question: what changed, and is it worth acting on. Deliberately NOT a list
    of every tier change. On an ordinary night the churn diagnostic measured 39 of 39 tier
@@ -2385,6 +2958,45 @@ function renderSpecHistory(spec){
       <td>${esc(g.from)}${g.from===g.to?'':' → '+esc(g.to)} <span class="src">${g.days}d</span></td>
     </tr>`).join('')}
   </table>`;
+}
+
+/* ---------- new-module wiring ----------
+   Guarded on presence rather than assumed: these run at script scope, and a bare
+   $('#sbx-min').addEventListener throws on null and kills every statement after it —
+   including boot(). One reverted markup block would take the whole page down. */
+if($('#map-mode')){
+  $$('#map-mode button').forEach(b=>{
+    b.onclick=()=>{
+      S.mapMode=b.dataset.mode;
+      $$('#map-mode button').forEach(o=>o.setAttribute('aria-pressed',String(o===b)));
+      renderMap();
+    };
+  });
+}
+if($('#sandbox')){
+  $('#sbx-min').addEventListener('input',e=>{
+    S.sbx.min=+e.target.value;
+    $('#sbx-min-v').textContent=S.sbx.min;
+    e.target.setAttribute('aria-valuetext',String(S.sbx.min));
+    renderSandbox();
+  });
+  $('#sbx-max').addEventListener('input',e=>{
+    S.sbx.max=+e.target.value;
+    $('#sbx-max-v').textContent=S.sbx.max.toFixed(1)+'%';
+    e.target.setAttribute('aria-valuetext',S.sbx.max.toFixed(1)+'%');
+    renderSandbox();
+  });
+  $$('#sbx-rule button').forEach(b=>{
+    b.onclick=()=>{
+      S.sbx.rule=b.dataset.rule;
+      $$('#sbx-rule button').forEach(o=>o.setAttribute('aria-pressed',String(o===b)));
+      renderSandbox();
+    };
+  });
+  $('#sbx-book tbody').addEventListener('click',e=>{
+    const tr=e.target.closest('tr[data-sym]');
+    if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+  });
 }
 
 /* ---------- chrome ---------- */
