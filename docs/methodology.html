@@ -186,12 +186,24 @@ An IC computed across a weight change is a number about two different models; se
 that hash is what keeps a long series interpretable.</p>
 
 <h3>Score-change attribution</h3>
-<p>Each pillar is linear in its percentiles, so a factor's exact contribution to a pillar's
-move is <code>span &times; weight &times; &Delta;percentile</code>. Conviction is a cube
-root of their product and therefore is not linear, so pillar moves are mapped to points
-through a first-order expansion about the midpoint. Whatever that expansion fails to
-explain is reported as an explicit <b>residual</b> rather than being spread silently across
-the factors.</p>
+<p>Conviction is a cube root of a product, so its logarithm is additive:</p>
+<div class="formula">d ln(conviction) = ⅓ ( d ln Q + d ln C + d ln R )</div>
+<p>Working in that space makes each pillar's share of a move <b>exact</b> rather than an
+approximation, and within a pillar the percentile mapping is linear, so the factor shares
+are exact too. Contributions sum to the move as an identity, asserted by a test over 300
+randomised pairs.</p>
+<p>An earlier version used a first-order expansion about the midpoint. It was accurate for
+small moves but drifted badly on large ones — a median residual of 2.2 points on a 2&ndash;4
+point move — and a decomposition that stops adding up precisely where the interesting moves
+are is not much of a decomposition.</p>
+<p>Two figures are reported alongside. The <b>residual</b> should be zero; a non-zero value
+means an assumption broke. <b>Rounding</b> is separate, because the published score is a
+whole number while the decomposition is not, and a one-point display difference should
+never be mistaken for a failure of the method.</p>
+<p>The headline names the largest contributor <em>in each direction</em>. Ranking by
+magnitude instead produced labels like "+5 points, driven by &minus;0.4 trend and
+&minus;0.4 relative strength" on 5% of names — true numbers arranged into a false
+summary.</p>
 
 <h2>5 · Missing data</h2>
 <p>An input the filings do not report is imputed at the <b>sector median percentile</b> and

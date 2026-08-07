@@ -181,3 +181,84 @@ def test_encoding_is_columnar(tmp_path):
     raw = json.loads(open(path).read())
     assert isinstance(raw["data"]["AAPL"], list)
     assert len(raw["data"]["AAPL"]) == len(snapshots.COLUMNS)
+
+
+def test_attribution_never_compares_a_day_against_itself(tmp_path):
+    """The build overwrites today's snapshot, so an unguarded 'most recent' lookup
+    compares this run to an earlier run on the same date and reports intraday rebuild
+    noise as if it were a daily move."""
+    morning = row(p_roic=0.30)
+    snapshots.write([morning], str(tmp_path), on="2026-08-07")
+
+    evening = [row(p_roic=0.95)]
+    got = snapshots.attribute_all(str(tmp_path), evening, today="2026-08-07")
+    assert got == {}, f"attributed against the same date: {got}"
+
+    # With a genuine prior date present, it compares against that.
+    snapshots.write([morning], str(tmp_path), on="2026-08-06")
+    got = snapshots.attribute_all(str(tmp_path), evening, today="2026-08-07")
+    assert got["since"] == "2026-08-06"
+
+
+def test_exact_conviction_reconstructs_the_score_from_stored_pillars():
+    """Snapshots store conviction as an integer. Differencing integers mixes the real
+    move with up to a full point of rounding, which then shows up as residual and
+    makes the decomposition look broken when it is not."""
+    r = row(p_roic=0.73, p_rs=0.41)
+    exact = snapshots.exact_conviction(r)
+    assert exact is not None
+    assert abs(exact - r["conviction"]) < 0.5, "must round to the stored conviction"
+
+
+def test_residual_excludes_rounding_and_stays_small():
+    before, after = row(), row(p_roic=0.95, p_value=0.3)
+    got = snapshots.attribute(before, after)
+    # The expansion should explain nearly all of the *exact* move.
+    assert abs(got["residual"]) < 0.5, f"residual {got['residual']}"
+    assert got["exact_total"] is not None
+    # Rounding is reported separately rather than folded into the residual.
+    assert abs(got["rounding"]) <= 1.0
+
+
+def test_headline_always_explains_the_direction_of_the_move():
+    """Top-two-by-magnitude produced labels like '+5 points, driven by -0.4 trend and
+    -0.4 relative strength' — two true numbers arranged into a false summary."""
+    before = row()
+    after = row(p_roic=0.99, p_value=0.05, p_rs=0.55)
+    got = snapshots.attribute(before, after)
+    headline = got["headline"]
+    assert headline, "a move must name at least one driver"
+    signs = {v > 0 for _, v in headline}
+    if got["exact_total"] > 0:
+        assert True in signs, f"a positive move must name a positive driver: {headline}"
+    if any(v < 0 for v in got["factors"].values()):
+        assert False in signs, f"an offsetting drag must be named: {headline}"
+
+
+def test_pillar_contributions_sum_to_the_move_exactly():
+    """The log form is additive by construction, so this is an identity, not a
+    tolerance. A first-order expansion left a median residual of 2.2 points on a
+    2-4 point move — a decomposition that stops adding up precisely where the
+    interesting moves are is not much of a decomposition."""
+    import random
+    rng = random.Random(11)
+    for _ in range(300):
+        before = row(**{k: round(rng.random(), 4) for k in BASE_PERCENTILES})
+        after = row(**{k: round(rng.random(), 4) for k in BASE_PERCENTILES})
+        got = snapshots.attribute(before, after)
+        if got is None:
+            continue
+        assert abs(got["residual"]) < 1e-9, (
+            f"pillars sum to {sum(p['points'] for p in got['pillars'].values())} "
+            f"but the move was {got['exact_total']}")
+
+
+def test_factor_contributions_sum_to_their_pillar():
+    before = row()
+    after = row(p_roic=0.2, p_fcf_yield=0.95, p_rs=0.9, p_value=0.1)
+    got = snapshots.attribute(before, after)
+    for pillar, keys in snapshots.pillar_factors_for(got["profile"]).items():
+        if pillar not in got["pillars"]:
+            continue
+        share = sum(got["factors"].get(k, 0.0) for k in keys)
+        assert abs(share - got["pillars"][pillar]["points"]) < 0.01, pillar

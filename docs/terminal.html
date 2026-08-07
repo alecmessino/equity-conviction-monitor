@@ -214,6 +214,29 @@ svg{display:block;max-width:100%;overflow:visible}
 .ramp{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted)}
 .ramp-bar{width:104px;height:7px;border-radius:4px}
 
+/* factor heatmap */
+.hm{border-collapse:separate;border-spacing:2px;font-variant-numeric:tabular-nums}
+.hm th{position:static;background:none;border:0;padding:2px 4px;font-size:9.5px;
+  text-transform:none;letter-spacing:0;cursor:default;white-space:nowrap}
+.hm th.rot{writing-mode:vertical-rl;transform:rotate(180deg);height:118px;
+  text-align:left;vertical-align:bottom;color:var(--muted);padding-bottom:4px}
+.hm td{padding:0;border:0}
+.hm .cell{width:34px;height:22px;border-radius:3px;display:flex;align-items:center;
+  justify-content:center;font-size:10px;cursor:default}
+.hm td.l{padding-right:6px}
+.hm .sym{font-size:11.5px}
+
+/* attribution waterfall */
+.wf{display:flex;flex-direction:column;gap:3px;margin:6px 0}
+.wf-row{display:flex;align-items:center;gap:8px;font-size:11.5px}
+.wf-name{flex:none;width:150px;color:var(--ink-2)}
+.wf-track{flex:1;height:14px;position:relative;background:var(--plane);border-radius:3px}
+.wf-zero{position:absolute;top:0;bottom:0;width:1px;background:var(--axis)}
+.wf-bar{position:absolute;top:2px;bottom:2px;border-radius:2px}
+.wf-val{flex:none;width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.pending{color:var(--muted);font-size:11.5px;line-height:1.6;
+  border-left:2px solid var(--axis);padding-left:10px;margin:6px 0}
+
 .prose{max-width:74ch;font-size:13px;line-height:1.62;color:var(--ink-2)}
 .prose h3{font-size:13px;color:var(--ink);text-transform:none;letter-spacing:0;margin:20px 0 6px}
 .prose p{margin:0 0 10px}
@@ -248,6 +271,7 @@ svg{display:block;max-width:100%;overflow:visible}
 <nav role="tablist">
   <button role="tab" aria-selected="true" data-view="screener">Screener</button>
   <button role="tab" aria-selected="false" data-view="sectors">Sectors</button>
+  <button role="tab" aria-selected="false" data-view="research">Research</button>
   <button role="tab" aria-selected="false" data-view="portfolio">Portfolio</button>
   <button role="tab" aria-selected="false" data-view="data">Data quality</button>
   <button role="tab" aria-selected="false" data-view="method">Method</button>
@@ -329,6 +353,7 @@ svg{display:block;max-width:100%;overflow:visible}
           <th class="l" data-k="symbol">Ticker</th>
           <th class="l" data-k="sector">Sector</th>
           <th data-k="conviction" aria-sort="descending">Conv</th>
+          <th data-k="_delta" title="Change since the previous nightly snapshot">Δ</th>
           <th class="l" data-k="signal">Signal</th>
           <th data-k="q_raw" title="Sector-relative percentile: ROIC, FCF yield, gross margin, leverage, earnings stability">Quality</th>
           <th data-k="c_raw" title="Vol-adjusted excess return vs SPY over 1/3/6/12m, plus trend state">Momentum</th>
@@ -374,6 +399,49 @@ svg{display:block;max-width:100%;overflow:visible}
             <th>Median 12m</th><th>Coverage</th>
           </tr></thead><tbody></tbody>
         </table></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ================= RESEARCH ================= -->
+  <div class="view" id="view-research" hidden>
+    <div class="card" style="margin-bottom:12px">
+      <h2>Observation history</h2>
+      <div id="obs"></div>
+    </div>
+
+    <div class="card" style="margin-bottom:12px">
+      <h2>Factor heatmap — top names by conviction</h2>
+      <div style="overflow-x:auto"><div id="heat"></div></div>
+      <div class="legend">
+        <span class="ramp"><span>0th pct</span>
+          <span class="ramp-bar" id="heat-ramp"></span><span>100th</span></span>
+        <span>Blank = imputed, not measured</span>
+      </div>
+      <p class="card-note">
+        Percentile of each input, within sector. Rows are scored under their own sector
+        profile, so a bank's columns are ROE and capital where an industrial's are ROIC
+        and gross margin — the header shows which. Reading across a row shows what the
+        score is actually made of; reading down a column shows who leads on that factor.
+      </p>
+    </div>
+
+    <div class="row split">
+      <div class="card">
+        <h2>Biggest conviction moves</h2>
+        <div class="tbl-wrap" style="max-height:420px"><table id="movers">
+          <thead><tr><th class="l">Ticker</th><th>From</th><th>To</th><th>Δ</th>
+            <th class="l">Driven by</th></tr></thead><tbody></tbody></table></div>
+        <p class="card-note" id="movers-note"></p>
+      </div>
+      <div class="card">
+        <h2>Factor leaders</h2>
+        <select id="lead-factor" class="muted-btn" aria-label="Factor"></select>
+        <div class="tbl-wrap" style="max-height:380px;margin-top:8px"><table id="leaders">
+          <thead><tr><th class="l">Ticker</th><th class="l">Sector</th>
+            <th>Percentile</th><th>Conv</th></tr></thead><tbody></tbody></table></div>
+        <p class="card-note">Ranked within sector, so this is "best of its peer group"
+          rather than "biggest number".</p>
       </div>
     </div>
   </div>
@@ -680,8 +748,13 @@ async function boot(){
   S.bench=j.benchmarks||[];
   try{ S.hist=await fetch(base+'history.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
   try{ S.macro=await fetch(base+'macro.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
+  try{ S.trends=await fetch(base+'trends.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
+
+  const moved=(j.attribution&&j.attribution.names)||{};
+  S.rows.forEach(r=>{ r._delta = moved[r.symbol] ? moved[r.symbol].total : null; });
 
   renderHeader(); renderMacro(); renderKPIs(); renderMap(); renderSale(); renderDist();
+  renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
   buildSectorFilter(); renderGrid(); renderSectors(); renderPortfolio(); renderData();
 }
 
@@ -779,6 +852,11 @@ function renderMap(){
                       y:(m.t+H-m.b)/2,class:'axis-title','text-anchor':'middle'},s);
   yt.textContent='Momentum percentile';
 
+  el('line',{x1:x(0.5),y1:m.t,x2:x(0.5),y2:H-m.b,stroke:cssVar('--axis'),
+             'stroke-width':1,'stroke-opacity':0.6},s);
+  el('line',{x1:m.l,y1:y(0.5),x2:W-m.r,y2:y(0.5),stroke:cssVar('--axis'),
+             'stroke-width':1,'stroke-opacity':0.6},s);
+
   const caps=S.rows.map(r=>r.market_cap).filter(v=>nz(v)&&v>0);
   const maxCap=Math.max(...caps,1);
   // Area ∝ market cap, so radius ∝ sqrt — encoding value as radius would
@@ -806,6 +884,17 @@ function renderMap(){
     c.addEventListener('blur',hideTip);
     c.addEventListener('click',()=>openPanel(r));
     c.addEventListener('keydown',e=>{if(e.key==='Enter')openPanel(r);});
+  });
+
+  // Quadrant labels last, so the points cannot cover them, with a surface-coloured
+  // stroke underneath the glyphs — drawn first they were unreadable behind the cloud.
+  [[0.80,0.94,'Quality confirmed'],[0.80,0.06,'Quality on sale'],
+   [0.20,0.94,'Momentum without quality'],[0.20,0.06,'Weak on both']]
+  .forEach(([qx,qy,label])=>{
+    const t=el('text',{x:x(qx),y:y(qy),class:'axis-title','text-anchor':'middle',
+      fill:cssVar('--ink-2'), stroke:cssVar('--surface'), 'stroke-width':3.5,
+      'paint-order':'stroke fill','stroke-linejoin':'round'},s);
+    t.textContent=label;
   });
 
   $('#ramp').style.background=
@@ -885,6 +974,152 @@ function renderDist(){
      A working cross-section spreads out; a broken one collapses to a single spike.`;
 }
 
+
+/* ---------- research: observation history ----------
+   Every history-dependent panel states what it has and what it is waiting for. A
+   sparkline drawn through one point is a flat line, and a flat line reads as "nothing
+   is happening" rather than "there is no history yet" — which is a different claim. */
+function renderObservations(){
+  const t=S.trends||{}, dates=t.dates||[];
+  const n=dates.length;
+  const attr=S.ledger.attribution||{};
+  const rows=[
+    ['Snapshots on file', n||'0'],
+    ['Date range', n?`${dates[0]} → ${dates[n-1]}`:'—'],
+    ['Model / spec', `${esc(S.ledger.model_version||'?')} · ${esc(S.ledger.spec_hash||'?')}`],
+    ['Attribution baseline', attr.since?esc(attr.since):'none yet'],
+    ['Names with a recorded move', attr.names?Object.keys(attr.names).length:0],
+  ];
+  let html=`<table class="kv">${rows.map(([k,v])=>
+    `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>`;
+  if(n<2){
+    html+=`<div class="pending">Factor history began on ${esc(dates[0]||'the first run')}.
+      Score-change attribution needs a second nightly snapshot; conviction sparklines
+      become meaningful from roughly the fifth. Nothing here is back-filled — the
+      factor values for a past date are not recoverable after the fact, so the series
+      starts when recording started.</div>`;
+  }
+  $('#obs').innerHTML=html;
+}
+
+/* ---------- research: factor heatmap (cross-sectional, available today) ---------- */
+// Short column labels. The full name is on the header's title attribute; a rotated
+// header wide enough for "Leverage (debt/assets, inv.)" would set the row height for
+// the entire table.
+const HEAT_LABELS={
+  p_roic:'ROIC', p_fcf_yield:'FCF yield', p_gross_margin:'Gross margin',
+  p_leverage:'Leverage', p_earnings_stability:'Earnings stab.',
+  p_rs:'Rel. strength', p_trend:'Trend', p_liquidity:'Liquidity',
+  p_value:'Valuation', p_lowvol:'Low vol',
+  p_roe:'ROE', p_capital:'Capital', p_cash_yield:'Cash yield',
+  p_ffo_yield:'FFO yield', p_leverage_assets:'Debt/assets',
+};
+function heatColor(v){
+  if(!nz(v)) return 'transparent';
+  // Sequential single hue: this is one continuous magnitude, not a category.
+  const a=cssVar('--seq-100'), b=cssVar('--seq-650');
+  return mix(a,b,Math.max(0,Math.min(1,v)));
+}
+function renderHeatmap(){
+  const rows=[...S.rows].sort((a,b)=>b.conviction-a.conviction).slice(0,20);
+  if(!rows.length){ $('#heat').innerHTML=''; return; }
+  // Column set = union of every profile in play, so a bank and an industrial can sit
+  // in the same table without either being shown a factor it is not scored on.
+  const qcols=[...new Set(rows.flatMap(r=>Object.keys(weightsFor(r.profile||r.sector).quality)))];
+  const cols=[...qcols, ...Object.keys(WEIGHTS.confirmation), ...Object.keys(WEIGHTS.risk)];
+  const head=`<tr><th class="l"></th><th class="l"></th>${
+    cols.map(c=>`<th class="rot" title="${esc(FACTOR_LABELS[c]||c)}">${
+      esc(HEAT_LABELS[c]||FACTOR_LABELS[c]||c)}</th>`).join('')}<th></th></tr>`;
+  const body=rows.map(r=>{
+    const used=weightsFor(r.profile||r.sector);
+    const inProfile=new Set([...Object.keys(used.quality),
+      ...Object.keys(used.confirmation),...Object.keys(used.risk)]);
+    return `<tr data-sym="${esc(r.symbol)}">
+      <td class="l"><span class="sym">${esc(r.symbol)}</span></td>
+      <td class="l" style="color:var(--muted);font-size:10px">${esc((r.profile&&r.profile!=='default')?r.profile:'')}</td>
+      ${cols.map(c=>{
+        if(!inProfile.has(c)) return `<td><div class="cell" style="background:var(--plane);
+          color:var(--muted)" title="${esc(r.symbol)} is scored under the ${esc(qualityProfile(r.profile||r.sector))} profile, which does not use ${esc(FACTOR_LABELS[c]||c)}">·</div></td>`;
+        const imp=(r.imputed||[]).includes(c);
+        const v=r[c];
+        return `<td><div class="cell" style="background:${imp?'transparent':heatColor(v)};
+          border:${imp?'1px dashed var(--axis)':'0'};
+          color:${!imp&&v>0.55?'#fff':'var(--ink-2)'}"
+          title="${esc(r.symbol)} · ${esc(FACTOR_LABELS[c]||c)}: ${imp?'imputed from the sector median':(v*100).toFixed(0)+'th percentile'}">${
+            imp?'':(v*100).toFixed(0)}</div></td>`;
+      }).join('')}
+      <td class="l" style="padding-left:8px"><b style="color:${convColor(r.conviction)}">${r.conviction}</b></td>
+    </tr>`;
+  }).join('');
+  $('#heat').innerHTML=`<table class="hm">${head}${body}</table>`;
+  $('#heat-ramp').style.background=`linear-gradient(90deg,${cssVar('--seq-100')},${cssVar('--seq-650')})`;
+  $('#heat').onclick=e=>{
+    const tr=e.target.closest('tr[data-sym]');
+    if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+  };
+}
+
+/* ---------- research: biggest movers, from real attribution ---------- */
+function renderMovers(){
+  const attr=S.ledger.attribution||{};
+  const names=attr.names||{};
+  const tb=$('#movers tbody');
+  const entries=Object.entries(names)
+    .sort((a,b)=>Math.abs(b[1].total)-Math.abs(a[1].total)).slice(0,25);
+  if(!entries.length){
+    tb.innerHTML=`<tr><td colspan="5" class="l"><div class="pending">
+      No prior snapshot to compare against yet. This fills in after the next nightly
+      run — it is computed from the recorded factor values, not re-derived.</div></td></tr>`;
+    $('#movers-note').textContent='';
+    return;
+  }
+  tb.innerHTML=entries.map(([sym,a])=>{
+    // The largest push in each direction, which is what makes the label read as an
+    // explanation ("ROIC up, valuation down") rather than a list of big numbers.
+    const top=(a.headline||[]).map(([k,v])=>
+      `<span class="${v>0?'up':'down'}">${v>0?'+':''}${v.toFixed(1)}</span> ${esc(FACTOR_LABELS[k]||k)}`
+    ).join(' · ');
+    return `<tr data-sym="${esc(sym)}">
+      <td class="l"><span class="sym">${esc(sym)}</span></td>
+      <td>${a.from}</td><td>${a.to}</td>
+      <td class="${a.total>=0?'up':'down'}">${a.total>0?'+':''}${a.total}</td>
+      <td class="l" style="color:var(--ink-2);font-size:11px">${top||'—'}</td></tr>`;
+  }).join('');
+  $('#movers tbody').onclick=e=>{
+    const tr=e.target.closest('tr[data-sym]');
+    if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+  };
+  $('#movers-note').innerHTML=`Change since ${esc(attr.since)}. "Driven by" lists the
+    two largest factor contributions in conviction points; the full decomposition and
+    its residual are in each name's detail panel.`;
+}
+
+/* ---------- research: factor leaders ---------- */
+function renderLeaders(){
+  const sel=$('#lead-factor');
+  if(!sel.options.length){
+    const keys=[...new Set(S.rows.flatMap(r=>{
+      const w=weightsFor(r.profile||r.sector);
+      return [...Object.keys(w.quality),...Object.keys(w.confirmation),...Object.keys(w.risk)];
+    }))];
+    sel.innerHTML=keys.map(k=>`<option value="${k}">${esc(FACTOR_LABELS[k]||k)}</option>`).join('');
+    sel.onchange=renderLeaders;
+  }
+  const k=sel.value||sel.options[0]?.value;
+  const rows=S.rows.filter(r=>nz(r[k]) && !(r.imputed||[]).includes(k))
+    .sort((a,b)=>b[k]-a[k]).slice(0,20);
+  $('#leaders tbody').innerHTML=rows.length?rows.map(r=>`<tr data-sym="${esc(r.symbol)}">
+    <td class="l"><span class="sym">${esc(r.symbol)}</span></td>
+    <td class="l" style="color:var(--ink-2)">${esc(r.sector||'—')}</td>
+    <td>${(r[k]*100).toFixed(0)}</td>
+    <td class="conv" style="color:${convColor(r.conviction)}">${r.conviction}</td></tr>`).join('')
+    : `<tr><td colspan="4" class="l" style="color:var(--muted)">No name is measured on this factor.</td></tr>`;
+  $('#leaders tbody').onclick=e=>{
+    const tr=e.target.closest('tr[data-sym]');
+    if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+  };
+}
+
 /* ---------- screener grid ---------- */
 function buildSectorFilter(){
   const secs=[...new Set(S.rows.map(r=>r.sector).filter(Boolean))].sort();
@@ -900,6 +1135,19 @@ function filtered(){
     && (!sec || r.sector===sec)
     && (!sig || r.signal===sig)
     && ((r.data_confidence??1)>=conf));
+}
+function deltaCell(r){
+  if(!S.ledger.attribution||!S.ledger.attribution.since) return '<span style="color:var(--muted)">·</span>';
+  if(!nz(r._delta)||r._delta===0) return '<span style="color:var(--muted)">—</span>';
+  return (r._delta>0?'+':'')+r._delta;
+}
+function deltaTitle(r){
+  const attr=S.ledger.attribution||{};
+  if(!attr.since) return 'No prior snapshot yet — appears after the next nightly run';
+  const a=(attr.names||{})[r.symbol];
+  if(!a) return `Unchanged since ${attr.since}`;
+  return `Since ${attr.since}: ` + (a.headline||[]).map(([k,v])=>
+    `${v>0?'+':''}${v.toFixed(1)} ${FACTOR_LABELS[k]||k}`).join(', ');
 }
 function pbar(v){
   if(!nz(v)) return '<span class="pb-num">—</span>';
@@ -935,6 +1183,8 @@ function renderGrid(){
         <span class="co">${esc(r.name||'')}</span></td>
     <td class="l" style="color:var(--ink-2)">${esc(r.sector||'—')}</td>
     <td class="conv" style="color:${convColor(r.conviction)}">${r.conviction}</td>
+    <td class="${nz(r._delta)?(r._delta>0?'up':r._delta<0?'down':''):''}"
+        title="${deltaTitle(r)}">${deltaCell(r)}</td>
     <td class="l"><span class="tier" style="${tierStyle(r.signal,r.conviction)}">${esc(r.signal)}</span></td>
     <td>${pbar(r.q_raw)}</td>
     <td>${pbar(r.c_raw)}</td>
@@ -968,6 +1218,76 @@ $('#grid tbody').addEventListener('click',e=>{
   const tr=e.target.closest('tr[data-sym]');
   if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
 });
+
+
+/* ---------- detail: what moved, and the conviction series ---------- */
+function attributionBlock(r){
+  const attr=S.ledger.attribution||{};
+  const a=(attr.names||{})[r.symbol];
+  if(!a){
+    const since=attr.since;
+    return `<div class="pending">${since
+      ? `No recorded change since ${esc(since)} — the score held.`
+      : `Score-change attribution needs a prior nightly snapshot. Factor history began
+         on ${esc((S.trends&&S.trends.dates&&S.trends.dates[0])||'the first run')};
+         this fills in from the next run onward.`}</div>`;
+  }
+  const factors=Object.entries(a.factors||{}).filter(([,v])=>Math.abs(v)>=0.01);
+  const max=Math.max(...factors.map(([,v])=>Math.abs(v)), 0.1);
+  const bars=factors.map(([k,v])=>{
+    const w=Math.abs(v)/max*48;
+    const pos=v>=0;
+    return `<div class="wf-row">
+      <span class="wf-name">${esc(FACTOR_LABELS[k]||k)}</span>
+      <span class="wf-track"><span class="wf-zero" style="left:50%"></span>
+        <span class="wf-bar" style="${pos?'left:50%':`right:50%`};width:${w}%;
+          background:${pos?cssVar('--pos-pole'):cssVar('--neg-pole')}"></span></span>
+      <span class="wf-val ${pos?'up':'down'}">${pos?'+':''}${v.toFixed(1)}</span></div>`;
+  }).join('');
+  return `<div class="tile-row" style="margin-bottom:6px">
+      <div class="tile-sub">since ${esc(attr.since)}</div>
+      <div class="delta ${a.total>=0?'up':'down'}" style="font-size:15px;font-weight:600">
+        ${a.total>0?'+':''}${a.total} pts</div></div>
+    <div class="wf">${bars||'<div class="tile-sub">No single factor moved materially.</div>'}</div>
+    <div class="src">Exact decomposition: conviction is a cube root of a product, so its
+      logarithm is additive and each pillar's share of the move is exact rather than
+      approximated. Within a pillar the percentile mapping is linear, so the factor
+      shares are exact too — these contributions sum to
+      ${nz(a.exact_total)?(a.exact_total>0?'+':'')+a.exact_total.toFixed(2):a.total} points.${
+        nz(a.rounding)&&Math.abs(a.rounding)>=0.005
+          ? ` The headline number differs by ${a.rounding>0?'+':''}${a.rounding.toFixed(2)} because the score is displayed as a whole number.`
+          : ''}</div>`;
+}
+
+function convictionHistory(hist){
+  if(!hist||!hist.dates||hist.dates.length<2){
+    return `<div class="pending">${hist&&hist.dates&&hist.dates.length===1
+      ? `One observation, recorded ${esc(hist.dates[0])}. A series needs at least two.`
+      : 'No factor history recorded for this name yet.'}</div>`;
+  }
+  const ci=hist.columns.indexOf('conviction');
+  const vals=hist.rows.map(r=>r[ci]).filter(v=>v!=null);
+  if(vals.length<2) return '<div class="pending">Not enough observations to plot.</div>';
+  const W=520,H=130,m={t:10,r:12,b:20,l:34};
+  const lo=Math.min(...vals),hi=Math.max(...vals),rng=(hi-lo)||1;
+  const X=i=>m.l+i/(vals.length-1)*(W-m.l-m.r);
+  const Y=v=>H-m.b-(v-lo)/rng*(H-m.t-m.b);
+  const d=vals.map((v,i)=>`${i?'L':'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ');
+  let grid='';
+  for(const v of [lo,(lo+hi)/2,hi]){
+    grid+=`<line x1="${m.l}" y1="${Y(v)}" x2="${W-m.r}" y2="${Y(v)}" class="gridline"/>
+      <text x="${m.l-6}" y="${Y(v)+3}" class="tick" text-anchor="end">${v.toFixed(0)}</text>`;
+  }
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:${W}px" role="img"
+      aria-label="Conviction over the recorded history">
+    ${grid}
+    <path d="${d}" fill="none" stroke="${cssVar('--s1')}" stroke-width="2" stroke-linejoin="round"/>
+    <text x="${m.l}" y="${H-6}" class="tick">${esc(hist.dates[0])}</text>
+    <text x="${W-m.r}" y="${H-6}" class="tick" text-anchor="end">${esc(hist.dates[hist.dates.length-1])}</text>
+  </svg>
+  <div class="src">${vals.length} nightly observations. Not back-filled — the series
+    starts when recording started.</div>`;
+}
 
 /* ---------- detail panel ---------- */
 function priceChart(bars,r){
@@ -1097,6 +1417,16 @@ function openPanel(r){
     </section>
 
     <section>
+      <h3>What moved the score</h3>
+      ${attributionBlock(r)}
+    </section>
+
+    <section>
+      <h3>Conviction history</h3>
+      <div id="conv-hist"><div class="pending">loading…</div></div>
+    </section>
+
+    <section>
       <h3>Factor percentiles</h3>
       ${factorBars(r)}
       <div class="src">* imputed from the sector median — the filing did not report it.
@@ -1141,6 +1471,14 @@ function openPanel(r){
       <div class="src" style="margin-top:6px">${cik} · prices via ${esc(r.source||'—')},
         last bar ${esc(r.last_date||'—')}</div>
     </section>`;
+
+  // Per-symbol factor history, lazily. Served from the artifact like the price
+  // history; it does not exist until snapshots accumulate, and the panel says so.
+  fetch(S.base+'factors/'+encodeURIComponent(r.symbol)+'.json',{cache:'no-cache'})
+    .then(x=>x.ok?x.json():null)
+    .then(h=>{ const el=$('#conv-hist'); if(el) el.innerHTML=convictionHistory(h); })
+    .catch(()=>{ const el=$('#conv-hist');
+      if(el) el.innerHTML='<div class="pending">No factor history recorded yet.</div>'; });
 
   // Load the full OHLCV series lazily, then upgrade the chart in place.
   fetch(S.base+'history/'+encodeURIComponent(r.symbol)+'.json',{cache:'no-cache'})
@@ -1323,7 +1661,8 @@ $('#theme').onclick=()=>{
   document.documentElement.setAttribute('data-theme',next);
   try{ localStorage.setItem('ecm-theme',next); }catch{}
   if(S.ledger){ renderMacro(); renderMap(); renderGrid(); renderSectors();
-                renderPortfolio(); renderData(); renderSale(); renderDist(); }
+                renderPortfolio(); renderData(); renderSale(); renderDist();
+                renderObservations(); renderHeatmap(); renderMovers(); renderLeaders(); }
 };
 try{
   const saved=localStorage.getItem('ecm-theme');
