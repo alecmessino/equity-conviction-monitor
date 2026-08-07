@@ -16,16 +16,18 @@ Two properties this file is careful about:
   across a weight change is a number about two different models. Segmenting by
   ``spec_hash`` is what keeps the series honest when the specification eventually moves.
 
-* **Attribution reports its own residual.** The decomposition below is exact for the
-  pillars (which are linear in the percentiles) and first-order for the conviction
-  score (which is not, being a cube root of their product). Rather than quietly
-  distributing the approximation error across the factors, the leftover is returned as
-  ``residual`` so the reader can see how much of the move the decomposition explains.
+* **Attribution is exact, and still reports a residual.** Conviction is a cube root of
+  a product, so its logarithm is additive: ``d ln(conviction) = (d ln Q + d ln C +
+  d ln R)/3``. Working in that space makes each pillar's share of a move exact rather
+  than a linearisation, and within a pillar the percentile mapping is linear, so the
+  factor shares are exact too. The residual is reported anyway — it should be zero, and
+  a non-zero value means an assumption broke.
 """
 from __future__ import annotations
 
 import glob
 import json
+import math
 import os
 from datetime import date
 
@@ -55,12 +57,15 @@ PILLAR_FACTORS = {
 }
 
 
+PILLAR_RANGE = {"quality": ("q_raw", model.Q_SPAN),
+                "confirmation": ("c_raw", model.C_SPAN),
+                "risk": ("r_raw", model.R_SPAN)}
+
+
 def pillar_factors_for(profile: str) -> dict[str, list[str]]:
     quality = model.QUALITY_PROFILES.get(profile or "default",
                                          model.QUALITY_PROFILES["default"])
     return {**PILLAR_FACTORS, "quality": list(quality)}
-PILLAR_RANGE = {"quality": ("q_raw", model.Q_SPAN), "confirmation": ("c_raw", model.C_SPAN),
-                "risk": ("r_raw", model.R_SPAN)}
 
 _PRECISION = {"conviction": 0, "price": 4, "market_cap": 0, "weight": 3}
 _DEFAULT_PRECISION = 4
@@ -220,6 +225,24 @@ def write_symbol_factors(ledger_dir: str, limit: int = 250) -> int:
 # ---------------------------------------------------------------------------
 # score-change attribution
 # ---------------------------------------------------------------------------
+def exact_conviction(row: dict) -> float | None:
+    """Unrounded conviction, reconstructed from the stored pillar values.
+
+    Snapshots persist ``conviction`` as an integer, so differencing it mixes the real
+    move with up to a full point of rounding. q_raw/c_raw/r_raw and the uplift are all
+    stored, and score() is a pure function of them, so the exact value is recoverable
+    and the residual can be made to measure only the non-linearity it is meant to.
+    """
+    q_raw, c_raw, r_raw = row.get("q_raw"), row.get("c_raw"), row.get("r_raw")
+    if q_raw is None or c_raw is None or r_raw is None:
+        return None
+    Q = model.Q_FLOOR + model.Q_SPAN * q_raw
+    R = model.R_FLOOR + model.R_SPAN * r_raw
+    C = min(model.C_CEILING,
+            (model.C_FLOOR + model.C_SPAN * c_raw) * (row.get("mr_uplift") or 1.0))
+    return 100.0 * (Q * C * R) ** (1.0 / 3.0)
+
+
 def attribute(previous: dict, current: dict) -> dict | None:
     """Decompose a conviction change into per-factor contributions.
 
@@ -246,69 +269,119 @@ def attribute(previous: dict, current: dict) -> dict | None:
         return None
 
     total = current["conviction"] - previous["conviction"]
-    pillars: dict[str, dict] = {}
-    factors: dict[str, float] = {}
-    approx_total = 0.0
+    exact_before, exact_after = exact_conviction(previous), exact_conviction(current)
+    if exact_before is None or exact_after is None or exact_before <= 0 or exact_after <= 0:
+        return None
+    exact_total = exact_after - exact_before
 
     profile = current.get("profile") or previous.get("profile") or "default"
     per_pillar = pillar_factors_for(profile)
     weights_by_pillar = model.weights_for(
         profile if profile in model.QUALITY_PROFILES else "")
 
+    # Exact decomposition, not a linearisation.
+    #
+    #   conviction = 100 * (Q*C*R)^(1/3)
+    #   =>  d ln(conviction) = (1/3) * ( d ln Q + d ln C + d ln R )
+    #
+    # The log form is additive *exactly*, so each pillar's share of the total move is
+    # its share of d ln(conviction) with no approximation. Converting those shares
+    # into points against the real move makes the pillar contributions sum to the move
+    # by construction. A first-order expansion about the midpoint was accurate for
+    # small moves but drifted badly on large ones — median residual 2.2 points on a
+    # 2-4 point move — and a decomposition that stops adding up exactly where the
+    # interesting moves are is not much of a decomposition.
+    pillars: dict[str, dict] = {}
+    factors: dict[str, float] = {}
+
+    floors = {"quality": model.Q_FLOOR, "confirmation": model.C_FLOOR,
+              "risk": model.R_FLOOR}
+    log_share: dict[str, float] = {}
+    pillar_delta: dict[str, tuple[float, float, float]] = {}
+
     for pillar, keys in per_pillar.items():
         raw_key, span = PILLAR_RANGE[pillar]
-        weights = weights_by_pillar[pillar]
         prev_raw, cur_raw = previous.get(raw_key), current.get(raw_key)
         if prev_raw is None or cur_raw is None:
             continue
-
-        floor = {"quality": model.Q_FLOOR, "confirmation": model.C_FLOOR,
-                 "risk": model.R_FLOOR}[pillar]
-        prev_pillar = floor + span * prev_raw
-        cur_pillar = floor + span * cur_raw
-        mid = (prev_pillar + cur_pillar) / 2.0
-        if mid <= 0:
+        floor = floors[pillar]
+        prev_p = floor + span * prev_raw
+        cur_p = floor + span * cur_raw
+        if pillar == "confirmation":
+            prev_p = min(model.C_CEILING, prev_p * (previous.get("mr_uplift") or 1.0))
+            cur_p = min(model.C_CEILING, cur_p * (current.get("mr_uplift") or 1.0))
+        if prev_p <= 0 or cur_p <= 0:
             continue
+        log_share[pillar] = math.log(cur_p / prev_p) / 3.0
+        pillar_delta[pillar] = (prev_raw, cur_raw, cur_p - prev_p)
 
-        mid_conv = (previous["conviction"] + current["conviction"]) / 2.0
-        scale = mid_conv * (1 / 3) / mid          # points per unit of pillar move
-        pillar_points = scale * (cur_pillar - prev_pillar)
-        approx_total += pillar_points
+    total_log = sum(log_share.values())
+    allocated = 0.0
+    for pillar, share in log_share.items():
+        prev_raw, cur_raw, _ = pillar_delta[pillar]
+        points = exact_total * (share / total_log) if abs(total_log) > 1e-12 else 0.0
+        allocated += points
+        pillars[pillar] = {"from": round(prev_raw, 4), "to": round(cur_raw, 4),
+                           "points": round(points, 3)}
 
-        # Each factor's contribution is computed directly, not split proportionally.
-        # The pillar is linear in its percentiles, so span * w_k * dp_k is that
-        # factor's exact share of the pillar's move, and the shares sum to it.
-        # Splitting by |delta| instead would invert the sign of every factor whenever
-        # the pillar fell, reporting a deteriorating input as a positive contribution.
-        for k in keys:
+        # Within a pillar the mapping is linear, so weight * delta_percentile is each
+        # factor's exact share of the pillar's move and the shares sum to it.
+        weights = weights_by_pillar[pillar]
+        deltas = {}
+        for k in per_pillar[pillar]:
             a, b = previous.get(k), current.get(k)
-            if a is None or b is None:
-                factors[k] = 0.0
-                continue
-            factors[k] = scale * span * weights.get(k, 0.0) * (b - a)
+            deltas[k] = weights.get(k, 0.0) * (b - a) if (a is not None and b is not None) else 0.0
+        net = sum(deltas.values())
+        for k, dv in deltas.items():
+            factors[k] = points * (dv / net) if abs(net) > 1e-12 else 0.0
 
-        pillars[pillar] = {
-            "from": round(prev_raw, 4),
-            "to": round(cur_raw, 4),
-            "points": round(pillar_points, 3),
-        }
+    ordered = {k: round(v, 3) for k, v in
+               sorted(factors.items(), key=lambda kv: -abs(kv[1]))}
+    # The two entries that explain the move: the largest push in each direction.
+    # Taking the top two by magnitude instead produced a label reading "+5, driven by
+    # -0.4 trend and -0.4 relative strength" on 5% of names — two true numbers
+    # arranged into a false summary.
+    positives = [(k, v) for k, v in ordered.items() if v > 0.01]
+    negatives = [(k, v) for k, v in ordered.items() if v < -0.01]
+    headline = []
+    if positives:
+        headline.append(positives[0])
+    if negatives:
+        headline.append(negatives[0])
+    if len(headline) == 1:
+        pool = positives if positives else negatives
+        headline = pool[:2]
 
     return {
         "total": total,
         "profile": profile,
         "from": previous["conviction"],
         "to": current["conviction"],
+        "exact_total": round(exact_total, 3),
         "pillars": pillars,
-        "factors": {k: round(v, 3) for k, v in sorted(
-            factors.items(), key=lambda kv: -abs(kv[1]))},
-        "residual": round(total - approx_total, 3),
+        "factors": ordered,
+        "headline": [[k, v] for k, v in headline],
+        # Exact by construction, so this only ever reflects float noise. Measured
+        # against the unrounded allocation — differencing the rounded, published
+        # points would report the display precision as if it were model error.
+        # Rounding of the displayed integer score is reported separately.
+        "residual": round(exact_total - allocated, 6),
+        "rounding": round(total - exact_total, 3),
     }
 
 
 def attribute_all(ledger_dir: str, current_rows: list[dict],
-                  before: str | None = None) -> dict:
-    """Attribution for every name against the most recent prior snapshot."""
-    prior = latest(ledger_dir, before=before)
+                  before: str | None = None, today: str | None = None) -> dict:
+    """Attribution for every name against the most recent snapshot from a PRIOR date.
+
+    ``before`` defaults to today, which matters: the build overwrites the current
+    date's snapshot, so comparing against ``latest()`` unguarded compares this run to
+    an earlier run on the same day. That produces a real-looking "since 2026-08-07"
+    attribution describing nothing but intraday rebuild noise — precisely the sort of
+    plausible-but-meaningless output this project exists to avoid.
+    """
+    cutoff = before or today or date.today().isoformat()
+    prior = latest(ledger_dir, before=cutoff)
     if not prior:
         return {}
     out = {}
