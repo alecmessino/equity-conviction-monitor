@@ -188,6 +188,96 @@ def check_regression(payload: dict, previous: dict,
     return problems
 
 
+# A snapshot series is only a research dataset while every file in it decodes the same
+# way. Below this share of the recent median row count, a snapshot is truncated rather
+# than merely small, and committing it would put a hole in the history.
+MIN_SNAPSHOT_ROW_RATIO = 0.5
+
+
+def check_snapshots(ledger_dir: str) -> list[str]:
+    """Integrity of the accumulated factor history.
+
+    The snapshot series is the one artifact here that cannot be rebuilt. A ledger can be
+    regenerated from today's filings and prices; a night that was recorded wrong is wrong
+    forever, and a night that was never recorded is simply gone.
+
+    The invariant that matters most is the **append-only column order**. Snapshots are
+    stored columnar, so each file's values are positional. ``snapshots.COLUMNS`` is
+    documented as append-only and a unit test pins its shape, but nothing has been
+    checking the files on disk against it. Inserting a column mid-list would leave every
+    prior snapshot parsing without error and silently reporting one factor's values under
+    another factor's name — corruption that produces no exception, no empty column and no
+    visible symptom, in the dataset the Information Coefficient work will run against.
+    """
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from equity_monitor import snapshots as snap
+
+    problems: list[str] = []
+    directory = os.path.join(ledger_dir, "snapshots")
+    if not os.path.isdir(directory):
+        return problems
+
+    stamps = snap.available(ledger_dir)
+    if not stamps:
+        return problems
+
+    counts: list[int] = []
+    seen: set[str] = set()
+    for stamp in stamps:
+        path = snap.snapshot_path(ledger_dir, stamp)
+        try:
+            with open(path) as fh:
+                payload = json.load(fh)
+        except Exception as exc:
+            problems.append(f"snapshot {stamp} is unreadable: {exc}")
+            continue
+
+        cols = payload.get("columns")
+        if not cols:
+            problems.append(f"snapshot {stamp} records no column order, so its rows "
+                            f"cannot be decoded")
+        elif cols != snap.COLUMNS[:len(cols)]:
+            # Report the first divergence: "columns differ" sends the reader to diff two
+            # lists by eye, and the position is the whole diagnosis.
+            at = next((i for i, c in enumerate(cols)
+                       if i >= len(snap.COLUMNS) or c != snap.COLUMNS[i]), len(cols))
+            expected = snap.COLUMNS[at] if at < len(snap.COLUMNS) else "(past the end)"
+            problems.append(
+                f"snapshot {stamp} column {at} is {cols[at]!r} where the current order "
+                f"has {expected!r} — COLUMNS is append-only, and a change anywhere but "
+                f"the end silently reinterprets every value after it in this file and "
+                f"every other snapshot written before the change")
+
+        if payload.get("date") != stamp:
+            problems.append(f"snapshot {stamp} carries date {payload.get('date')!r}; "
+                            f"a series keyed on filename and read by inner date will "
+                            f"disagree with itself")
+        if not payload.get("spec_hash"):
+            problems.append(f"snapshot {stamp} has no spec_hash, so it cannot be "
+                            f"segmented and is unusable for return analysis")
+        if payload.get("date") in seen:
+            problems.append(f"duplicate snapshot date {payload.get('date')}")
+        seen.add(payload.get("date"))
+
+        rows = payload.get("data") or {}
+        counts.append(len(rows))
+        if not rows:
+            problems.append(f"snapshot {stamp} contains no rows")
+
+    # A collapse in row count is the signature of a partial run that still exited zero.
+    if len(counts) >= 3:
+        ordered = sorted(counts[:-1])
+        median = ordered[len(ordered) // 2]
+        latest = counts[-1]
+        if median and latest < median * MIN_SNAPSHOT_ROW_RATIO:
+            problems.append(
+                f"latest snapshot has {latest} rows against a median of {median} across "
+                f"{len(counts) - 1} prior nights — a truncated night committed to the "
+                f"history cannot be repaired later")
+
+    return problems
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -195,6 +285,8 @@ def main() -> int:
     ap.add_argument("--min-rows", type=int, default=MIN_ROWS)
     ap.add_argument("--previous", help="prior ledger to compare coverage against "
                                        "(CI passes the copy from git HEAD)")
+    ap.add_argument("--skip-snapshots", action="store_true",
+                    help="skip the accumulated-history integrity checks")
     args = ap.parse_args()
 
     try:
@@ -211,6 +303,10 @@ def main() -> int:
                 problems += check_regression(payload, json.load(fh))
         except Exception as exc:
             print(f"note: could not compare against {args.previous}: {exc}")
+    ledger_dir = os.path.dirname(os.path.abspath(args.path))
+    if not args.skip_snapshots:
+        problems += check_snapshots(ledger_dir)
+
     rows = payload.get("all") or []
     convictions = [r.get("conviction") for r in rows if r.get("conviction") is not None]
     print(f"ledger:      {args.path}")
@@ -227,6 +323,12 @@ def main() -> int:
     cov = payload.get("coverage") or {}
     if cov:
         print("coverage:    " + "  ".join(f"{k}={v:.0%}" for k, v in sorted(cov.items())))
+    if not args.skip_snapshots:
+        sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+        from equity_monitor import snapshots as snap
+        stamps = snap.available(ledger_dir)
+        if stamps:
+            print(f"history:     {len(stamps)} snapshot(s), {stamps[0]} to {stamps[-1]}")
 
     if problems:
         print(f"\nFAIL  {len(problems)} problem(s):")

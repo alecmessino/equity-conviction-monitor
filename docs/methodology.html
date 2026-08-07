@@ -254,6 +254,15 @@ nonsense.</p>
       test pins the hash. Changing a weight, a floor, a tier boundary or a sector profile
       fails the build until the version is deliberately bumped, so historical snapshots
       can always be segmented by the model that produced them.</li>
+  <li><b>History integrity</b> — every accumulated snapshot is re-read before the run is
+      committed: it must decode, carry a spec hash, agree with its own filename, and hold
+      rows. The invariant that matters most is the <em>append-only column order</em>.
+      Snapshots are stored columnar, so values are positional; inserting a column mid-list
+      would leave every prior file parsing without error while reporting one factor's
+      values under another factor's name. No exception, no empty column, no visible
+      symptom — silent corruption of the one artifact that cannot be rebuilt. A truncated
+      night, where the row count collapses against the recent median, is caught the same
+      way.</li>
   <li><b>Profile guard rails</b> — the build fails if a profile's own inputs resolve for
       under 75% of its sector (the profile would be imputing more than it measures), or if
       a profile leaks onto a sector it was not meant to touch.</li>
