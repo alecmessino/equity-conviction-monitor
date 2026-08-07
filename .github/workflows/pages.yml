@@ -48,7 +48,12 @@ jobs:
 
       - name: Validate ledger
         id: validate
-        run: python scripts/validate_ledger.py ledger/index.json
+        run: |
+          # Compare coverage against the previously published ledger, which is still
+          # in git HEAD at this point — the build overwrote the working copy only.
+          git show HEAD:ledger/index.json > /tmp/previous_ledger.json 2>/dev/null || true
+          python scripts/validate_ledger.py ledger/index.json \
+                 --previous /tmp/previous_ledger.json
 
       - name: Mirror terminal into docs/
         run: |
@@ -59,9 +64,13 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          # Only the small artifacts. ledger/history/ is gitignored — it is
-          # regenerated every run and shipped in the Pages artifact instead.
-          git add ledger/index.json ledger/history.json ledger/macro.json docs/terminal.html
+          # ledger/snapshots/ IS committed: it is the research dataset, and an
+          # Information Coefficient cannot be computed retroactively — the day's
+          # factor decomposition is either recorded tonight or lost. ~200 KB/day.
+          # ledger/history/ and ledger/factors/ are gitignored: both are regenerated
+          # each run and shipped in the Pages artifact instead.
+          git add ledger/index.json ledger/history.json ledger/macro.json \
+                  ledger/trends.json ledger/snapshots docs/terminal.html
           if git diff --cached --quiet; then
             echo "no data changes to commit"
           else
@@ -76,7 +85,10 @@ jobs:
           cp ledger/index.json      site/ledger/
           cp ledger/history.json    site/ledger/
           cp ledger/macro.json      site/ledger/ 2>/dev/null || true
+          cp ledger/trends.json     site/ledger/ 2>/dev/null || true
           cp -r ledger/history      site/ledger/ 2>/dev/null || true
+          cp -r ledger/factors      site/ledger/ 2>/dev/null || true
+          cp -r ledger/snapshots    site/ledger/ 2>/dev/null || true
           cp docs/methodology.html  site/docs/
           cat > site/index.html <<'HTML'
           <!DOCTYPE html><html lang="en"><head><meta charset="utf-8">

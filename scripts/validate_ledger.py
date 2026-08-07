@@ -45,6 +45,11 @@ MIN_FIELD_COVERAGE = {
 # above any floor safe enough to leave in place.
 COVERAGE_REGRESSION = 0.15
 
+# A sector profile exists to stop that sector being scored on imputed values. If its
+# own inputs resolve for less than this share of the sector, the profile is not doing
+# the job it was introduced for and the build should say so.
+PROFILE_INPUT_COVERAGE = 0.75
+
 
 class Failure(Exception):
     pass
@@ -114,6 +119,42 @@ def check(payload: dict, min_rows: int = MIN_ROWS) -> list[str]:
             got = observed / len(rows)
         if got < floor:
             fail(f"coverage[{field}] = {got:.0%} < {floor:.0%}")
+
+    # Sector profiles: check coverage where it matters. A profile input is expected to
+    # be sparse universe-wide (only banks report noninterest expense), so a global
+    # floor would either be trivially loose or fire constantly. The question that
+    # matters is whether the sector scored by a profile actually has the inputs.
+    profiles = payload.get("quality_profiles") or {}
+    if profiles and rows:
+        by_sector: dict[str, list] = {}
+        for r in rows:
+            by_sector.setdefault(r.get("sector") or "", []).append(r)
+        for sector, weights in profiles.items():
+            if sector == "default":
+                continue
+            members = by_sector.get(sector) or []
+            if not members:
+                continue
+            for key in weights:
+                got = sum(1 for r in members if r.get(key) is not None) / len(members)
+                if got < PROFILE_INPUT_COVERAGE:
+                    fail(f"{sector} profile input {key} resolves for {got:.0%} of the "
+                         f"sector (need >= {PROFILE_INPUT_COVERAGE:.0%}) — the profile "
+                         f"is imputing more than it measures")
+            wrong = [r["symbol"] for r in members
+                     if r.get("profile") not in (None, sector)]
+            if wrong:
+                fail(f"{len(wrong)} {sector} names scored under the wrong profile "
+                     f"(e.g. {wrong[:3]})")
+
+        # A profile must not leak. Names outside a profile sector must score under
+        # the default, or a profile change would silently move the whole board.
+        leaked = [r["symbol"] for r in rows
+                  if (r.get("sector") or "") not in profiles
+                  and r.get("profile") not in (None, "default")]
+        if leaked:
+            fail(f"{len(leaked)} names outside a profile sector are not on the default "
+                 f"profile (e.g. {leaked[:3]})")
 
     if not payload.get("as_of"):
         fail("no as_of timestamp")

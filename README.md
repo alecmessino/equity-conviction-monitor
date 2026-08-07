@@ -18,6 +18,25 @@ Conviction = 100 × (Q · C · R)^(1/3)
 Every input is a **cross-sectional percentile**, not a hand-picked threshold. Quality and
 valuation rank *within GICS sector*; momentum and liquidity rank across the universe.
 
+**Sector-specific quality profiles.** Banks do not tag operating income or gross profit at
+all, so the default quality inputs resolved for a minority of Financials and the rest were
+imputed — which measurably compressed the sector (2.84 imputed inputs per name, quality
+dispersion 0.090 against 0.167 for Materials; correlation between the two across sectors,
+−0.67). Financials now score on ROE, capital, cash-flow yield and earnings stability; Real
+Estate on FFO yield, ROE and debt/assets. Financials' quality dispersion rose to 0.161 and
+its data confidence from 72% to 98%, while all nine other sectors changed by exactly 0.000.
+
+Regulatory **CET1 is not obtainable** and is not faked: banks tag capital ratios
+dimensionally and the bulk XBRL API returns zero filers for it. Equity/assets stands in,
+labelled a proxy. FFO is likewise an approximation (net income to common + D&A) and is
+labelled as one.
+
+**Factor-level history.** Every night the full decomposition of every name — all fifteen
+percentile inputs, the three pillars, confidence — is committed to `ledger/snapshots/`,
+each stamped with the hash of the specification that produced it. That is the dataset
+Information Coefficient and decile-spread analysis will run against; none of it can be
+reconstructed after the fact.
+
 ## Why it works this way
 
 This is a rebuild. The previous version published `conviction 0 · AVOID` for all 48 names

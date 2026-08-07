@@ -35,3 +35,8 @@ ledger/prev_index.json
 # within a fortnight. The build regenerates it and ships it in the Pages artifact;
 # only the small bundled downsample (ledger/history.json) is committed.
 ledger/history/
+
+# Per-symbol factor history: regenerated each run from ledger/snapshots/ (which IS
+# committed) and shipped in the Pages artifact. Committing both would store the same
+# data twice, once transposed.
+ledger/factors/
