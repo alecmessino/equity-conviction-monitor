@@ -50,7 +50,7 @@ a{color:var(--s1)}
 
 <a class="back" href="../web/terminal.html">← Terminal</a>
 <h1>Methodology</h1>
-<p class="lede">Equity Conviction Monitor · model v3 · US large caps and factor ETFs</p>
+<p class="lede">Equity Conviction Monitor · model v3.1.0 · Russell 1000 + factor ETFs</p>
 
 <div class="formula">Conviction = 100 × (Q · C · R)<sup>1/3</sup></div>
 
@@ -122,6 +122,77 @@ score, because there is no recovering from a zero factor.</p>
   <tr><td>&lt; 40</td><td>AVOID</td></tr>
 </table>
 
+<h2>4b · Sector-specific quality profiles</h2>
+<p>The default quality inputs are not merely imprecise for two sectors — they are largely
+absent. Banks do not tag <code>OperatingIncomeLoss</code> or <code>GrossProfit</code> at
+all (0 of 11 large US banks tag either), and "net debt" is not a meaningful concept for a
+balance sheet funded by deposits. Measured across the Russell 1000, within Financials:
+ROIC resolves for 28% of names, gross margin for 14%, net debt/EBITDA for 21%.</p>
+
+<p>The effect was measurable. Imputing the missing inputs at the sector median pulls those
+names toward the middle:</p>
+<table>
+  <tr><th>Sector</th><th>Imputed inputs / name</th><th>Quality dispersion</th></tr>
+  <tr><td>Financials (before)</td><td>2.84</td><td>0.090</td></tr>
+  <tr><td>Real Estate (before)</td><td>2.37</td><td>0.122</td></tr>
+  <tr><td>Materials</td><td>1.02</td><td>0.167</td></tr>
+</table>
+<p>Across all eleven sectors the correlation between imputed-input count and quality
+dispersion was <b>&minus;0.67</b>. The model was discriminating 46% less well within
+Financials than within Materials for a purely mechanical reason: missing data, not
+similar banks.</p>
+
+<table>
+  <tr><th>Profile</th><th>Inputs and weights</th></tr>
+  <tr><td>default</td><td>ROIC 0.30 · FCF yield 0.25 · gross margin 0.15 · leverage 0.15 · earnings stability 0.15</td></tr>
+  <tr><td>Financials</td><td>ROE 0.35 · capital (equity/assets) 0.20 · cash-flow yield 0.20 · earnings stability 0.25</td></tr>
+  <tr><td>Real Estate</td><td>FFO yield 0.35 · ROE 0.20 · leverage (debt/assets, inverted) 0.20 · earnings stability 0.25</td></tr>
+</table>
+
+<p>Swapping inputs by sector is safe because quality is <em>already</em> a percentile rank
+computed within sector. Each profile ranks its names against their own peers on their own
+metrics; nothing is compared across a profile boundary. Verified: applying the profiles
+left the quality dispersion of all nine other sectors changed by exactly 0.000, while
+Financials rose from 0.090 to 0.161 and Real Estate from 0.122 to 0.158. Mean data
+confidence within Financials went from 72% to 98%.</p>
+
+<div class="note warn"><b>Two labelled approximations.</b>
+<p style="margin:8px 0 0"><b>Capital is not CET1.</b> Regulatory CET1 cannot be sourced
+here. Banks tag capital ratios dimensionally — by consolidated-vs-bank-level entity and by
+Standardized-vs-Advanced approach — and the bulk XBRL <code>frames</code> API drops
+dimensional facts. Measured:
+<code>CommonEquityTierOneCapitalToRiskWeightedAssets</code> returns <b>zero filers</b>
+universe-wide, and <code>TierOneRiskBasedCapitalToRiskWeightedAssets</code> returns 66
+filers, hitting 1 of 11 large banks. Equity-to-assets is used instead: plainly observable
+(96% of Financials), directionally the same thing, and labelled a proxy.</p>
+<p style="margin:8px 0 0"><b>FFO is approximated</b> as net income to common plus
+depreciation and amortisation. The NAREIT definition also removes gains on property sales,
+which no REIT in this universe tags, so the figure runs slightly high for a REIT that sold
+assets during the period. It is marked with a dagger wherever it appears.</p></div>
+
+<h2>4c · Factor-level history</h2>
+<p>Every night the full decomposition of every name is written to
+<code>ledger/snapshots/YYYY-MM-DD.json</code> — conviction, the three pillars, all fifteen
+percentile inputs, data confidence, price and market cap. Roughly 200 KB per trading day,
+committed to the repository.</p>
+<p>Storing only the final score would discard almost everything that makes it useful. Six
+months on, a bare score says Apple went 81 to 84; the decomposition says the move was
+driven by improving ROIC while valuation deteriorated. It is also the precondition for
+validating the model at all — Information Coefficient, decile spreads and factor decay are
+regressions of past factor values against forward returns, and none can be reconstructed
+after the fact.</p>
+<p>Each snapshot records the <code>spec_hash</code> of the specification that produced it.
+An IC computed across a weight change is a number about two different models; segmenting by
+that hash is what keeps a long series interpretable.</p>
+
+<h3>Score-change attribution</h3>
+<p>Each pillar is linear in its percentiles, so a factor's exact contribution to a pillar's
+move is <code>span &times; weight &times; &Delta;percentile</code>. Conviction is a cube
+root of their product and therefore is not linear, so pillar moves are mapped to points
+through a first-order expansion about the midpoint. Whatever that expansion fails to
+explain is reported as an explicit <b>residual</b> rather than being spread silently across
+the factors.</p>
+
 <h2>5 · Missing data</h2>
 <p>An input the filings do not report is imputed at the <b>sector median percentile</b> and
 lowers the name's <b>data confidence</b>, which is reported beside the score and drives the
@@ -167,6 +238,13 @@ nonsense.</p>
       cases.</li>
   <li><b>Regression tests</b> — each documented v2 failure has a named test asserting it
       cannot return.</li>
+  <li><b>Specification freeze</b> — every constant that can move a score is hashed, and a
+      test pins the hash. Changing a weight, a floor, a tier boundary or a sector profile
+      fails the build until the version is deliberately bumped, so historical snapshots
+      can always be segmented by the model that produced them.</li>
+  <li><b>Profile guard rails</b> — the build fails if a profile's own inputs resolve for
+      under 75% of its sector (the profile would be imputing more than it measures), or if
+      a profile leaks onto a sector it was not meant to touch.</li>
 </ul>
 
 <h2>9 · Limitations</h2>

@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from equity_monitor import features, model, universe as uni
+from equity_monitor import features, model, snapshots, universe as uni
 from equity_monitor.sources import edgar, macro
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -32,6 +32,8 @@ COVERAGE_FIELDS = [
     "market_cap", "roic", "fcf_yield", "gross_margin", "net_debt_ebitda",
     "earnings_stability", "earnings_yield", "rs_blend", "trend", "adv_usd",
     "vol_1y", "drawdown_52w", "sector",
+    # sector-specific inputs
+    "roe", "efficiency_ratio", "equity_to_assets", "ffo_yield", "debt_to_assets",
 ]
 
 # Portfolio construction: only names the model actually likes are held, weighted by
@@ -186,6 +188,27 @@ def build(limit: int | None = None, skip_macro: bool = False,
         except Exception as exc:
             print(f"macro: unavailable ({exc})")
 
+    # Factor-level snapshot: the full decomposition for every name, every night.
+    # This is the research dataset — Information Coefficient, decile spreads and
+    # factor decay are all regressions of past factor values against forward returns,
+    # and none of them can be reconstructed after the fact. Written before the ledger
+    # so a later failure cannot cost us the day's observation.
+    attribution = snapshots.attribute_all(LEDGER, scored)
+    snap_path = snapshots.write(scored, LEDGER, as_of=_now())
+    n_snaps = len(snapshots.available(LEDGER))
+    print(f"snapshot: {os.path.basename(snap_path)} "
+          f"({os.path.getsize(snap_path)/1024:.0f} KB, {n_snaps} on file)")
+    if attribution:
+        moved = attribution.get("names", {})
+        print(f"attribution: {len(moved)} names moved since {attribution.get('since')}")
+    try:
+        with open(os.path.join(LEDGER, "trends.json"), "w") as fh:
+            json.dump(snapshots.build_trends(LEDGER), fh, separators=(",", ":"))
+        n_factor_files = snapshots.write_symbol_factors(LEDGER)
+        print(f"trends + per-symbol factor history: {n_factor_files} symbols")
+    except Exception as exc:
+        print(f"trends: skipped ({exc})")
+
     prev = None
     prev_path = os.path.join(LEDGER, "index.json")
     if os.path.exists(prev_path):
@@ -198,11 +221,15 @@ def build(limit: int | None = None, skip_macro: bool = False,
     benchmarks = [r for r in rows if r.get("asset_class") == "ETF"]
     payload = {
         "as_of": _now(),
-        "model_version": "v3",
+        "model_version": model.MODEL_VERSION,
+        "spec_hash": model.spec_hash(),
+        "snapshots": n_snaps,
+        "attribution": attribution,
         "benchmark": uni.BENCHMARK,
         "universe_source": provenance,
         "universe": len(scored),
         "weights": model.WEIGHTS,
+        "quality_profiles": model.QUALITY_PROFILES,
         "coverage": cov,
         "dispersion": round(model.dispersion(scored), 2),
         "price_failures": failures,

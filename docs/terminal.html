@@ -526,6 +526,22 @@ const WEIGHTS = {
   confirmation: {p_rs:0.70, p_trend:0.30},
   risk:         {p_liquidity:0.40, p_value:0.35, p_lowvol:0.25},
 };
+// Sector-specific quality inputs. Banks do not report gross profit or operating
+// income at all, so the default inputs resolve for a minority of Financials and the
+// rest get imputed to the sector median — which measurably compressed the sector's
+// dispersion. Ranking is already within-sector, so swapping the inputs compares
+// nothing across a profile boundary.
+const QUALITY_PROFILES = {
+  "default":     WEIGHTS.quality,
+  "Financials":  {p_roe:0.35, p_capital:0.20, p_cash_yield:0.20, p_earnings_stability:0.25},
+  "Real Estate": {p_ffo_yield:0.35, p_roe:0.20, p_leverage_assets:0.20, p_earnings_stability:0.25},
+};
+function qualityProfile(sector){
+  return (sector && sector!=='default' && QUALITY_PROFILES[sector]) ? sector : 'default';
+}
+function weightsFor(sector){
+  return Object.assign({}, WEIGHTS, {quality: QUALITY_PROFILES[qualityProfile(sector)]});
+}
 const Q_FLOOR=0.02, Q_SPAN=0.98, C_FLOOR=0.10, C_SPAN=0.85,
       R_FLOOR=0.35, R_SPAN=0.75, C_CEILING=0.98,
       MR_QUALITY_GATE=0.55, MR_DRAWDOWN_GATE=0.15,
@@ -546,7 +562,8 @@ function pillar(p,w){
   return seen>0 ? total/seen : NEUTRAL;
 }
 function score(p, weights){
-  const w = weights || WEIGHTS;
+  // A row scores under its sector's profile unless weights are passed explicitly.
+  const w = weights || weightsFor(p && (p.profile || p.sector));
   const q_raw=pillar(p,w.quality), c_raw=pillar(p,w.confirmation), r_raw=pillar(p,w.risk);
   const Q=Q_FLOOR+Q_SPAN*q_raw, R=R_FLOOR+R_SPAN*r_raw;
   let C=C_FLOOR+C_SPAN*c_raw;
@@ -994,19 +1011,37 @@ const FACTOR_LABELS={
   p_leverage:'Leverage (inv.)', p_earnings_stability:'Earnings stability',
   p_rs:'Relative strength', p_trend:'Trend', p_liquidity:'Dollar liquidity',
   p_value:'Valuation', p_lowvol:'Low volatility',
+  p_roe:'Return on equity', p_capital:'Capital (equity/assets)',
+  p_cash_yield:'Cash flow yield', p_ffo_yield:'FFO yield',
+  p_leverage_assets:'Leverage (debt/assets, inv.)',
+};
+// Metrics that are approximations or proxies. Labelled wherever they surface rather
+// than presented as the thing they stand in for.
+const APPROXIMATIONS = {
+  p_capital: 'Equity/assets, a plainly observable capital cushion. NOT regulatory '
+    + 'CET1 — banks tag capital ratios dimensionally and the bulk XBRL API returns '
+    + 'zero filers for CET1, so it cannot be sourced here at all.',
+  p_ffo_yield: 'FFO approximated as net income to common plus depreciation and '
+    + 'amortisation. The NAREIT definition also removes gains on property sales, '
+    + 'which no REIT in this universe tags, so this figure runs slightly high for a '
+    + 'REIT that sold assets during the period.',
 };
 function factorBars(r){
-  const groups=[['Quality',Object.keys(WEIGHTS.quality)],
-                ['Confirmation',Object.keys(WEIGHTS.confirmation)],
-                ['Risk',Object.keys(WEIGHTS.risk)]];
+  const w=weightsFor(r.profile||r.sector);
+  const prof=qualityProfile(r.profile||r.sector);
+  const groups=[[prof==='default'?'Quality':`Quality · ${prof} profile`,Object.keys(w.quality)],
+                ['Confirmation',Object.keys(w.confirmation)],
+                ['Risk',Object.keys(w.risk)]];
   return groups.map(([name,keys])=>`
     <div style="margin-bottom:10px">
       <div class="src" style="margin-bottom:3px">${name}</div>
       ${keys.map(k=>{
         const v=r[k], imp=r.imputed&&r.imputed.includes(k);
+        const approx=APPROXIMATIONS[k];
         return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-          <span style="flex:none;width:126px;font-size:11.5px;color:${imp?'var(--muted)':'var(--ink-2)'}">
-            ${FACTOR_LABELS[k]}${imp?' *':''}</span>
+          <span style="flex:none;width:150px;font-size:11.5px;color:${imp?'var(--muted)':'var(--ink-2)'}"
+                ${approx?`title="${esc(approx)}"`:''}>
+            ${FACTOR_LABELS[k]||k}${approx?' †':''}${imp?' *':''}</span>
           <span class="pb-track" style="flex:1;width:auto">
             <span class="pb-fill" style="width:${((v??0.5)*100).toFixed(0)}%;
               background:${imp?cssVar('--axis'):cssVar('--seq-450')}"></span></span>
@@ -1018,7 +1053,10 @@ function factorBars(r){
 function openPanel(r){
   if(!r) return;
   $('#p-sym').textContent=r.symbol;
-  $('#p-name').textContent=[r.name,r.sector].filter(Boolean).join(' · ');
+  const profName=qualityProfile(r.profile||r.sector);
+  $('#p-name').textContent=[r.name, r.sector,
+    profName!=='default' ? `${profName} scoring profile` : null]
+    .filter(Boolean).join(' · ');
   const sc=score(r);   // recomputed live so the panel reflects the current weights
   const cik=(r.as_of&&Object.keys(r.as_of).length)
     ? `<a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${encodeURIComponent(r.symbol)}&type=10-K&dateb=&owner=include&count=10"
@@ -1062,7 +1100,9 @@ function openPanel(r){
       <h3>Factor percentiles</h3>
       ${factorBars(r)}
       <div class="src">* imputed from the sector median — the filing did not report it.
-        Data confidence ${pct(r.data_confidence,0)}.</div>
+        Data confidence ${pct(r.data_confidence,0)}.
+        ${Object.keys(APPROXIMATIONS).some(k=>k in (weightsFor(r.profile||r.sector).quality))
+          ? '<br>† an approximation or proxy — hover the label for exactly what it stands in for.' : ''}</div>
     </section>
 
     <section>

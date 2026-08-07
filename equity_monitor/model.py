@@ -48,6 +48,65 @@ WEIGHTS = {
     },
 }
 
+# --- sector-specific quality profiles -------------------------------------------
+# The default quality inputs are not merely imprecise for banks and REITs, they are
+# largely absent. Measured across the Russell 1000: within Financials, ROIC resolves
+# for 28% of names, gross margin for 14%, net-debt/EBITDA for 21% — because banks do
+# not tag OperatingIncomeLoss or GrossProfit at all (0 of 11 large US banks tag
+# either), and "net debt" is not a meaningful concept for a balance sheet funded by
+# deposits.
+#
+# The consequence was measurable and is the reason this exists. Imputing the missing
+# inputs at the sector median pulls those names toward the middle: Financials averaged
+# 2.8 imputed inputs per name and showed quality dispersion of 0.090, against 1.0 and
+# 0.167 for Materials. Across sectors the correlation between imputed-input count and
+# quality dispersion was -0.67. The model was discriminating 46% less within Financials
+# than within Materials for a purely mechanical reason — missing data, not similar banks.
+#
+# Swapping the inputs is architecturally safe because quality is *already* a percentile
+# rank computed within sector. Each profile ranks its own names against their own peers
+# on their own metrics; nothing is compared across a profile boundary. Verified
+# empirically: applying these profiles leaves the quality dispersion of all nine other
+# sectors changed by exactly 0.000.
+QUALITY_PROFILES: dict[str, dict[str, float]] = {
+    "default": WEIGHTS["quality"],
+    "Financials": {
+        "p_roe": 0.35,                  # return on equity, not on invested capital
+        "p_capital": 0.20,              # equity/assets — see the CET1 note below
+        "p_cash_yield": 0.20,           # operating cash flow / market cap
+        "p_earnings_stability": 0.25,
+    },
+    "Real Estate": {
+        "p_ffo_yield": 0.35,            # approximated FFO / market cap
+        "p_roe": 0.20,
+        "p_leverage_assets": 0.20,      # debt/assets, ranked inverted
+        "p_earnings_stability": 0.25,
+    },
+}
+
+# Regulatory CET1 was requested for the Financials profile and is NOT obtainable.
+# Banks tag capital ratios dimensionally — by consolidated-vs-bank-level entity and by
+# Standardized-vs-Advanced approach — and the bulk XBRL frames API drops dimensional
+# facts. Measured: CommonEquityTierOneCapitalToRiskWeightedAssets returns zero filers
+# universe-wide; TierOneRiskBasedCapitalToRiskWeightedAssets returns 66 filers and hits
+# 1 of 11 large banks. Equity-to-assets is used instead: plainly observable (96% of
+# Financials), directionally the same thing, and labelled a proxy rather than dressed
+# up as a regulatory measure.
+
+# Sectors whose profile requires a metric only that sector reports. Used by the
+# validator to check coverage where it actually matters rather than universe-wide.
+PROFILE_SECTORS = tuple(k for k in QUALITY_PROFILES if k != "default")
+
+
+def quality_profile(sector: str) -> str:
+    """Name of the quality profile a sector scores under."""
+    return sector if sector in QUALITY_PROFILES and sector != "default" else "default"
+
+
+def weights_for(sector: str) -> dict:
+    """Full pillar weights for a sector. Only the quality pillar varies."""
+    return {**WEIGHTS, "quality": QUALITY_PROFILES[quality_profile(sector)]}
+
 # Pillar output ranges. The floors are non-zero on purpose: a company in the bottom
 # percentile of its sector is a poor holding, not a nonexistent one, and mapping it to
 # exactly 0 destroys all information below the floor.
@@ -74,6 +133,7 @@ SIGNAL_TIERS = [(80, "STRONG"), (70, "BUY"), (55, "HOLD"), (40, "WATCH")]
 SECTOR_RELATIVE = {
     "p_roic", "p_fcf_yield", "p_gross_margin", "p_leverage",
     "p_earnings_stability", "p_value",
+    "p_roe", "p_capital", "p_cash_yield", "p_ffo_yield", "p_leverage_assets",
 }
 MIN_SECTOR_GROUP = 5
 
@@ -193,6 +253,13 @@ RANK_SPEC: list[tuple[str, str, bool]] = [
     ("p_trend", "trend", True),
     ("p_liquidity", "adv_usd", True),
     ("p_lowvol", "vol_1y", False),
+    # Sector-profile inputs. Ranked for every name so a profile can be switched
+    # without a re-fetch; only consumed by the profile that names them.
+    ("p_roe", "roe", True),
+    ("p_capital", "equity_to_assets", True),
+    ("p_cash_yield", "cfo_yield", True),
+    ("p_ffo_yield", "ffo_yield", True),
+    ("p_leverage_assets", "debt_to_assets", False),
 ]
 
 ALL_PERCENTILES = [k for k, _, _ in RANK_SPEC] + ["p_value"]
@@ -259,15 +326,26 @@ def prepare(rows: list[dict]) -> list[dict]:
 
     for i in scoreable:
         r = rows[i]
-        observed = [k for k in ALL_PERCENTILES if r.get(k) is not None]
-        r["data_confidence"] = round(len(observed) / len(ALL_PERCENTILES), 3)
-        r["imputed"] = [k for k in ALL_PERCENTILES if r.get(k) is None]
+        # Confidence counts the inputs this name is actually scored on, not every
+        # input that exists. A bank should not be marked low-confidence for lacking a
+        # gross margin its profile never asks for.
+        used = used_percentiles(r.get("sector") or "")
+        observed = [k for k in used if r.get(k) is not None]
+        r["profile"] = quality_profile(r.get("sector") or "")
+        r["data_confidence"] = round(len(observed) / len(used), 3)
+        r["imputed"] = [k for k in used if r.get(k) is None]
         # Substitute the group median for anything unobservable, so a missing input
         # neither fabricates a signal nor silently reads as a confident AVOID — the
         # precise failure that made every name in v2 look like a sell.
         for k in r["imputed"]:
             r[k] = NEUTRAL
     return rows
+
+
+def used_percentiles(sector: str) -> list[str]:
+    """Percentile keys that actually feed a given sector's score."""
+    return (list(QUALITY_PROFILES[quality_profile(sector)])
+            + list(WEIGHTS["confirmation"]) + list(WEIGHTS["risk"]))
 
 
 def score_rows(rows: list[dict], weights: dict | None = None) -> list[dict]:
@@ -278,7 +356,7 @@ def score_rows(rows: list[dict], weights: dict | None = None) -> list[dict]:
             r["conviction"] = None
             r["signal"] = "BENCHMARK"
             continue
-        r.update(score(r, weights))
+        r.update(score(r, weights or weights_for(r.get("sector") or "")))
     return rows
 
 
@@ -293,3 +371,56 @@ def dispersion(rows: list[dict]) -> float:
         return 0.0
     mean = sum(vals) / len(vals)
     return math.sqrt(sum((v - mean) ** 2 for v in vals) / len(vals))
+
+
+# ---------------------------------------------------------------------------
+# specification freeze
+# ---------------------------------------------------------------------------
+# The scoring specification is frozen and versioned. Every constant that can move a
+# score lives in spec() and is hashed; tests/test_spec.py pins the hash, so changing a
+# weight, a floor or a tier boundary fails loudly and forces a deliberate version bump
+# rather than silently re-basing every historical score.
+#
+# This matters most for the research dataset. Snapshots accumulate nightly and are
+# later regressed against forward returns to measure whether the model predicts
+# anything. That analysis is only valid within a single specification: if the weights
+# changed mid-series and nothing recorded it, the Information Coefficient would be
+# computed across two different models and would mean nothing. Every snapshot
+# therefore carries the version and hash of the spec that produced it.
+MODEL_VERSION = "v3.1.0"
+
+
+def spec() -> dict:
+    """Every constant that can change a score, in a stable, serialisable form."""
+    return {
+        "version": MODEL_VERSION,
+        "formula": "100 * (Q * C * R) ** (1/3)",
+        "weights": {k: dict(sorted(v.items())) for k, v in sorted(WEIGHTS.items())},
+        "quality_profiles": {k: dict(sorted(v.items()))
+                             for k, v in sorted(QUALITY_PROFILES.items())},
+        "pillar_ranges": {
+            "q": [Q_FLOOR, Q_SPAN],
+            "c": [C_FLOOR, C_SPAN],
+            "r": [R_FLOOR, R_SPAN],
+            "c_ceiling": C_CEILING,
+        },
+        "mean_reversion": {
+            "quality_gate": MR_QUALITY_GATE,
+            "drawdown_gate": MR_DRAWDOWN_GATE,
+            "drawdown_span": MR_DRAWDOWN_SPAN,
+            "max_uplift": MR_MAX_UPLIFT,
+        },
+        "signal_tiers": [list(t) for t in SIGNAL_TIERS],
+        "rank_spec": [list(r) for r in RANK_SPEC],
+        "sector_relative": sorted(SECTOR_RELATIVE),
+        "min_sector_group": MIN_SECTOR_GROUP,
+        "neutral_percentile": NEUTRAL,
+    }
+
+
+def spec_hash() -> str:
+    """Short stable digest of spec(). Recorded on every ledger and every snapshot."""
+    import hashlib
+    import json as _json
+    blob = _json.dumps(spec(), sort_keys=True, separators=(",", ":")).encode()
+    return hashlib.sha256(blob).hexdigest()[:12]

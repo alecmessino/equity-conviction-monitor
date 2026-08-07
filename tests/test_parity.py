@@ -89,9 +89,17 @@ def run_js(cases: list[dict]) -> list[dict]:
     return json.loads(proc.stdout)
 
 
+PROFILES = ["default", "Financials", "Real Estate", "", None, "Industrials"]
+
+
 def random_case(rng: random.Random) -> dict:
     case = {k: round(rng.random(), 6) for k in model.ALL_PERCENTILES}
     case["drawdown_52w"] = round(rng.random() * 0.6, 6)
+    # Exercise the sector profiles. Without this the gate would run only the default
+    # weighting and stay silent on whichever port got the profile routing wrong.
+    profile = rng.choice(PROFILES)
+    if profile is not None:
+        case["profile"] = profile
     # A quarter of the time, drop some inputs entirely — missing values take a
     # different branch in both implementations and are where drift would hide.
     if rng.random() < 0.25:
@@ -113,6 +121,10 @@ EDGE_CASES: list[dict] = [
     # nothing observed at all
     {k: None for k in model.ALL_PERCENTILES},
     {},
+    # every profile at its extremes, plus an unknown sector that must fall back
+    *[{**{k: v for k in model.ALL_PERCENTILES}, "profile": prof, "drawdown_52w": 0.3}
+      for prof in ("default", "Financials", "Real Estate", "Nonsense Sector")
+      for v in (0.0, 0.5, 1.0)],
 ]
 
 
@@ -124,7 +136,9 @@ def test_js_and_python_agree():
 
     mismatches = []
     for case, got in zip(cases, js_results):
-        want = model.score(dict(case))
+        sector = case.get("profile")
+        want = model.score(dict(case),
+                           model.weights_for(sector) if sector is not None else None)
         for key in ("conviction", "signal"):
             if want[key] != got[key]:
                 mismatches.append((case, key, want[key], got[key]))
@@ -137,6 +151,20 @@ def test_js_and_python_agree():
         + "\n".join(f"  {k}: python={w!r} js={g!r}  case={c}"
                     for c, k, w, g in mismatches[:3])
     )
+
+
+def test_sector_profiles_match_between_implementations():
+    """A profile present in one port and not the other reweights a whole sector."""
+    js = extract_port()
+    for name, weights in model.QUALITY_PROFILES.items():
+        if name == "default":
+            continue
+        block = re.search(rf'"{re.escape(name)}":\s*\{{(.*?)\}}', js, re.S)
+        assert block, f"JS port has no quality profile for {name!r}"
+        found = {m.group(1): float(m.group(2))
+                 for m in re.finditer(r"(\w+)\s*:\s*([0-9.]+)", block.group(1))}
+        assert found == pytest.approx(weights), (
+            f"{name} profile differs — python={weights} js={found}")
 
 
 def test_weights_match_between_implementations():

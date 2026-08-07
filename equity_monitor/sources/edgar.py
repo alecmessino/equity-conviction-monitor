@@ -64,6 +64,23 @@ FLOW_CONCEPTS: list[tuple[str, str, str, list[str]]] = [
         "NetIncomeLoss",
         "ProfitLoss",
     ]),
+    # Income attributable to common holders. Better covered than NetIncomeLoss for
+    # banks (11/11 vs 9/11 of the large US banks) and for REITs, where preferred
+    # distributions make the distinction material.
+    ("net_income_common", "us-gaap", "USD", [
+        "NetIncomeLossAvailableToCommonStockholdersBasic",
+        "NetIncomeLoss",
+    ]),
+    # --- banking income statement ---
+    # Banks do not report OperatingIncomeLoss or GrossProfit at all (0/11 of the
+    # large US banks tag either), which is why the default quality inputs are blank
+    # for the whole sector. These three are tagged by 10-11 of 11.
+    ("net_interest_income", "us-gaap", "USD", [
+        "InterestIncomeExpenseNet",
+        "InterestIncomeExpenseAfterProvisionForLoanLoss",
+    ]),
+    ("noninterest_expense", "us-gaap", "USD", ["NoninterestExpense"]),
+    ("noninterest_income", "us-gaap", "USD", ["NoninterestIncome"]),
     ("cfo", "us-gaap", "USD", [
         "NetCashProvidedByUsedInOperatingActivities",
         "NetCashProvidedByUsedInOperatingActivitiesContinuingOperations",
@@ -108,6 +125,12 @@ INSTANT_CONCEPTS: list[tuple[str, str, str, list[str]]] = [
         "ShortTermBorrowings",
         "LongTermDebtAndCapitalLeaseObligationsCurrent",
         "OtherShortTermBorrowings",
+    ]),
+    # Real-estate carrying value, for a REIT loan-to-value proxy. Only REITs tag it
+    # (8/12 of the large REITs; 0/11 banks), so it doubles as a sector sanity check.
+    ("real_estate", "us-gaap", "USD", [
+        "RealEstateInvestmentPropertyNet",
+        "RealEstateInvestmentPropertyAtCost",
     ]),
     ("shares", "dei", "shares", ["EntityCommonStockSharesOutstanding"]),
     ("shares_common", "us-gaap", "shares", [
@@ -404,12 +427,66 @@ def derive(comp: CompanyFacts, market_cap: float | None) -> dict:
     net_debt = (debt - (cash or 0.0)) if has_debt_tag else None
     net_debt_ebitda = _safe_div(net_debt, ebitda, floor=1e6)
 
+    # --- sector-specific inputs -------------------------------------------------
+    # Computed for every filer; only consumed by the sector profile that needs them.
+    # A company that does not tag the underlying concepts simply gets None here,
+    # which the model treats as unobserved rather than as a zero.
+    net_income_common = comp.val("net_income_common") or comp.val("net_income")
+    equity = comp.val("equity")
+    assets = comp.val("assets")
+
+    # Banks: return on equity, not return on invested capital. "Invested capital" is
+    # not a meaningful denominator for a balance sheet whose liabilities are deposits.
+    roe = _safe_div(net_income_common, equity, floor=1e6)
+
+    # Banks: cost per dollar of revenue produced. Lower is better, so it is ranked
+    # inverted. This is the single most-watched bank efficiency measure.
+    nii = comp.val("net_interest_income")
+    noninterest_income = comp.val("noninterest_income")
+    noninterest_expense = comp.val("noninterest_expense")
+    bank_revenue = None
+    if nii is not None or noninterest_income is not None:
+        bank_revenue = (nii or 0.0) + (noninterest_income or 0.0)
+    efficiency_ratio = _safe_div(noninterest_expense, bank_revenue, floor=1e6)
+
+    # Banks: equity to assets. Regulatory CET1 is NOT obtainable — banks tag capital
+    # ratios dimensionally (consolidated vs bank-level, Standardized vs Advanced) and
+    # the bulk frames API drops dimensional facts, so
+    # CommonEquityTierOneCapitalToRiskWeightedAssets returns zero filers universe-wide.
+    # Equity/assets is a plain, fully-observable capital cushion, and it is labelled as
+    # a proxy rather than presented as a regulatory ratio.
+    equity_to_assets = _safe_div(equity, assets, floor=1e6)
+
+    # REITs: GAAP net income is depressed by property depreciation that does not
+    # reflect economic decline, which is why the industry reports FFO. The exact
+    # NAREIT definition also removes gains on property sales, but that adjustment is
+    # not tagged (0/12 of the large REITs), so this is an APPROXIMATION and is
+    # labelled as one everywhere it surfaces.
+    ffo = None
+    if net_income_common is not None and dna is not None:
+        ffo = net_income_common + dna
+    ffo_yield = _safe_div(ffo, market_cap, floor=1e6)
+
+    # REITs: leverage against the asset base. Assets is used rather than real-estate
+    # carrying value because Assets is tagged by 12/12 large REITs and the real-estate
+    # concepts by 8/12; a better-covered denominator beats a more precise one that is
+    # missing a third of the time.
+    debt_to_assets = _safe_div(debt if has_debt_tag else None, assets, floor=1e6)
+
     return {
         "roic": roic,
         "fcf_yield": fcf_yield,
         "gross_margin": gross_margin,
         "net_debt_ebitda": net_debt_ebitda,
         "earnings_stability": earnings_stability(comp.net_income_history),
+        "roe": roe,
+        "efficiency_ratio": efficiency_ratio,
+        "equity_to_assets": equity_to_assets,
+        "ffo": ffo,
+        "ffo_yield": ffo_yield,
+        "debt_to_assets": debt_to_assets,
+        "cfo_yield": _safe_div(cfo, market_cap, floor=1e6),
+        "real_estate": comp.val("real_estate"),
         "shares": (comp.val("shares") or comp.val("shares_common")
                    or comp.val("shares_diluted")),
         "revenue_ttm": revenue,
