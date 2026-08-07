@@ -345,6 +345,49 @@ amplification. The regression test for it is still in the suite.</div>
 sustained over weeks is what would justify revisiting a specification, and the
 specification stays frozen in the meantime so that the history remains one dataset.</p>
 
+<h2>8d · The overnight diff</h2>
+
+<p>The obvious version of a daily change list — every name whose tier moved — is actively
+misleading, and the churn diagnostic is what showed it. On an ordinary night, <b>39 of 39
+tier changes came from moves of two points or less across a hard threshold</b>. A morning
+list of 39 "new BUYs" built from those would be 39 pieces of noise presented as 39
+decisions, wrong in detail every single day.</p>
+
+<p>So the diff sorts by whether the <em>view</em> changed, not whether a label did:</p>
+
+<table>
+  <tr><th>Section</th><th>What qualifies</th></tr>
+  <tr><td>Upgrades / downgrades</td><td>The tier moved <em>and</em> conviction moved more
+      than 2 points. Something actually happened.</td></tr>
+  <tr><td>Boundary crossings</td><td>The tier moved on a hair. Listed separately and
+      quietly, so they can be recognised and ignored rather than discovered.</td></tr>
+  <tr><td>Moved hard, same tier</td><td>Conviction moved 5+ points without crossing. A
+      tier-only diff drops these, and they are often the most informative rows.</td></tr>
+  <tr><td>Entered / left</td><td>Index mechanics. Never a rating action.</td></tr>
+</table>
+
+<p>Every row carries its driver: the largest factor pushing <em>in the direction of the
+move</em>, taken from the exact log-space attribution already computed nightly. Not the
+largest by magnitude — the biggest number in a decomposition is sometimes a drag pulling
+the other way, and reporting that as the reason yields "+11, driven by deteriorating
+trend", which is two true numbers arranged into a false sentence. The opposing factor is
+shown separately, labelled as working against the move.</p>
+
+<h2>8e · Hover explanations</h2>
+
+<p>Every factor and pillar in the terminal explains itself on hover: the pillar it feeds
+and its weight there, the arithmetic, and what the measure is for. Hovering <b>Risk</b>
+gives the three inputs and their weights; hovering <b>ROIC</b> gives
+<code>NOPAT ÷ (total debt + equity − cash)</code> and what NOPAT means here. Approximations
+and imputed values are called out in the same place rather than in a footnote.</p>
+
+<p>The definitions live in one registry read by every surface — column headers, the factor
+heatmap, the detail panel, the diff's reason column. The alternative, a description written
+at each call site, is how three accounts of the same metric end up disagreeing. Tests
+assert that every scored input has an entry, that no entry describes an input the model
+does not read, and that each carries both a formula and a plain-language note, so a new
+factor cannot ship undocumented.</p>
+
 <h2>9 · Limitations</h2>
 <ul>
   <li>Fundamentals are as-filed and lag the market by up to a quarter.</li>

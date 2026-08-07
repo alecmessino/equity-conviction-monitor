@@ -21,7 +21,8 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from equity_monitor import churn, features, model, monitor, snapshots, universe as uni
+from equity_monitor import (churn, features, model, monitor, snapshots,
+                            universe as uni, watchlist)
 from equity_monitor.sources import edgar, macro
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -271,6 +272,22 @@ def build(limit: int | None = None, skip_macro: bool = False,
             print("churn: pending (needs a second snapshot)")
     except Exception as exc:
         print(f"monitor: skipped ({exc})")
+
+    # The overnight diff, published separately: it is a daily workflow rather than a
+    # diagnostic, and pinning it to monitor.json would couple a morning view to a
+    # monitoring artifact that may grow large.
+    try:
+        diff = watchlist.from_ledger(LEDGER, payload)
+        with open(os.path.join(LEDGER, "watchlist.json"), "w") as fh:
+            json.dump(diff, fh, separators=(",", ":"))
+        if diff:
+            c = diff["counts"]
+            print(f"watchlist: {c['upgrades']} up, {c['downgrades']} down, "
+                  f"{c['movers']} big moves in-tier, {c['boundary']} boundary crossings")
+        else:
+            print("watchlist: pending (needs a second snapshot)")
+    except Exception as exc:
+        print(f"watchlist: skipped ({exc})")
 
     print(f"wrote {prev_path} ({len(scored)} scored, {len(benchmarks)} benchmarks)")
     return payload
