@@ -70,7 +70,8 @@ jobs:
           # ledger/history/ and ledger/factors/ are gitignored: both are regenerated
           # each run and shipped in the Pages artifact instead.
           git add ledger/index.json ledger/history.json ledger/macro.json \
-                  ledger/trends.json ledger/monitor.json ledger/snapshots \
+                  ledger/trends.json ledger/monitor.json ledger/watchlist.json \
+                  ledger/snapshots \
                   docs/terminal.html
           if git diff --cached --quiet; then
             echo "no data changes to commit"
@@ -88,6 +89,7 @@ jobs:
           cp ledger/macro.json      site/ledger/ 2>/dev/null || true
           cp ledger/trends.json     site/ledger/ 2>/dev/null || true
           cp ledger/monitor.json    site/ledger/ 2>/dev/null || true
+          cp ledger/watchlist.json  site/ledger/ 2>/dev/null || true
           cp -r ledger/history      site/ledger/ 2>/dev/null || true
           cp -r ledger/factors      site/ledger/ 2>/dev/null || true
           cp -r ledger/snapshots    site/ledger/ 2>/dev/null || true

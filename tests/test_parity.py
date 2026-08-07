@@ -184,3 +184,70 @@ def test_signal_thresholds_match():
     js = extract_port()
     found = [(int(a), b) for a, b in re.findall(r"\[(\d+),\s*'([A-Z]+)'\]", js)]
     assert found == model.SIGNAL_TIERS
+
+
+# ---------------------------------------------------------------------------
+# hover explanations
+#
+# The terminal explains every factor and pillar on hover, from one registry. These
+# tests exist so a new input cannot ship undocumented: the failure mode is silent —
+# the metric renders fine and simply has no explanation behind it, which nobody
+# notices until someone hovers it looking for the formula and gets nothing.
+# ---------------------------------------------------------------------------
+def _js_object(html: str, name: str) -> list[str]:
+    """Top-level keys of a `const NAME={...}` literal in the terminal."""
+    start = html.index(f"const {name}={{") + len(f"const {name}=")
+    depth, i = 0, start
+    while i < len(html):
+        if html[i] == "{":
+            depth += 1
+        elif html[i] == "}":
+            depth -= 1
+            if depth == 0:
+                break
+        i += 1
+    body = html[start:i + 1]
+    keys, depth = [], 0
+    for line in body.splitlines():
+        stripped = line.strip()
+        if depth == 1 and ":" in stripped and stripped[0].isalpha():
+            keys.append(stripped.split(":", 1)[0].strip())
+        depth += line.count("{") - line.count("}")
+    return keys
+
+
+def test_every_scored_input_has_a_hover_definition():
+    html = TERMINAL.read_text(encoding="utf-8")
+    documented = set(_js_object(html, "FACTOR_DEFS"))
+    scored = set(model.ALL_PERCENTILES)
+    for profile in model.QUALITY_PROFILES.values():
+        scored |= set(profile)
+    missing = scored - documented
+    assert not missing, f"scored inputs with no hover explanation: {sorted(missing)}"
+
+
+def test_no_hover_definition_describes_an_input_the_model_does_not_use():
+    """A definition for a retired factor is documentation that quietly became fiction."""
+    html = TERMINAL.read_text(encoding="utf-8")
+    documented = set(_js_object(html, "FACTOR_DEFS"))
+    scored = set(model.ALL_PERCENTILES)
+    for profile in model.QUALITY_PROFILES.values():
+        scored |= set(profile)
+    assert not documented - scored, \
+        f"explanations for inputs the model never reads: {sorted(documented - scored)}"
+
+
+def test_every_pillar_has_a_hover_definition():
+    html = TERMINAL.read_text(encoding="utf-8")
+    assert set(_js_object(html, "PILLAR_DEFS")) == set(model.WEIGHTS)
+
+
+def test_every_factor_definition_carries_a_formula():
+    """A description without the arithmetic still sends the reader to the docs."""
+    html = TERMINAL.read_text(encoding="utf-8")
+    block = html[html.index("const FACTOR_DEFS={"):html.index("const PILLAR_DEFS={")]
+    for key in _js_object(html, "FACTOR_DEFS"):
+        chunk = block[block.index(key + ":"):]
+        chunk = chunk[:chunk.index("},") + 1]
+        assert "formula:" in chunk, f"{key} has no formula"
+        assert "note:" in chunk, f"{key} has no plain-language note"

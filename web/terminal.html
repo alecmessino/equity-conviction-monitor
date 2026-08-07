@@ -303,6 +303,7 @@ table.mig th{cursor:default;text-align:center}
 
 <nav role="tablist">
   <button role="tab" aria-selected="true" data-view="screener">Screener</button>
+  <button role="tab" aria-selected="false" data-view="watchlist">Watchlist diff</button>
   <button role="tab" aria-selected="false" data-view="sectors">Sectors</button>
   <button role="tab" aria-selected="false" data-view="research">Research</button>
   <button role="tab" aria-selected="false" data-view="portfolio">Portfolio</button>
@@ -389,16 +390,16 @@ table.mig th{cursor:default;text-align:center}
           <th data-k="conviction" aria-sort="descending">Conv</th>
           <th data-k="_delta" title="Change since the previous nightly snapshot">Δ</th>
           <th class="l" data-k="signal">Signal</th>
-          <th data-k="q_raw" title="Sector-relative percentile: ROIC, FCF yield, gross margin, leverage, earnings stability">Quality</th>
-          <th data-k="c_raw" title="Vol-adjusted excess return vs SPY over 1/3/6/12m, plus trend state">Momentum</th>
-          <th data-k="r_raw" title="Dollar liquidity, valuation, realised volatility">Risk</th>
+          <th data-k="q_raw" data-pillar="quality">Quality</th>
+          <th data-k="c_raw" data-pillar="confirmation">Momentum</th>
+          <th data-k="r_raw" data-pillar="risk">Risk</th>
           <th data-k="weight">Weight</th>
           <th data-k="price">Price</th>
           <th data-k="chg_1d">1d</th>
           <th data-k="ret_12m">12m</th>
           <th data-k="drawdown_52w">Drawdn</th>
-          <th data-k="roic">ROIC</th>
-          <th data-k="fcf_yield">FCF yld</th>
+          <th data-k="roic" data-def="p_roic">ROIC</th>
+          <th data-k="fcf_yield" data-def="p_fcf_yield">FCF yld</th>
           <th data-k="pe">P/E</th>
           <th data-k="market_cap">Mkt cap</th>
           <th data-k="data_confidence" title="Share of model inputs observed rather than imputed from the sector median">Conf</th>
@@ -409,6 +410,26 @@ table.mig th{cursor:default;text-align:center}
         imputed from the sector median because the filing did not report them — they lower
         the confidence score rather than silently counting as zero.
       </p>
+    </div>
+  </div>
+
+  <!-- ================= WATCHLIST DIFF ================= -->
+  <div class="view" id="view-watchlist" hidden>
+    <div class="row strip" id="wl-kpis"></div>
+    <div id="wl-main"></div>
+    <div class="card" style="margin-top:12px">
+      <h2>Boundary crossings — the label moved, the view did not</h2>
+      <div id="wl-boundary"></div>
+    </div>
+    <div class="row split" style="margin-top:12px">
+      <div class="card">
+        <h2>Entered the universe</h2>
+        <div id="wl-entered"></div>
+      </div>
+      <div class="card">
+        <h2>Left the universe</h2>
+        <div id="wl-left"></div>
+      </div>
     </div>
   </div>
 
@@ -795,9 +816,21 @@ function convColor(c){
   const t=Math.max(0,Math.min(1,(c-25)/55));           // 25 -> 80 spans the ramp
   return t<0.5 ? mix(lo,mid,t*2) : mix(mid,hi,(t-0.5)*2);
 }
+/* Conviction rendered as *text* rather than as a fill. Near the ramp's neutral midpoint
+   the diverging colour is by construction close to the surface, so a 55 was rendering at
+   roughly a tenth of the contrast of an 85. Text falls back to the body ink through the
+   neutral band; fills keep the full ramp. */
+function convInk(c){
+  if(!nz(c)) return cssVar('--muted');
+  return (c>=38 && c<=64) ? cssVar('--ink-2') : convColor(c);
+}
 function tierStyle(sig,conv){
   const c=convColor(conv);
-  return `color:${sig==='HOLD'?cssVar('--ink-2'):c};border-color:${c};`
+  // Near the ramp's neutral midpoint the diverging colour is by construction almost the
+  // surface colour, which is right for a fill and unreadable as text. The band is wider
+  // than HOLD alone: a WATCH at 46 sits in it too.
+  const neutral = nz(conv) && conv>=38 && conv<=64;
+  return `color:${neutral?cssVar('--ink-2'):c};border-color:${c};`
        + `background:color-mix(in srgb, ${c} 12%, transparent)`;
 }
 
@@ -840,7 +873,7 @@ function sparkline(values,w,h,stroke){
 }
 
 /* ---------- state ---------- */
-const S={ledger:null, rows:[], hist:{}, macro:null, mon:null,
+const S={ledger:null, rows:[], hist:{}, macro:null, mon:null, wl:null,
          sort:{k:'conviction',dir:-1}};
 
 async function boot(){
@@ -864,6 +897,7 @@ async function boot(){
   try{ S.macro=await fetch(base+'macro.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
   try{ S.trends=await fetch(base+'trends.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
   try{ S.mon=await fetch(base+'monitor.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
+  try{ S.wl=await fetch(base+'watchlist.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
 
   const moved=(j.attribution&&j.attribution.names)||{};
   S.rows.forEach(r=>{ r._delta = moved[r.symbol] ? moved[r.symbol].total : null; });
@@ -871,7 +905,7 @@ async function boot(){
   renderHeader(); renderMacro(); renderKPIs(); renderMap(); renderSale(); renderDist();
   renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
   buildSectorFilter(); renderGrid(); renderSectors(); renderPortfolio(); renderData();
-  renderMonitor();
+  renderWatchlist(); renderMonitor();
 }
 
 /* ---------- header ---------- */
@@ -1029,7 +1063,7 @@ function renderSale(){
   }else{
     tb.innerHTML=hits.map(r=>`<tr data-sym="${esc(r.symbol)}">
       <td class="l"><span class="sym">${esc(r.symbol)}</span></td>
-      <td class="conv" style="color:${convColor(r.conviction)}">${r.conviction}</td>
+      <td class="conv" style="color:${convInk(r.conviction)}">${r.conviction}</td>
       <td>${pct(r.q_raw,0)}</td>
       <td class="down">−${pct(r.drawdown_52w,0)}</td>
       <td class="${(r.ret_12m??0)>=0?'up':'down'}">${spct(r.ret_12m,0)}</td>
@@ -1144,7 +1178,7 @@ function renderHeatmap(){
   const qcols=[...new Set(rows.flatMap(r=>Object.keys(weightsFor(r.profile||r.sector).quality)))];
   const cols=[...qcols, ...Object.keys(WEIGHTS.confirmation), ...Object.keys(WEIGHTS.risk)];
   const head=`<tr><th class="l"></th><th class="l"></th>${
-    cols.map(c=>`<th class="rot" title="${esc(FACTOR_LABELS[c]||c)}">${
+    cols.map(c=>`<th class="rot" data-def="${esc(c)}">${
       esc(HEAT_LABELS[c]||FACTOR_LABELS[c]||c)}</th>`).join('')}<th></th></tr>`;
   const body=rows.map(r=>{
     const used=weightsFor(r.profile||r.sector);
@@ -1164,7 +1198,7 @@ function renderHeatmap(){
           title="${esc(r.symbol)} · ${esc(FACTOR_LABELS[c]||c)}: ${imp?'imputed from the sector median':(v*100).toFixed(0)+'th percentile'}">${
             imp?'':(v*100).toFixed(0)}</div></td>`;
       }).join('')}
-      <td class="l" style="padding-left:8px"><b style="color:${convColor(r.conviction)}">${r.conviction}</b></td>
+      <td class="l" style="padding-left:8px"><b style="color:${convInk(r.conviction)}">${r.conviction}</b></td>
     </tr>`;
   }).join('');
   $('#heat').innerHTML=`<table class="hm">${head}${body}</table>`;
@@ -1228,7 +1262,7 @@ function renderLeaders(){
     <td class="l"><span class="sym">${esc(r.symbol)}</span></td>
     <td class="l" style="color:var(--ink-2)">${esc(r.sector||'—')}</td>
     <td>${(r[k]*100).toFixed(0)}</td>
-    <td class="conv" style="color:${convColor(r.conviction)}">${r.conviction}</td></tr>`).join('')
+    <td class="conv" style="color:${convInk(r.conviction)}">${r.conviction}</td></tr>`).join('')
     : `<tr><td colspan="4" class="l" style="color:var(--muted)">No name is measured on this factor.</td></tr>`;
   $('#leaders tbody').onclick=e=>{
     const tr=e.target.closest('tr[data-sym]');
@@ -1298,7 +1332,7 @@ function renderGrid(){
     <td class="l"><span class="sym">${esc(r.symbol)}</span>
         <span class="co">${esc(r.name||'')}</span></td>
     <td class="l" style="color:var(--ink-2)">${esc(r.sector||'—')}</td>
-    <td class="conv" style="color:${convColor(r.conviction)}">${r.conviction}</td>
+    <td class="conv" style="color:${convInk(r.conviction)}">${r.conviction}</td>
     <td class="${nz(r._delta)?(r._delta>0?'up':r._delta<0?'down':''):''}"
         title="${deltaTitle(r)}">${deltaCell(r)}</td>
     <td class="l"><span class="tier" style="${tierStyle(r.signal,r.conviction)}">${esc(r.signal)}</span></td>
@@ -1462,21 +1496,125 @@ const APPROXIMATIONS = {
     + 'which no REIT in this universe tags, so this figure runs slightly high for a '
     + 'REIT that sold assets during the period.',
 };
+/* ---------- definitions: hover anything, see how it is built ----------
+   One registry, read by every surface that names a factor or a pillar. The alternative
+   is a title="" written at each call site, which is how three descriptions of the same
+   metric end up disagreeing. A test asserts every scored input has an entry here, so a
+   new factor cannot ship undocumented. */
+const FACTOR_DEFS={
+  p_roic:{formula:'NOPAT ÷ (total debt + equity − cash)',
+    note:'NOPAT is operating income after a flat 21% tax. Return on the capital the '
+      +'business actually employs, before financing choices.'},
+  p_fcf_yield:{formula:'(operating cash flow − capital expenditure) ÷ market cap',
+    note:'Cash the business generates for its owners, per dollar of market value. '
+      +'Cash rather than earnings, because accruals are a choice and cash is not.'},
+  p_gross_margin:{formula:'gross profit ÷ revenue',
+    note:'Reconstructed from revenue minus cost of revenue where a filer omits the '
+      +'gross profit tag. Pricing power, ranked against sector peers.'},
+  p_leverage:{formula:'(total debt − cash) ÷ EBITDA',
+    note:'Ranked inverted, so less leverage scores higher. Not meaningful for banks '
+      +'and insurers, which are scored on the Financials profile instead.'},
+  p_earnings_stability:{formula:'1 − (σ ÷ |mean|) of annual net income',
+    note:'Coefficient of variation over the reported years. A business whose earnings '
+      +'swing wildly is harder to underwrite at any level of profitability.'},
+  p_rs:{formula:'excess log return vs SPY at 1/3/6/12m (0.15/0.25/0.30/0.30), ÷ realised vol',
+    note:'Dividing by volatility is what makes a utility’s +6% comparable to a '
+      +'semiconductor’s +18%. Without it, a momentum rank is a high-beta screen.'},
+  p_trend:{formula:'price vs 50-day and 200-day moving averages (0.4 / 0.6)',
+    note:'Separates "cheap and recovering" from "cheap and still falling".'},
+  p_liquidity:{formula:'63-day mean of close × volume',
+    note:'Dollar volume, not share volume. A $4 stock trading 10m shares is not more '
+      +'liquid than a $400 stock trading 200k.'},
+  p_value:{formula:'mean of earnings yield and EBITDA/EV, ranked within sector',
+    note:'Yields rather than multiples: a yield stays finite and correctly ordered '
+      +'through zero and negative earnings, where P/E flips sign and misleads.'},
+  p_lowvol:{formula:'annualised realised volatility of daily returns',
+    note:'Ranked inverted, so calmer names score higher.'},
+  p_roe:{formula:'net income ÷ shareholders’ equity',
+    note:'The Financials profile’s core return measure. Banks do not tag operating '
+      +'income or gross profit at all, so ROIC and margin are unavailable for them.'},
+  p_capital:{formula:'shareholders’ equity ÷ total assets',
+    note:'A capital cushion, ranked within Financials.'},
+  p_cash_yield:{formula:'operating cash flow ÷ market cap',
+    note:'The Financials analogue of FCF yield. Capex is not a meaningful drag for a '
+      +'bank, so it is not subtracted.'},
+  p_ffo_yield:{formula:'funds from operations ÷ market cap',
+    note:'The Real Estate profile’s core measure. FFO adds depreciation back to '
+      +'earnings, because a REIT’s buildings do not actually waste away on schedule.'},
+  p_leverage_assets:{formula:'total debt ÷ total assets',
+    note:'Ranked inverted. Used for Real Estate, where debt/EBITDA is distorted by '
+      +'property-level financing.'},
+};
+const PILLAR_DEFS={
+  quality:{title:'Q — Structural quality',
+    note:'How good the business is, ranked against its own sector. Ranking within '
+      +'sector is deliberate: a grocer’s 25% gross margin is excellent for a grocer, '
+      +'and ranking it against software would turn quality into a sector bet.'},
+  confirmation:{title:'C — Market confirmation',
+    note:'Whether the market agrees yet. Vol-adjusted excess return against SPY plus '
+      +'trend state, with a mean-reversion uplift for high-quality names in a drawdown.'},
+  risk:{title:'R — Risk and price',
+    note:'What you pay and what you take on to hold it: dollar liquidity, valuation '
+      +'against sector peers, and realised volatility ranked inverted.'},
+};
+
+/* Rich hover for anything carrying data-def / data-pillar. Delegated once rather than
+   bound per render, so it survives every redraw without re-wiring. */
+function defTip(key, row){
+  const d=FACTOR_DEFS[key];
+  if(!d) return '';
+  const w=row ? weightsFor(row.profile||row.sector) : WEIGHTS;
+  let weight=null, pillar=null;
+  for(const p of ['quality','confirmation','risk'])
+    if(w[p] && w[p][key]!=null){ weight=w[p][key]; pillar=p; }
+  const approx=APPROXIMATIONS[key];
+  const imp=row && (row.imputed||[]).includes(key);
+  return `<b>${esc(FACTOR_LABELS[key]||key)}</b>`
+    + (pillar?`<div class="src">${esc(PILLAR_DEFS[pillar].title)} · weight ${(weight*100).toFixed(0)}% of the pillar</div>`:'')
+    + `<div style="margin:5px 0;font-family:ui-monospace,monospace;font-size:11px;color:var(--ink)">${esc(d.formula)}</div>`
+    + `<div style="color:var(--ink-2)">${esc(d.note)}</div>`
+    + (approx?`<div class="src" style="margin-top:5px">† ${esc(approx)}</div>`:'')
+    + (imp?`<div class="src" style="margin-top:5px">* Not reported for this name — imputed at the sector median, which lowers its confidence score.</div>`:'');
+}
+function pillarTip(key, row){
+  const d=PILLAR_DEFS[key];
+  if(!d) return '';
+  const w=row ? weightsFor(row.profile||row.sector) : WEIGHTS;
+  const parts=Object.entries(w[key]||{}).sort((a,b)=>b[1]-a[1]);
+  return `<b>${esc(d.title)}</b>`
+    + `<div style="margin:5px 0;color:var(--ink-2)">${esc(d.note)}</div>`
+    + `<div class="src" style="margin-bottom:3px">Built from</div>`
+    + parts.map(([k,v])=>`<div class="r"><span>${esc(FACTOR_LABELS[k]||k)}</span>`
+        +`<span>${(v*100).toFixed(0)}%</span></div>`).join('')
+    + `<div class="src" style="margin-top:5px">Hover any of these for its formula.</div>`;
+}
+document.addEventListener('mouseover', e=>{
+  const t=e.target.closest('[data-def],[data-pillar]');
+  if(!t) return;
+  const sym=t.closest('[data-sym]')?.dataset.sym;
+  const row=sym ? S.rows.find(r=>r.symbol===sym) : null;
+  const html = t.dataset.def ? defTip(t.dataset.def, row) : pillarTip(t.dataset.pillar, row);
+  if(html) showTip(html, e.clientX, e.clientY);
+});
+document.addEventListener('mouseout', e=>{
+  if(e.target.closest('[data-def],[data-pillar]')) hideTip();
+});
+
 function factorBars(r){
   const w=weightsFor(r.profile||r.sector);
   const prof=qualityProfile(r.profile||r.sector);
-  const groups=[[prof==='default'?'Quality':`Quality · ${prof} profile`,Object.keys(w.quality)],
-                ['Confirmation',Object.keys(w.confirmation)],
-                ['Risk',Object.keys(w.risk)]];
-  return groups.map(([name,keys])=>`
+  const groups=[['quality',prof==='default'?'Quality':`Quality · ${prof} profile`,Object.keys(w.quality)],
+                ['confirmation','Confirmation',Object.keys(w.confirmation)],
+                ['risk','Risk',Object.keys(w.risk)]];
+  return groups.map(([pillar,name,keys])=>`
     <div style="margin-bottom:10px">
-      <div class="src" style="margin-bottom:3px">${name}</div>
+      <div class="src" style="margin-bottom:3px;cursor:help" data-pillar="${pillar}">${name}</div>
       ${keys.map(k=>{
         const v=r[k], imp=r.imputed&&r.imputed.includes(k);
         const approx=APPROXIMATIONS[k];
         return `<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-          <span style="flex:none;width:150px;font-size:11.5px;color:${imp?'var(--muted)':'var(--ink-2)'}"
-                ${approx?`title="${esc(approx)}"`:''}>
+          <span style="flex:none;width:150px;font-size:11.5px;cursor:help;color:${imp?'var(--muted)':'var(--ink-2)'}"
+                data-def="${esc(k)}">
             ${FACTOR_LABELS[k]||k}${approx?' †':''}${imp?' *':''}</span>
           <span class="pb-track" style="flex:1;width:auto">
             <span class="pb-fill" style="width:${((v??0.5)*100).toFixed(0)}%;
@@ -1504,7 +1642,7 @@ function openPanel(r){
     <section>
       <div class="tile-row">
         <div>
-          <div class="tile-value num" style="color:${convColor(sc.conviction)}">${sc.conviction}</div>
+          <div class="tile-value num" style="color:${convInk(sc.conviction)}">${sc.conviction}</div>
           <div class="tile-sub">conviction ·
             <span class="tier" style="${tierStyle(sc.signal,sc.conviction)}">${sc.signal}</span></div>
         </div>
@@ -1667,7 +1805,7 @@ function renderSectors(){
 
   $('#sec-table tbody').innerHTML=stats.map(d=>`<tr>
     <td class="l">${esc(d.sector)}</td><td>${d.n}</td>
-    <td class="conv" style="color:${convColor(d.conv)}">${d.conv.toFixed(0)}</td>
+    <td class="conv" style="color:${convInk(d.conv)}">${d.conv.toFixed(0)}</td>
     <td class="${(d.ret??0)>=0?'up':'down'}">${spct(d.ret,0)}</td>
     <td>${pct(d.cov,0)}</td></tr>`).join('');
 }
@@ -1689,7 +1827,7 @@ function renderPortfolio(){
   $('#pf tbody').innerHTML = held.length ? held.map(r=>`<tr data-sym="${esc(r.symbol)}">
       <td class="l"><span class="sym">${esc(r.symbol)}</span></td>
       <td class="l" style="color:var(--ink-2)">${esc(r.sector||'—')}</td>
-      <td class="conv" style="color:${convColor(r.conviction)}">${r.conviction}</td>
+      <td class="conv" style="color:${convInk(r.conviction)}">${r.conviction}</td>
       <td>${num(r.weight,2)}%</td>
       <td class="${(r.ret_12m??0)>=0?'up':'down'}">${spct(r.ret_12m,0)}</td>
       <td>${pct(r.vol_1y,0)}</td></tr>`).join('')
@@ -1761,6 +1899,112 @@ function renderData(){
     <tr><td>Conviction dispersion</td><td>${num(j.dispersion,1)}</td></tr>
     <tr><td>Symbols with no price data</td>
         <td>${fails.length?esc(fails.slice(0,6).join(', '))+(fails.length>6?` +${fails.length-6}`:''):'none'}</td></tr>`;
+}
+
+/* ---------- watchlist diff ----------
+   The morning question: what changed, and is it worth acting on. Deliberately NOT a list
+   of every tier change. On an ordinary night the churn diagnostic measured 39 of 39 tier
+   changes coming from moves of two points or less across a hard threshold — a "new BUY"
+   list built from those would be wrong in detail every single day. Real reclassifications
+   lead; boundary crossings are filed separately and quietly; large moves that stayed
+   inside a tier are surfaced because a tier-only diff drops them entirely. */
+function wlRow(r, opts){
+  const up=r.delta>=0;
+  const why=r.driver
+    ? `<span data-def="${esc(r.driver.factor)}" style="cursor:help">${esc(FACTOR_LABELS[r.driver.factor]||r.driver.factor)}</span>
+       <span class="src">${r.driver.points>0?'+':''}${num(r.driver.points,1)}</span>`
+    : '<span class="src">not attributable</span>';
+  const against=r.drag
+    ? `<div class="src" style="margin-top:1px">against: ${esc(FACTOR_LABELS[r.drag.factor]||r.drag.factor)}
+       ${r.drag.points>0?'+':''}${num(r.drag.points,1)}</div>` : '';
+  return `<tr data-sym="${esc(r.symbol)}">
+    <td class="l"><span class="sym">${esc(r.symbol)}</span>
+      <span class="co">${esc(r.name||'')}</span></td>
+    <td class="l"><span class="tier" style="${tierStyle(r.to_tier,r.to)}">${esc(r.to_tier)}</span>
+      ${(opts&&opts.showFrom===false)?'':`<span class="src">from ${esc(r.from_tier)}</span>`}</td>
+    <td class="conv" style="color:${convInk(r.to)}">${r.to}</td>
+    <td class="delta ${up?'up':'down'}">${up?'▲ +':'▼ '}${r.delta}</td>
+    <td class="l">${why}${against}</td>
+  </tr>`;
+}
+
+function wlTable(rows, empty, opts){
+  if(!rows||!rows.length) return `<div class="pending">${empty}</div>`;
+  return `<div class="tbl-wrap" style="max-height:420px"><table>
+    <thead><tr><th class="l">Name</th><th class="l">Tier</th><th>Conv</th><th>Δ</th>
+      <th class="l">Driven by</th></tr></thead>
+    <tbody>${rows.map(r=>wlRow(r,opts)).join('')}</tbody></table></div>`;
+}
+
+function renderWatchlist(){
+  const d=S.wl;
+  const hosts=['#wl-kpis','#wl-main','#wl-boundary','#wl-entered','#wl-left'];
+  if(!d){
+    $('#wl-kpis').innerHTML='';
+    $('#wl-main').innerHTML=`<div class="card"><div class="pending">
+      <b>Waiting on a second snapshot.</b> The diff compares tonight's board against the
+      previous run, so it appears after the next nightly build. It is not back-filled:
+      the history starts when recording started, and inventing a prior board to diff
+      against would make the first morning's list fiction.</div></div>`;
+    ['#wl-boundary','#wl-entered','#wl-left'].forEach(s=>{
+      $(s).innerHTML='<div class="pending">Nothing to compare against yet.</div>'; });
+    return;
+  }
+  const c=d.counts||{};
+  $('#wl-kpis').innerHTML=
+     tile('Upgrades', c.upgrades??0, `moved tier on more than ${num(d.marginal_move,0)} points`)
+   + tile('Downgrades', c.downgrades??0, 'a real reclassification, not a boundary')
+   + tile('Big moves, same tier', c.movers??0, `${num(d.material_move,0)}+ points without crossing`)
+   + tile('Boundary crossings', c.boundary??0, 'label moved, view did not');
+
+  $('#wl-main').innerHTML=`
+    <div class="card" style="margin-bottom:12px">
+      <div class="tile-row" style="margin-bottom:8px">
+        <h3 class="sub-h" style="margin:0">Upgrades</h3>
+        <span class="tile-sub">${esc(d.from)} → ${esc(d.to)} · ${d.names_compared} names compared</span>
+      </div>
+      ${wlTable(d.upgrades,'No name was reclassified upward on a material move.')}
+    </div>
+    <div class="row split">
+      <div class="card">
+        <h2>Downgrades</h2>
+        ${wlTable(d.downgrades,'No name was reclassified downward on a material move.')}
+      </div>
+      <div class="card">
+        <h2>Moved hard without changing tier</h2>
+        ${wlTable(d.movers,`No name moved ${num(d.material_move,0)} points or more inside its tier.`)}
+        <p class="card-note">A name going 58 → 68 has not become a BUY, but it is doing
+        something, and a diff built only on tier changes would never show it.</p>
+      </div>
+    </div>`;
+
+  $('#wl-boundary').innerHTML=wlTable(d.boundary,
+      'No tier changed on a marginal move tonight.')
+    + `<p class="card-note">These crossed a threshold on ${num(d.marginal_move,0)} points
+    or less. <b>That is not a change of view</b> — a name at 69 and a name at 71 are not
+    different holdings, and the tier is a label applied to a continuous score. They are
+    listed so they can be recognised and ignored rather than discovered as a surprise.</p>`;
+
+  const plain=(rows,empty)=> rows&&rows.length
+    ? `<div class="tbl-wrap" style="max-height:220px"><table>
+        <thead><tr><th class="l">Name</th><th class="l">Sector</th><th class="l">Tier</th><th>Conv</th></tr></thead>
+        <tbody>${rows.map(r=>`<tr data-sym="${esc(r.symbol)}">
+          <td class="l"><span class="sym">${esc(r.symbol)}</span><span class="co">${esc(r.name||'')}</span></td>
+          <td class="l src">${esc(r.sector||'—')}</td>
+          <td class="l">${r.tier?`<span class="tier" style="${tierStyle(r.tier,r.conviction)}">${esc(r.tier)}</span>`:'—'}</td>
+          <td class="conv">${r.conviction??'—'}</td></tr>`).join('')}</tbody></table></div>`
+    : `<div class="pending">${empty}</div>`;
+  $('#wl-entered').innerHTML=plain(d.entered,'No new names.')
+    + `<p class="card-note">Index mechanics, not a rating action. A name appearing here
+    was not upgraded — it was simply not being scored yesterday.</p>`;
+  $('#wl-left').innerHTML=plain(d.left,'No names dropped out.')
+    + `<p class="card-note">Removed from the universe file or unpriceable in this run.
+    Not a sell signal.</p>`;
+
+  hosts.forEach(s=>{ $(s).onclick=e=>{
+    const tr=e.target.closest('tr[data-sym]');
+    if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+  };});
 }
 
 /* ---------- monitor ----------
@@ -2158,7 +2402,7 @@ $('#theme').onclick=()=>{
   if(S.ledger){ renderMacro(); renderMap(); renderGrid(); renderSectors();
                 renderPortfolio(); renderData(); renderSale(); renderDist();
                 renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
-                renderMonitor(); }
+                renderWatchlist(); renderMonitor(); }
 };
 try{
   const saved=localStorage.getItem('ecm-theme');

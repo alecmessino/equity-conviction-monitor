@@ -111,6 +111,7 @@ equity_monitor/
   snapshots.py         nightly factor-level history + score-change attribution
   monitor.py           self-grading: stability, coverage trend, regime, health
   churn.py             why the board moved: information vs. model sensitivity
+  watchlist.py         the overnight diff: what changed and whether it matters
   nightly.py           orchestrator; writes ledger/
   sources/
     _http.py           retries, throttling, gzip, on-disk cache
@@ -152,6 +153,23 @@ mean anything, and per-name elasticity reported with the weakest pillar so the m
 is nameable.
 
 It reports evidence, never a prescription. One night is a single reading.
+
+### The overnight diff
+
+`equity_monitor/watchlist.py` builds the morning view: upgrades, downgrades, large moves
+that stayed inside a tier, and — kept deliberately separate — tier changes caused by a
+move too small to mean anything. That separation is the whole design. The churn
+diagnostic measured 39 of 39 tier changes on an ordinary night coming from moves of two
+points or less; a "new BUY" list built from those would be wrong in detail every day.
+Each row names the largest factor pushing in the direction of the move, and the largest
+one pushing against it.
+
+### Hover explanations
+
+Every factor and pillar explains itself on hover — the pillar it feeds and its weight,
+the arithmetic, and what the measure is for — from a single registry read by every
+surface. Tests assert that every scored input has an entry and that no entry describes an
+input the model does not read, so a new factor cannot ship undocumented.
 
 ## The parity gate
 
