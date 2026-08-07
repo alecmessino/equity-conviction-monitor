@@ -2228,8 +2228,9 @@ function drawPoints(s, x, y, m, W, H){
     }
   };
 
-  $('#legend-density').hidden=!dense;
-  $('#legend-area').textContent=dense?'Focus layer: area ∝ market cap':'Area ∝ market cap, capped';
+  const note=$('#map-mode-note'), legend=$('#legend-density'), area=$('#legend-area');
+  if(legend) legend.hidden=!dense;
+  if(area) area.textContent=dense?'Focus layer: area ∝ market cap':'Area ∝ market cap, capped';
 
   if(!dense){
     drawQuadrantLabels(s, m, W, H);
@@ -2240,7 +2241,7 @@ function drawPoints(s, x, y, m, W, H){
       bind(el('circle',{cx:px(r),cy:py(r),r:rad,fill:'none',
         stroke:convColor(r.conviction),'stroke-opacity':0.55,'stroke-width':1.1},s), r, false);
     });
-    $('#map-mode-note').textContent =
+    if(note) note.textContent =
       `All ${rows.length} as unfilled rings, radius capped at 13px — overlap reads as `
       + `intersection, not occlusion. Hover or click any ring.`;
     return;
@@ -2285,9 +2286,10 @@ function drawPoints(s, x, y, m, W, H){
     t.textContent=r.symbol;
   });
 
-  $('#ramp-density').style.background=
+  const rd=$('#ramp-density');
+  if(rd) rd.style.background=
     `linear-gradient(90deg, color-mix(in srgb, ${cssVar('--s1')} 8%, transparent), ${cssVar('--s1')})`;
-  $('#map-mode-note').textContent =
+  if(note) note.textContent =
     `${rows.length} names as a hex-binned density field · top ${FOCUS_N} by conviction drawn `
     + `as points, 8 labelled. Hover a cell for the names inside it.`;
 }
@@ -3035,6 +3037,22 @@ $('#csv').onclick=()=>{
   a.href=url; a.download='conviction_'+(S.ledger.as_of||'').slice(0,10)+'.csv';
   document.body.appendChild(a); a.click(); a.remove(); URL.revokeObjectURL(url);
 };
+
+/* ---------- last line of defence ----------
+   Anything that throws outside boot()'s own catch — a render, a listener, a script-scope
+   statement — used to leave the header and nav standing over an empty page with no
+   explanation. A terminal that fails silently is the failure mode this rebuild exists to
+   remove, so it reports on itself here too. */
+function reportFatal(what, err){
+  const box=document.getElementById('alert');
+  if(!box || box.dataset.fatal) return;
+  box.dataset.fatal='1';
+  box.innerHTML=`<div class="banner"><b>The terminal hit an error while ${esc(what)}.</b>
+    Part of this page did not render. Nothing below is stale or invented — it is simply
+    absent. <code>${esc(String((err && (err.message||err)) || 'unknown'))}</code></div>`;
+}
+addEventListener('error', e=>reportFatal('rendering', e.error||e.message));
+addEventListener('unhandledrejection', e=>reportFatal('loading', e.reason));
 
 boot();
 </script>
