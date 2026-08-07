@@ -259,6 +259,44 @@ nonsense.</p>
       a profile leaks onto a sector it was not meant to touch.</li>
 </ul>
 
+<h2>8b · Self-monitoring</h2>
+
+<p>Verification above runs at build time and blocks a bad ledger from shipping. Monitoring
+runs continuously over the ledgers that did ship, and is published as
+<code>ledger/monitor.json</code> and the terminal's <b>Monitor</b> tab. It answers one
+question: <i>is the machinery working?</i> It deliberately does not answer, and must not be
+read as answering, whether the scores are any good.</p>
+
+<div class="note warn">A board can be fresh, well dispersed, fully covered and perfectly
+stable while forecasting nothing whatsoever. Stability says the ordering is not being
+reshuffled by noise; it says nothing about whether the ordering is correct. Conflating the
+two would be the most damaging thing this module could do.</div>
+
+<ul>
+  <li><b>Ranking stability</b> — Spearman rank correlation between consecutive snapshots
+      (ties averaged, which matters when an integer score over ~1,000 names produces many
+      of them), plus mean, median and maximum absolute conviction change, and a full 5×5
+      tier migration matrix. The migration counts matter more than the mean move: a board
+      can have a small average change while quietly reclassifying half its BUY list.</li>
+  <li><b>Coverage trend</b> — mean data confidence and the share of names with every input
+      observed, per run and per sector. A sustained fall means a filing tag changed
+      underneath the pipeline, not that companies got worse. This is the earliest available
+      warning of a silent source break.</li>
+  <li><b>Regime</b> — four independent observed readings (10-year level and direction, 2s10s,
+      VIX, high-yield OAS) rather than one cycle label. "Late-cycle" is an interpretation
+      that reads as a forecast once printed; these are measurements. Nothing here feeds back
+      into a score. It is recorded so that, once enough history exists, factor behaviour can
+      be segmented by the conditions it occurred in.</li>
+  <li><b>Specification continuity</b> — which spec hash produced each stretch of history, and
+      where the boundaries fall. A series spanning two hashes is two datasets.</li>
+</ul>
+
+<p>Every history-dependent metric reports its sample size, and anything not yet computable
+says what it is waiting for rather than returning a default that would render as a real
+reading. Whether high-conviction names outperform low-conviction names is an Information
+Coefficient question requiring months of accumulated snapshots within a single
+specification; it is not measured here and no panel implies otherwise.</p>
+
 <h2>9 · Limitations</h2>
 <ul>
   <li>Fundamentals are as-filed and lag the market by up to a quarter.</li>
