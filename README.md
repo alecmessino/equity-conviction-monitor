@@ -204,6 +204,17 @@ a book from whatever the screener is showing, and a **factor exposure** panel re
 book's weighted percentile against the universe median for all fifteen model inputs,
 counting only the names whose sector profile actually reads each one.
 
+Baselines are chosen from the data's range rather than defaulted to zero. Sector medians
+occupy 46–62 of a hundred-point score, so bars grown from zero differed in length by under
+a quarter and all eleven sectors read alike; they now diverge from the universe median,
+which is drawn and labelled. The factor-exposure panel keeps its fixed ±50 axis for the
+opposite reason — that is the entire range a deviation from a median percentile can take,
+and rescaling it to the book would draw a 6-point tilt the same size as a 30-point one.
+
+Charts size to the panel they are in rather than to a hardcoded design width, so a 1540px
+card no longer renders a 700px chart against 840px of nothing; the coordinate system stays
+1:1 with CSS pixels at every width, so a 9.5px tick label is never scaled up to 28px.
+
 Contrast was measured, not assumed: the small-caps label colour was 3.50:1 on the light
 surface, below AA for 10px uppercase text, and is now 5.27:1 light / 7.23:1 dark.
 
