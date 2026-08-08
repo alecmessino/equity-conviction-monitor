@@ -135,6 +135,14 @@ main{padding:16px 20px 48px;max-width:1680px;margin:0 auto}
 
 /* --- tables --- */
 .tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:70vh;border-radius:8px}
+/* A scroll box whose height is not a multiple of the row height cuts its last row
+   through the middle, and a half-drawn row reads as a broken panel rather than as more
+   content below. A sticky pseudo-element stays pinned to the bottom of the scroll port
+   (an absolutely positioned one would scroll away with the content) and fades the cut
+   edge, so the truncation reads as truncation. It lifts once scrolled to the end. */
+.tbl-wrap::after{content:"";display:block;position:sticky;bottom:0;height:26px;
+  margin-top:-26px;pointer-events:none;
+  background:linear-gradient(transparent,var(--surface))}
 table{width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
 th,td{padding:6px 9px;text-align:right;font-size:12px;white-space:nowrap}
 th{
