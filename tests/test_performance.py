@@ -204,3 +204,19 @@ def test_the_validator_rejects_benchmark_points_on_an_unavailable_benchmark(ledg
 def test_a_missing_performance_file_is_not_a_failure(tmp_path):
     import scripts.validate_ledger as v
     assert v.check_performance(str(tmp_path)) == []
+
+
+def test_the_origin_is_the_first_measured_night_not_the_first_recorded_one(ledger):
+    """Latent here until a leg is dropped, and immediate on the crypto ledger, whose
+    first three legs lose too much of the book to be returns. Anchoring the series at
+    the first recorded date draws a segment across the gap and attributes one night's
+    move to all of it."""
+    snap(ledger, "2026-01-01", [("A", 100.0, 20.0), ("GONE", 100.0, 80.0)])
+    for i, p in enumerate([101.0, 102.0, 103.0, 104.0]):
+        snap(ledger, f"2026-01-0{i+2}", [("A", p, 100.0)])
+    out = performance.build(str(ledger))
+    assert out["legs_dropped"] == 1
+    assert out["from"] == "2026-01-02"            # not 2026-01-01
+    assert out["recorded_from"] == "2026-01-01"
+    assert out["series"][0]["date"] == "2026-01-02"
+    assert out["series"][0]["book"] == 0.0
