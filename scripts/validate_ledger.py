@@ -278,6 +278,39 @@ def check_snapshots(ledger_dir: str) -> list[str]:
     return problems
 
 
+def check_performance(ledger_dir: str) -> list[str]:
+    """The paper-return curve must not claim to be renderable before it is.
+
+    This is the one artifact here that states a *result* rather than a condition, so it
+    is the one most worth gating. The failure this project actually had was publishing
+    something that looked like an answer while measuring nothing; a curve drawn through
+    two points is the same mistake in a new costume, and a flag flipped by a refactor
+    would ship it silently.
+    """
+    path = os.path.join(ledger_dir, "performance.json")
+    if not os.path.exists(path):
+        return []
+    try:
+        with open(path) as fh:
+            perf = json.load(fh)
+    except Exception as exc:
+        return [f"performance.json unreadable: {exc}"]
+
+    problems: list[str] = []
+    legs, need = perf.get("legs") or 0, perf.get("min_days") or 0
+    if perf.get("renderable") and legs < need - 1:
+        problems.append(f"performance.json claims renderable on {legs} measured leg(s), "
+                        f"below the {need}-day threshold it declares")
+    if perf.get("book_total") is not None and not legs:
+        problems.append("performance.json reports a total return with no measured legs")
+    for pt in perf.get("series") or []:
+        if pt.get("benchmark") is not None and not perf.get("benchmark_available"):
+            problems.append("performance.json carries benchmark points while reporting "
+                            "the benchmark unavailable")
+            break
+    return problems
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -306,6 +339,7 @@ def main() -> int:
     ledger_dir = os.path.dirname(os.path.abspath(args.path))
     if not args.skip_snapshots:
         problems += check_snapshots(ledger_dir)
+    problems += check_performance(ledger_dir)
 
     rows = payload.get("all") or []
     convictions = [r.get("conviction") for r in rows if r.get("conviction") is not None]
