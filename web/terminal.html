@@ -163,6 +163,11 @@ tbody tr:hover td{background:var(--plane)}
   display:inline-block;padding:1px 7px;border-radius:5px;font-size:10px;
   font-weight:600;letter-spacing:.02em;border:1px solid transparent;
 }
+/* A tier that changed overnight on a move too small to mean anything. The caveat lives
+   on the label it qualifies rather than only in the watchlist tab, because the moment it
+   matters is when you are looking at this row and reading STRONG as news. Dotted, not
+   coloured: it qualifies the label, it is not a fourth signal state. */
+.tier.marginal{border-bottom-style:dotted;border-bottom-color:currentColor;cursor:help}
 .conv{font-weight:600;font-size:13px}
 
 /* percentile bar: sequential single hue, magnitude only */
@@ -651,7 +656,7 @@ table.mig th.l,table.mig td.l,
           <th class="grp" data-k="data_confidence" title="Share of model inputs observed rather than imputed from the sector median">Conf</th>
         </tr></thead><tbody></tbody>
       </table></div>
-      <p class="card-note">
+      <p class="card-note" id="grid-note">
         Click any row for the full decomposition and its source filings. Italic values are
         imputed from the sector median because the filing did not report them — they lower
         the confidence score rather than silently counting as zero.
@@ -1576,6 +1581,21 @@ function filtered(){
     && (!sig || r.signal===sig)
     && ((r.data_confidence??1)>=conf));
 }
+/* Symbols whose tier changed overnight on a move at or under the marginal threshold,
+   from the diff that already computed them. Built once per render rather than per row. */
+function marginalTiers(){
+  const rows=(S.wl&&S.wl.boundary)||[];
+  const m=new Map();
+  for(const b of rows) m.set(b.symbol,b);
+  return m;
+}
+function tierPill(r){
+  const b=S._marginal&&S._marginal.get(r.symbol);
+  if(!b) return `<span class="tier" style="${tierStyle(r.signal,r.conviction)}">${esc(r.signal)}</span>`;
+  const n=Math.abs(b.delta);
+  return `<span class="tier marginal" style="${tierStyle(r.signal,r.conviction)}"
+    title="Was ${esc(b.from_tier)} last night and crossed on ${n} point${n===1?'':'s'} — the label moved, the view did not. ${b.from} → ${b.to}.">${esc(r.signal)}</span>`;
+}
 function deltaCell(r){
   if(!S.ledger.attribution||!S.ledger.attribution.since) return '<span style="color:var(--muted)">·</span>';
   if(!nz(r._delta)||r._delta===0) return '<span style="color:var(--muted)">—</span>';
@@ -1617,6 +1637,16 @@ function renderGrid(){
   const shown=rowLimit?rows.slice(0,rowLimit):rows;
   const attr=S.ledger.attribution;
   $('#grid').classList.toggle('no-delta', !(attr&&attr.since));
+  S._marginal=marginalTiers();
+  // The legend only appears when there is something on screen wearing it.
+  const marked=shown.filter(r=>S._marginal.has(r.symbol)).length;
+  const note=$('#grid-note'), base=note.dataset.base||(note.dataset.base=note.innerHTML);
+  note.innerHTML = marked
+    ? base+` A <span class="tier marginal" style="${tierStyle('HOLD',60)}">dotted</span>
+       tier changed overnight on ${num(S.wl.marginal_move,0)} points or less — hover it for
+       last night's label. ${marked} on screen; the tier is a cut through a continuous
+       score, and the conviction number beside it is the honest reading.`
+    : base;
   $('#count').textContent = shown.length<rows.length
     ? `${shown.length} shown · ${rows.length} match · ${S.rows.length} scored`
     : `${rows.length} of ${S.rows.length} names`;
@@ -2220,7 +2250,7 @@ function gridRows(shown){
     <td class="grp conv n" style="color:${convInk(r.conviction)}">${r.conviction}</td>
     <td class="n col-delta ${nz(r._delta)?(r._delta>0?'up':r._delta<0?'down':''):''}"
         title="${deltaTitle(r)}">${deltaCell(r)}</td>
-    <td class="l"><span class="tier" style="${tierStyle(r.signal,r.conviction)}">${esc(r.signal)}</span></td>
+    <td class="l">${tierPill(r)}</td>
     <td class="grp">${pbar(r.q_raw)}</td>
     <td>${pbar(r.c_raw)}</td>
     <td>${pbar(r.r_raw)}</td>
@@ -2904,8 +2934,8 @@ function renderChurn(c, observations){
   const amps=(e.amplifiers||[]).slice(0,8).map(x=>`<tr>
       <td class="l"><span class="sym">${esc(x.symbol)}</span></td>
       <td>${x.conviction_move>0?'+':''}${x.conviction_move}</td>
-      <td>${num(x.input_move,3)}</td>
-      <td>${num(x.elasticity,1)}</td>
+      <td>${num(x.input_move*100,1)}</td>
+      <td>${num(x.elasticity/100,1)}×</td>
       <td>${esc(x.weakest_pillar||'—')} ${nz(x.weakest_pillar_value)?num(x.weakest_pillar_value,2):''}</td>
     </tr>`).join('');
 
@@ -2921,12 +2951,16 @@ function renderChurn(c, observations){
       </div>
     </div>
     <div class="row strip" style="margin-bottom:10px">
-      <div class="card"><div class="tile-label">Input movement</div>
-        <div class="tile-value num">${num(c.input_movement,3)}</div>
-        <div class="tile-sub">weighted mean |Δ percentile|</div></div>
-      <div class="card"><div class="tile-label">Standing movement</div>
-        <div class="tile-value num">${num(c.output_movement,3)}</div>
-        <div class="tile-sub">mean |Δ| in the conviction ranking</div></div>
+      <!-- Percentiles are carried as 0-1 fractions and every other surface renders them
+           on 0-100. Printing the two headline numbers as 0.014 and 0.029 put the one
+           panel meant to explain the night's move in a different unit from the board it
+           is explaining, and to three decimals nobody can hold. -->
+      <div class="card"><div class="tile-label">Inputs moved</div>
+        <div class="tile-value num">${num(c.input_movement*100,1)} <span style="font-size:13px">pts</span></div>
+        <div class="tile-sub">average, weighted by how much each input counts</div></div>
+      <div class="card"><div class="tile-label">Standings moved</div>
+        <div class="tile-value num">${num(c.output_movement*100,1)} <span style="font-size:13px">pts</span></div>
+        <div class="tile-sub">average shift in a name's place in the ranking</div></div>
       <div class="card"><div class="tile-label">Ratio</div>
         <div class="tile-value num" style="color:${tone}">${nz(ratio)?num(ratio,1)+'×':'—'}</div>
         <div class="tile-sub">flags above ${num(c.threshold,1)}×</div></div>
@@ -2962,13 +2996,15 @@ function renderChurn(c, observations){
       <div>
         <h3 class="sub-h">Names the model moved hardest</h3>
         ${amps?`<div class="tbl-wrap" style="max-height:220px"><table>
-          <thead><tr><th class="l">Ticker</th><th>Δ conv</th><th>Δ input</th>
-            <th>Pts / unit</th><th class="l">Weakest pillar</th></tr></thead>
+          <thead><tr><th class="l">Ticker</th><th>Δ conv</th><th>Inputs moved</th>
+            <th title="Conviction points moved per percentile point of input movement">Amplification</th>
+            <th class="l">Weakest pillar</th></tr></thead>
           <tbody>${amps}</tbody></table></div>`
         :'<div class="pending">No name moved on a measurable input change.</div>'}
         <p class="card-note">${e.median===0
           ? 'Median across the board is zero — most names did not move a published point at all, so the turnover is concentrated in the rows above rather than spread across the universe.'
-          : `Median across the board is ${num(e.median,1)} points per unit of input movement.`}
+          : `Median across the board is ${num(e.median/100,1)}× — a typical name moves
+             ${num(e.median/100,1)} conviction points for every percentile point its inputs move.`}
         A pillar near its floor moves the score hardest, because conviction is a cube root
         of a product — that is the geometric mean working as designed, and it is also
         where turnover concentrates.</p>
