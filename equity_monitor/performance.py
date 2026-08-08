@@ -128,8 +128,14 @@ def build(ledger_dir: str = LEDGER) -> dict:
 
     series, book, bench, eq = [], 1.0, 1.0, 1.0
     bench_live = False
-    if dates:
-        series.append({"date": dates[0], "book": 0.0, "benchmark": 0.0, "equal_weight": 0.0})
+    # The origin is where measurement starts — the first *usable* leg's earlier date,
+    # not the first date on file. Anchoring at dates[0] when the opening legs were
+    # dropped draws a segment spanning the gap and attributes one night's return to all
+    # of it. Latent here (no leg has been dropped yet) and immediate on the crypto
+    # ledger, where the first three legs lose too much of the book to be returns.
+    if usable:
+        series.append({"date": usable[0]["from"], "book": 0.0,
+                       "benchmark": 0.0, "equal_weight": 0.0})
     for l in usable:
         book *= (1.0 + l["book"])
         if l["benchmark"] is not None:
@@ -170,8 +176,10 @@ def build(ledger_dir: str = LEDGER) -> dict:
         "renderable": len(usable) >= MIN_DAYS - 1,
         "legs": len(usable),
         "legs_dropped": len(ls) - len(usable),
-        "from": dates[0] if dates else None,
-        "to": dates[-1] if dates else None,
+        "from": usable[0]["from"] if usable else (dates[0] if dates else None),
+        "to": usable[-1]["to"] if usable else (dates[-1] if dates else None),
+        "recorded_from": dates[0] if dates else None,
+        "recorded_to": dates[-1] if dates else None,
         "benchmark": "SPY",
         "benchmark_legs": sum(1 for l in usable if l["benchmark"] is not None),
         "benchmark_available": bench_live,

@@ -2231,7 +2231,12 @@ function renderAlpha(){
   const vals=s.flatMap(d=>[d.book,d.benchmark].filter(v=>v!=null));
   const lo=Math.min(0,...vals), hi=Math.max(0,...vals), pad=Math.max(0.5,(hi-lo)*0.12);
   const y=v=>H-m.b-(v-(lo-pad))/((hi+pad)-(lo-pad))*(H-m.t-m.b);
-  const x=i=>m.l+(s.length===1?0.5:i/(s.length-1))*(W-m.l-m.r);
+  // Positioned by date rather than by index. Equal index spacing draws a week-long gap
+  // — a stretch where legs were dropped, or the ledger simply did not run — as one
+  // ordinary segment, which attributes one night's move to all of it.
+  const day=d=>Date.parse(d+'T00:00:00Z')/864e5;
+  const t0=day(s[0].date), t1=day(s[s.length-1].date), span=(t1-t0)||1;
+  const x=i=>m.l+(s.length===1?0.5:(day(s[i].date)-t0)/span)*(W-m.l-m.r);
   const g=svgIn(host,W,H);
   g.setAttribute('aria-label',`Cumulative paper return of the book against ${p.benchmark}`);
 
