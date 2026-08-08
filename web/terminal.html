@@ -116,7 +116,10 @@ main{padding:16px 20px 48px;max-width:1680px;margin:0 auto}
 .card-note{color:var(--muted);font-size:11px;margin-top:10px;line-height:1.5}
 .row{display:grid;gap:12px;margin-bottom:12px}
 .strip{grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
-.split{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);align-items:start}
+/* Cards stretch to the row height rather than sitting at their natural height. With
+   align-items:start a short card leaves the page background showing beside a tall one,
+   which reads as a panel that failed to render rather than as a panel with slack in it. */
+.split{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);align-items:stretch}
 @media (max-width:1100px){.split{grid-template-columns:1fr}}
 
 .tile-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
@@ -124,6 +127,10 @@ main{padding:16px 20px 48px;max-width:1680px;margin:0 auto}
 .tile-sub{font-size:11px;color:var(--muted)}
 .tile-row{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
 .delta{font-size:11px;font-variant-numeric:tabular-nums}
+/* Before a second snapshot exists every Δ is a placeholder dot. A column of 1014
+   identical dots is not information about the absence of information — the note under
+   the ledger says why it is missing, and the column returns when it has values. */
+#grid.no-delta .col-delta{display:none}
 .up{color:var(--good)}.down{color:var(--bad)}
 
 /* --- tables --- */
@@ -220,11 +227,20 @@ svg{display:block;max-width:100%;overflow:visible}
 .ramp-bar{width:104px;height:7px;border-radius:4px}
 
 /* factor heatmap */
-.hm{border-collapse:separate;border-spacing:2px;font-variant-numeric:tabular-nums}
+/* Sized to its contents, not to the panel. Inheriting the global table{width:100%} put
+   80px of column pitch behind 34px cells, so the grid read as scattered chips with a
+   120px gutter before the first factor rather than as a continuous heat field. */
+.hm{width:auto;border-collapse:separate;border-spacing:2px;
+  font-variant-numeric:tabular-nums}
 .hm th{position:static;background:none;border:0;padding:2px 4px;font-size:9.5px;
   text-transform:none;letter-spacing:0;cursor:default;white-space:nowrap}
-.hm th.rot{writing-mode:vertical-rl;transform:rotate(180deg);height:118px;
-  text-align:left;vertical-align:bottom;color:var(--muted);padding-bottom:4px}
+/* The rotated label is an inline-block centred in the cell. Applying writing-mode to
+   the `th` itself sizes and positions the rotated text against the cell's block axis,
+   which left every label sitting more than half a column to the right of the column it
+   names — the last one landed over the conviction figure. */
+.hm th.rot{height:118px;vertical-align:bottom;text-align:center;padding:0 0 5px}
+.hm th.rot span{display:inline-block;writing-mode:vertical-rl;transform:rotate(180deg);
+  color:var(--muted);line-height:1.05}
 .hm td{padding:0;border:0}
 .hm .cell{width:34px;height:22px;border-radius:3px;display:flex;align-items:center;
   justify-content:center;font-size:10px;cursor:default}
@@ -233,6 +249,9 @@ svg{display:block;max-width:100%;overflow:visible}
 
 /* attribution waterfall */
 .wf{display:flex;flex-direction:column;gap:3px;margin:6px 0}
+/* Column-major so the sort order still reads straight down the first column. */
+.wf-cols{display:grid;grid-auto-flow:column;gap:3px 32px}
+@media (max-width:900px){.wf-cols{display:flex;flex-direction:column}}
 .wf-row{display:flex;align-items:center;gap:8px;font-size:11.5px}
 .wf-name{flex:none;width:150px;color:var(--ink-2)}
 .wf-track{flex:1;height:14px;position:relative;background:var(--plane);border-radius:3px}
@@ -241,6 +260,10 @@ svg{display:block;max-width:100%;overflow:visible}
 .wf-val{flex:none;width:46px;text-align:right;font-variant-numeric:tabular-nums}
 .pending{color:var(--muted);font-size:11.5px;line-height:1.6;
   border-left:2px solid var(--axis);padding-left:10px;margin:6px 0}
+/* An empty state inside a table cell contributes its whole sentence as max-content, so
+   auto table layout widened the table past its scroll box and the text was cut mid-word
+   at the panel edge. Capping the block caps that contribution and it wraps instead. */
+td .pending{max-width:520px;white-space:normal}
 
 .prose{max-width:74ch;font-size:13px;line-height:1.62;color:var(--ink-2)}
 .prose h3{font-size:13px;color:var(--ink);text-transform:none;letter-spacing:0;margin:20px 0 6px}
@@ -553,18 +576,22 @@ table.mig th.l,table.mig td.l,
           <p class="card-note" id="dist-note"></p>
         </div>
 
-        <div class="card" style="margin-top:12px">
-          <div class="card-head">
-            <h2>Factor exposure — book vs. universe</h2>
-            <span class="tag-new">New</span>
-          </div>
-          <p class="card-note" style="margin:0 0 12px">
-            Weighted percentile of the sized book minus the universe median, in percentile
-            points. Every input the model ranks, not just the three pillars.
-          </p>
-          <div id="exposure"></div>
-        </div>
       </div>
+    </div>
+
+    <!-- Full width rather than stacked in the right column. Three cards there ran about
+         500px past the factor map beside them, and the map's own card cannot grow to
+         match — the balance is what left a large empty block under the scatter. -->
+    <div class="card">
+      <div class="card-head">
+        <h2>Factor exposure — book vs. universe</h2>
+        <span class="tag-new">New</span>
+      </div>
+      <p class="card-note" style="margin:0 0 12px">
+        Weighted percentile of the sized book minus the universe median, in percentile
+        points. Every input the model ranks, not just the three pillars.
+      </p>
+      <div id="exposure"></div>
     </div>
 
     <div class="card" id="screener">
@@ -599,7 +626,7 @@ table.mig th.l,table.mig td.l,
           <th class="pin pin-sym l" data-k="symbol">Ticker</th>
           <th class="l" data-k="sector">Sector</th>
           <th class="grp" data-k="conviction" aria-sort="descending">Conv</th>
-          <th data-k="_delta" title="Change since the previous nightly snapshot">Δ</th>
+          <th class="col-delta" data-k="_delta" title="Change since the previous nightly snapshot">Δ</th>
           <th class="l" data-k="signal">Signal</th>
           <th class="grp" data-k="q_raw" data-pillar="quality">Quality</th>
           <th data-k="c_raw" data-pillar="confirmation">Momentum</th>
@@ -658,7 +685,9 @@ table.mig th.l,table.mig td.l,
 
         <div style="min-width:0">
           <div class="sub-h">Sized book — top 12 by weight</div>
-          <div class="tbl-wrap" style="max-height:288px">
+          <!-- No max-height: the list is already capped at twelve rows, and a scroll box
+               shorter than its contents cut the last row through the middle. -->
+          <div class="tbl-wrap">
             <table id="sbx-book">
               <thead><tr>
                 <th class="l">Ticker</th><th class="l">Sector</th><th>Conv</th><th>Weight</th>
@@ -675,18 +704,20 @@ table.mig th.l,table.mig td.l,
   <div class="view" id="view-watchlist" hidden>
     <div class="row strip" id="wl-kpis"></div>
     <div id="wl-main"></div>
-    <div class="card" style="margin-top:12px">
-      <h2>Boundary crossings — the label moved, the view did not</h2>
-      <div id="wl-boundary"></div>
-    </div>
-    <div class="row split" style="margin-top:12px">
-      <div class="card">
-        <h2>Entered the universe</h2>
-        <div id="wl-entered"></div>
+    <div id="wl-rest">
+      <div class="card" style="margin-top:12px">
+        <h2>Boundary crossings — the label moved, the view did not</h2>
+        <div id="wl-boundary"></div>
       </div>
-      <div class="card">
-        <h2>Left the universe</h2>
-        <div id="wl-left"></div>
+      <div class="row split" style="margin-top:12px">
+        <div class="card">
+          <h2>Entered the universe</h2>
+          <div id="wl-entered"></div>
+        </div>
+        <div class="card">
+          <h2>Left the universe</h2>
+          <div id="wl-left"></div>
+        </div>
       </div>
     </div>
   </div>
@@ -695,13 +726,17 @@ table.mig th.l,table.mig td.l,
   <div class="view" id="view-sectors" hidden>
     <div class="row split">
       <div class="card">
-        <h2>Median conviction by sector</h2>
+        <h2>Sector conviction vs. the universe median</h2>
         <div id="sec-chart"></div>
         <p class="card-note">
-          Median rather than mean, so one outlier cannot carry a sector. Quality inputs are
-          ranked <em>within</em> sector, so this compares momentum, valuation and liquidity
-          across sectors rather than re-running a margin comparison that would only ever
-          favour software.
+          Bars are the sector's median conviction <em>minus</em> the universe median; the
+          figure on each row is the median itself. Sector medians occupy about sixteen
+          points of a hundred-point score, so bars drawn from zero differ by less than a
+          quarter of their length and every sector looks alike — the baseline is moved to
+          the number the comparison is against. Median rather than mean, so one outlier
+          cannot carry a sector. Quality inputs are ranked <em>within</em> sector, so this
+          compares momentum, valuation and liquidity across sectors rather than re-running
+          a margin comparison that would only ever favour software.
         </p>
       </div>
       <div class="card">
@@ -874,8 +909,9 @@ table.mig th.l,table.mig td.l,
 
   <!-- ================= METHOD ================= -->
   <div class="view" id="view-method" hidden>
-    <div class="card">
-      <h2>Methodology</h2>
+    <div class="row split">
+      <div class="card">
+      <h2>How the score is built</h2>
       <div class="prose">
         <p><b>Conviction = 100 × (Q · C · R)<sup>1/3</sup></b>, where each pillar is built
         from cross-sectional percentile ranks rather than absolute thresholds.</p>
@@ -913,8 +949,13 @@ table.mig th.l,table.mig td.l,
         tiers describe a structure the arithmetic cannot produce. The cube root restores the
         scale while keeping the property that matters: a pillar near zero still vetoes the
         score, because you cannot recover from a zero factor.</p>
+      </div>
+      </div>
 
-        <h3>Missing data</h3>
+      <div class="card">
+      <h2>Data, claims and limits</h2>
+      <div class="prose">
+        <h3 style="margin-top:0">Missing data</h3>
         <p>An input the filings do not report is imputed at the sector median percentile and
         lowers the name's <b>data confidence</b>, which is reported alongside the score.
         Absent evidence is not negative evidence: scoring an unmeasured company as 0 emits a
@@ -957,6 +998,7 @@ table.mig th.l,table.mig td.l,
           of this list, not an absolute valuation claim.</li>
           <li>This is a research tool, not investment advice.</li>
         </ul>
+      </div>
       </div>
     </div>
   </div>
@@ -1119,6 +1161,15 @@ function svgIn(host,w,h){
   // reads as a poster. Below the design width it still shrinks responsively.
   s.style.maxWidth=w+'px';
   return s;
+}
+// The width to draw a chart at. `min` is the width its margins and type sizes were laid
+// out for; past that the chart takes the panel's real width, so a 1540px card stops
+// rendering a 700px chart against 840px of nothing. The coordinate system stays 1:1 with
+// CSS pixels at every size, so a 9.5px tick label is 9.5px rather than a scaled 28px.
+// A hidden view measures 0 — `redrawCharts()` runs when a tab is shown, and on resize.
+function fitW(host,min,max){
+  const w=host?Math.round(host.getBoundingClientRect().width):0;
+  return w>0 ? Math.max(min,Math.min(max,w)) : min;
 }
 function sparkline(values,w,h,stroke){
   if(!values||values.length<2) return '';
@@ -1315,7 +1366,7 @@ function renderSale(){
    fixed was invisible in every other panel: a universe where every name scores the
    same still fills a table and a scatter, but its distribution is a single spike. */
 function renderDist(){
-  const W=440,H=170,m={t:10,r:12,b:34,l:34};
+  const W=fitW($('#dist'),440,760),H=170,m={t:10,r:12,b:34,l:34};
   const bins=new Array(10).fill(0);
   S.rows.forEach(r=>bins[Math.min(9,Math.floor(r.conviction/10))]++);
   const max=Math.max(...bins,1);
@@ -1409,8 +1460,8 @@ function renderHeatmap(){
   const qcols=[...new Set(rows.flatMap(r=>Object.keys(weightsFor(r.profile||r.sector).quality)))];
   const cols=[...qcols, ...Object.keys(WEIGHTS.confirmation), ...Object.keys(WEIGHTS.risk)];
   const head=`<tr><th class="l"></th><th class="l"></th>${
-    cols.map(c=>`<th class="rot" data-def="${esc(c)}">${
-      esc(HEAT_LABELS[c]||FACTOR_LABELS[c]||c)}</th>`).join('')}<th></th></tr>`;
+    cols.map(c=>`<th class="rot" data-def="${esc(c)}"><span>${
+      esc(HEAT_LABELS[c]||FACTOR_LABELS[c]||c)}</span></th>`).join('')}<th class="rot"><span>Conviction</span></th></tr>`;
   const body=rows.map(r=>{
     const used=weightsFor(r.profile||r.sector);
     const inProfile=new Set([...Object.keys(used.quality),
@@ -1556,6 +1607,8 @@ function renderGrid(){
   // every row template further down.
   const rowLimit=parseInt($('#f-limit').value,10)||0;
   const shown=rowLimit?rows.slice(0,rowLimit):rows;
+  const attr=S.ledger.attribution;
+  $('#grid').classList.toggle('no-delta', !(attr&&attr.since));
   $('#count').textContent = shown.length<rows.length
     ? `${shown.length} shown · ${rows.length} match · ${S.rows.length} scored`
     : `${rows.length} of ${S.rows.length} names`;
@@ -1989,38 +2042,52 @@ function sectorStats(){
 }
 function renderSectors(){
   const stats=sectorStats();
-  const W=700, rowH=27, H=stats.length*rowH+40, m={t:10,r:46,b:22,l:176};
-  const s=svgIn($('#sec-chart'),W,H);
-  s.setAttribute('aria-label','Median conviction by sector');
-  const max=Math.max(...stats.map(d=>d.conv),80);
-  const x=v=>m.l+v/max*(W-m.l-m.r);
+  const host=$('#sec-chart');
+  const W=fitW(host,700,1200), rowH=27, H=stats.length*rowH+44, m={t:10,r:52,b:26,l:176};
+  const s=svgIn(host,W,H);
+  s.setAttribute('aria-label','Median sector conviction against the universe median');
+
+  // Plotted as a deviation from the universe median rather than from zero. Sector
+  // medians span 46-62 on a 0-100 score, so bars grown from a zero baseline differ in
+  // length by under a quarter and the chart reads as eleven identical bars — the whole
+  // signal sits in the last 16 points. The baseline is the number the comparison is
+  // actually against, and it is drawn and labelled so the shift cannot be missed.
+  const mid=median(S.rows.map(r=>r.conviction));
+  const span=Math.max(6,Math.ceil(Math.max(...stats.map(d=>Math.abs(d.conv-mid)))+1));
+  const x=v=>m.l+(v+span)/(2*span)*(W-m.l-m.r);
   for(let i=0;i<=4;i++){
-    const v=max*i/4;
+    const v=-span+span*i/2;
     el('line',{x1:x(v),y1:m.t,x2:x(v),y2:H-m.b,class:'gridline'},s);
+    if(v===0) continue;   // the baseline caption below already names this tick
     const t=el('text',{x:x(v),y:H-m.b+14,class:'tick','text-anchor':'middle'},s);
-    t.textContent=v.toFixed(0);
+    t.textContent=(v>0?'+':'')+v.toFixed(0);
   }
   stats.forEach((d,i)=>{
-    const y=m.t+i*rowH;
-    // One measure, one series -> one colour. A value-ramp across nominal
-    // categories would re-encode bar length as hue and say nothing new.
-    const bar=el('rect',{x:m.l,y:y+4,width:Math.max(2,x(d.conv)-m.l),height:rowH-11,
-                         rx:4,fill:cssVar('--s1'),'fill-opacity':.85},s);
+    const y=m.t+i*rowH, dev=d.conv-mid, above=dev>=0;
+    const bar=el('rect',{x:above?x(0):x(dev),y:y+4,
+                         width:Math.max(2,Math.abs(x(dev)-x(0))),height:rowH-11,
+                         rx:3,fill:cssVar(above?'--s1':'--s2'),'fill-opacity':.85},s);
     bar.style.cursor='default';
     bar.addEventListener('mousemove',ev=>showTip(
       `<b>${esc(d.sector)}</b><br>
        <div class="r"><span>Median conviction</span><span>${d.conv.toFixed(0)}</span></div>
+       <div class="r"><span>vs universe median</span><span>${dev>=0?'+':''}${dev.toFixed(0)}</span></div>
        <div class="r"><span>Names</span><span>${d.n}</span></div>
        <div class="r"><span>Median 12m</span><span>${spct(d.ret,0)}</span></div>`,
       ev.clientX,ev.clientY));
     bar.addEventListener('mouseleave',hideTip);
     const lbl=el('text',{x:m.l-8,y:y+rowH/2+1,class:'tick','text-anchor':'end'},s);
     lbl.textContent=d.sector.length>24?d.sector.slice(0,23)+'…':d.sector;
-    const val=el('text',{x:x(d.conv)+6,y:y+rowH/2+1,class:'tick','text-anchor':'start',
-                         fill:cssVar('--ink-2')},s);
+    // The absolute median stays on the row: the deviation is what the eye compares,
+    // the level is what someone reading a single sector actually wants.
+    const val=el('text',{x:(above?x(dev):x(0))+6,y:y+rowH/2+1,class:'tick',
+                         'text-anchor':'start',fill:cssVar('--ink-2')},s);
     val.textContent=d.conv.toFixed(0);
   });
-  el('line',{x1:m.l,y1:m.t,x2:m.l,y2:H-m.b,class:'axisline'},s);
+  el('line',{x1:x(0),y1:m.t,x2:x(0),y2:H-m.b,class:'axisline'},s);
+  const zt=el('text',{x:x(0),y:H-m.b+14,class:'tick','text-anchor':'middle',
+                      fill:cssVar('--muted')},s);
+  zt.textContent=`universe median ${mid.toFixed(0)}`;
 
   $('#sec-table tbody').innerHTML=stats.map(d=>`<tr>
     <td class="l">${esc(d.sector)}</td><td>${d.n}</td>
@@ -2056,8 +2123,12 @@ function renderPortfolio(){
     const tr=e.target.closest('tr[data-sym]');
     if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
   };
+  // The table is a scroll box with no visible affordance, so a reader sees fourteen rows
+  // and no sign that 569 more are under them. The count says so rather than implying the
+  // book is what fits on screen.
   $('#pf-note').innerHTML=
-    `Only names scoring 55 or better are held, weighted by conviction above 40 and capped
+    `All ${held.length} held names are in the table above — scroll it for the rest.
+     Only names scoring 55 or better are held, weighted by conviction above 40 and capped
      at 5%. Weighting the whole universe — including names the model rates AVOID — would
      make this a market-cap tracker with extra steps.`;
 
@@ -2076,7 +2147,8 @@ function renderPortfolio(){
 function renderData(){
   const cov=S.ledger.coverage||{};
   const entries=Object.entries(cov).sort((a,b)=>a[1]-b[1]);
-  const W=880, rowH=24, H=entries.length*rowH+32, m={t:8,r:52,b:20,l:172};
+  const W=fitW($('#cov-chart'),880,1400), rowH=24, H=entries.length*rowH+32,
+        m={t:8,r:52,b:20,l:172};
   const s=svgIn($('#cov-chart'),W,H);
   s.setAttribute('aria-label','Input coverage by field');
   const x=v=>m.l+v*(W-m.l-m.r);
@@ -2138,7 +2210,7 @@ function gridRows(shown){
         <span class="co">${esc(r.name||'')}</span></td>
     <td class="l" style="color:var(--ink-2)">${esc(r.sector||'—')}</td>
     <td class="grp conv n" style="color:${convInk(r.conviction)}">${r.conviction}</td>
-    <td class="n ${nz(r._delta)?(r._delta>0?'up':r._delta<0?'down':''):''}"
+    <td class="n col-delta ${nz(r._delta)?(r._delta>0?'up':r._delta<0?'down':''):''}"
         title="${deltaTitle(r)}">${deltaCell(r)}</td>
     <td class="l"><span class="tier" style="${tierStyle(r.signal,r.conviction)}">${esc(r.signal)}</span></td>
     <td class="grp">${pbar(r.q_raw)}</td>
@@ -2276,22 +2348,41 @@ function drawPoints(s, x, y, m, W, H){
     bind(el('circle',{cx:px(r),cy:py(r),r:rad,fill:convColor(r.conviction),
       'fill-opacity':0.95,stroke:cssVar('--surface'),'stroke-width':1.4},s), r, true);
   });
-  focus.slice(0,8).forEach(r=>{
-    const nearRight = px(r) > W-m.r-150;   // clears the end-anchored corner label
-    const t=el('text',{x:px(r)+(nearRight?-12:12),y:py(r)+3.5,
-      'text-anchor':nearRight?'end':'start','font-size':10.5,
-      'font-family':cssVar('--mono'),fill:cssVar('--ink'),
-      stroke:cssVar('--surface'),'stroke-width':3,
-      'paint-order':'stroke fill','stroke-linejoin':'round'},s);
-    t.textContent=r.symbol;
-  });
+  // Labels are placed greedily against the boxes already down, trying the far side
+  // before giving up on a name. The top-of-board names cluster in the upper right by
+  // construction, so a fixed offset stacked five tickers on the same few pixels and the
+  // overprint read as one unparseable smear — a label that cannot be read is worse than
+  // no label, because the reader cannot tell it is a label for the point beneath it.
+  const placed=[], LW=34, LH=12;
+  const hits=b=>placed.some(p=>!(b.x2<p.x1||b.x1>p.x2||b.y2<p.y1||b.y1>p.y2));
+  let drawn=0;
+  for(const r of focus){
+    if(drawn>=8) break;
+    const cx=px(r), cy=py(r);
+    // Right first unless that would run into the end-anchored corner label.
+    const sides = cx > W-m.r-150 ? ['end','start'] : ['start','end'];
+    for(const side of sides){
+      const x = cx + (side==='end' ? -12 : 12);
+      const box = side==='end'
+        ? {x1:x-LW,x2:x,y1:cy-LH/2,y2:cy+LH/2}
+        : {x1:x,x2:x+LW,y1:cy-LH/2,y2:cy+LH/2};
+      if(box.x1<m.l||box.x2>W-m.r||hits(box)) continue;
+      const t=el('text',{x,y:cy+3.5,'text-anchor':side,'font-size':10.5,
+        'font-family':cssVar('--mono'),fill:cssVar('--ink'),
+        stroke:cssVar('--surface'),'stroke-width':3,
+        'paint-order':'stroke fill','stroke-linejoin':'round'},s);
+      t.textContent=r.symbol;
+      placed.push(box); drawn++;
+      break;
+    }
+  }
 
   const rd=$('#ramp-density');
   if(rd) rd.style.background=
     `linear-gradient(90deg, color-mix(in srgb, ${cssVar('--s1')} 8%, transparent), ${cssVar('--s1')})`;
   if(note) note.textContent =
     `${rows.length} names as a hex-binned density field · top ${FOCUS_N} by conviction drawn `
-    + `as points, 8 labelled. Hover a cell for the names inside it.`;
+    + `as points, ${drawn} labelled without overprinting. Hover a cell for the names inside it.`;
 }
 
 /* Corner-anchored, so they no longer sit inside the point field. They keep the surface
@@ -2433,7 +2524,13 @@ function renderExposure(held, tot){
     if(seen>0.5) rows.push([k, w/seen-50, seen/tot]);
   }
   rows.sort((a,b)=>Math.abs(b[1])-Math.abs(a[1]));
-  host.innerHTML='<div class="wf">'+rows.map(([k,d,cov])=>{
+  // Two columns, filled down then across, so fifteen rows across a full-width card do
+  // not stretch each track to ~900px. The domain stays fixed at ±50 — the full range a
+  // deviation from a median percentile can take — because rescaling it to the data
+  // would make a 6-point tilt and a 30-point tilt draw the same bar.
+  const perCol=Math.ceil(rows.length/2);
+  host.innerHTML=`<div class="wf wf-cols" style="grid-template-rows:repeat(${perCol},auto)">`
+  +rows.map(([k,d,cov])=>{
     const mag=Math.min(Math.abs(d),50)/50*50;
     const col=d>=0?cssVar('--pos-pole'):cssVar('--neg-pole');
     return `<div class="wf-row">
@@ -2448,7 +2545,10 @@ function renderExposure(held, tot){
   }).join('')+'</div>'
   + `<p class="card-note">Each input averaged over the book's weights, across only the
      names whose sector profile actually reads it — a percentage beside a label is the
-     share of the book that input covers.</p>`;
+     share of the book that input covers. The axis runs ±50 points either side of the
+     universe median, which is the whole range this measure can occupy; it is not
+     rescaled to the book, so a tilted book and a flat one are drawn on the same
+     yardstick.</p>`;
 }
 
 /* ---------- macro rail and KPI tiles ---------- */
@@ -2516,15 +2616,22 @@ function renderWatchlist(){
   const hosts=['#wl-kpis','#wl-main','#wl-boundary','#wl-entered','#wl-left'];
   if(!d){
     $('#wl-kpis').innerHTML=''; $('#wl-kpis').hidden=true;
+    // One statement of the reason, not four. Rendering the empty section headings as
+    // well left the page repeating "Nothing to compare against yet" in three boxes
+    // under a fourth that had already explained why — which reads as three separate
+    // failures rather than one system that has not run twice yet.
     $('#wl-main').innerHTML=`<div class="card"><div class="pending">
       <b>Waiting on a second snapshot.</b> The diff compares tonight's board against the
       previous run, so it appears after the next nightly build. It is not back-filled:
       the history starts when recording started, and inventing a prior board to diff
-      against would make the first morning's list fiction.</div></div>`;
-    ['#wl-boundary','#wl-entered','#wl-left'].forEach(s=>{
-      $(s).innerHTML='<div class="pending">Nothing to compare against yet.</div>'; });
+      against would make the first morning's list fiction.</div>
+      <p class="card-note">Once a second run exists this page shows upgrades, downgrades,
+      names that moved hard without changing tier, boundary crossings too small to mean
+      anything, and names entering or leaving the universe.</p></div>`;
+    $('#wl-rest').hidden=true;
     return;
   }
+  $('#wl-rest').hidden=false;
   const c=d.counts||{};
   $('#wl-kpis').hidden=false;
   $('#wl-kpis').innerHTML=
@@ -2874,7 +2981,7 @@ function renderCovTrend(cov){
       the wait.</div>`;
     return;
   }
-  const W=760,H=240,m={t:14,r:16,b:34,l:44};
+  const W=fitW(host,760,1300),H=240,m={t:14,r:16,b:34,l:44};
   const s=svgIn(host,W,H);
   s.setAttribute('aria-label','Mean data confidence and fully-measured share by run date');
   const n=series.length;
@@ -2923,7 +3030,7 @@ function renderCovSector(cov){
   const last=series[series.length-1];
   const entries=Object.entries((last&&last.by_sector)||{}).sort((a,b)=>a[1]-b[1]);
   if(!entries.length){ host.innerHTML=`<div class="pending">No sector coverage recorded.</div>`; return; }
-  const W=560,rowH=22,H=entries.length*rowH+26,m={t:6,r:44,b:18,l:150};
+  const W=fitW(host,560,1000),rowH=22,H=entries.length*rowH+26,m={t:6,r:44,b:18,l:150};
   const s=svgIn(host,W,H);
   s.setAttribute('aria-label','Mean data confidence by sector');
   const x=v=>m.l+v*(W-m.l-m.r);
@@ -3002,12 +3109,22 @@ if($('#sandbox')){
 }
 
 /* ---------- chrome ---------- */
+// A chart in a hidden view measures zero, so it is drawn at its minimum width and has
+// to be redrawn once its tab is actually on screen. Same on resize: the SVG scales
+// itself, but a scaled viewBox scales the type with it.
+function redrawCharts(){
+  if(!S.ledger) return;
+  renderMap(); renderDist(); renderSectors(); renderData(); renderMonitor();
+}
 $$('nav button').forEach(b=>{
   b.onclick=()=>{
     $$('nav button').forEach(o=>o.setAttribute('aria-selected', String(o===b)));
     $$('.view').forEach(v=>{v.hidden = v.id!=='view-'+b.dataset.view;});
+    redrawCharts();
   };
 });
+let resizeT;
+addEventListener('resize',()=>{ clearTimeout(resizeT); resizeT=setTimeout(redrawCharts,160); });
 $('#theme').onclick=()=>{
   const cur=document.documentElement.getAttribute('data-theme');
   const next = cur==='dark' ? 'light' : cur==='light' ? 'dark'
