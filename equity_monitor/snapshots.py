@@ -91,12 +91,18 @@ def snapshot_path(ledger_dir: str, on: date | str) -> str:
 
 
 def write(rows: list[dict], ledger_dir: str, on: date | str | None = None,
-          as_of: str = "") -> str:
+          as_of: str = "", benchmark: dict | None = None) -> str:
     """Persist one dated snapshot of the full factor decomposition.
 
     Columnar rather than a list of objects: at ~1,000 names the repeated key names
     would be roughly three quarters of the file, and these are committed to git every
     trading day.
+
+    ``benchmark`` records the reference index's close *on the night the board was
+    published*. It is stored here rather than read back from the OHLCV cache because
+    that cache lags — it held 2026-08-05 on the night of the 2026-08-08 run — and a
+    return series that silently substitutes a nearby date for a missing one is
+    comparing the book against a different holding period than the one it ran.
     """
     stamp = (on or date.today())
     path = snapshot_path(ledger_dir, stamp)
@@ -112,6 +118,9 @@ def write(rows: list[dict], ledger_dir: str, on: date | str | None = None,
         "profiles": {r["symbol"]: r.get("profile", "default") for r in scored},
         "data": {r["symbol"]: _encode(r) for r in scored},
     }
+    if benchmark and benchmark.get("price"):
+        payload["benchmark"] = {"symbol": benchmark.get("symbol", ""),
+                                "price": round(float(benchmark["price"]), 4)}
     tmp = path + ".tmp"
     with open(tmp, "w") as fh:
         json.dump(payload, fh, separators=(",", ":"))
@@ -130,6 +139,7 @@ def read(path: str) -> dict:
         "spec_hash": payload.get("spec_hash"),
         "sectors": payload.get("sectors", {}),
         "profiles": payload.get("profiles", {}),
+        "benchmark": payload.get("benchmark"),
         "rows": {sym: dict(zip(cols, vals), profile=(payload.get("profiles") or {}).get(sym, "default"))
                  for sym, vals in (payload.get("data") or {}).items()},
     }

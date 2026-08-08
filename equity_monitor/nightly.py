@@ -21,8 +21,8 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from equity_monitor import (churn, features, model, monitor, snapshots,
-                            universe as uni, watchlist)
+from equity_monitor import (churn, features, model, monitor, performance,
+                            snapshots, universe as uni, watchlist)
 from equity_monitor.sources import edgar, macro
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -195,7 +195,13 @@ def build(limit: int | None = None, skip_macro: bool = False,
     # and none of them can be reconstructed after the fact. Written before the ledger
     # so a later failure cannot cost us the day's observation.
     attribution = snapshots.attribute_all(LEDGER, scored)
-    snap_path = snapshots.write(scored, LEDGER, as_of=_now())
+    # The benchmark close goes into the snapshot, not read back from the OHLCV cache
+    # later: the cache lags the run by days, and a return series that substitutes a
+    # nearby close for a missing one is measuring a different holding period.
+    bench_row = next((r for r in rows if r.get("symbol") == uni.BENCHMARK), None)
+    snap_path = snapshots.write(
+        scored, LEDGER, as_of=_now(),
+        benchmark={"symbol": uni.BENCHMARK, "price": (bench_row or {}).get("price")})
     n_snaps = len(snapshots.available(LEDGER))
     print(f"snapshot: {os.path.basename(snap_path)} "
           f"({os.path.getsize(snap_path)/1024:.0f} KB, {n_snaps} on file)")
@@ -288,6 +294,23 @@ def build(limit: int | None = None, skip_macro: bool = False,
             print("watchlist: pending (needs a second snapshot)")
     except Exception as exc:
         print(f"watchlist: skipped ({exc})")
+
+    # Paper return of the published book. Chained across recorded snapshots only — it
+    # cannot be back-filled, because it needs the weights that were actually published
+    # on the earlier night and those were not recorded before the ledger started.
+    try:
+        perf = performance.write(LEDGER)
+        if perf["legs"]:
+            print(f"performance: {perf['legs']} leg(s), book {perf['book_total']:+.2f}%"
+                  + (f", {perf['benchmark']} {perf['benchmark_total']:+.2f}%"
+                     if perf["benchmark_available"] else
+                     f", {perf['benchmark']} not yet recorded")
+                  + ("" if perf["renderable"] else
+                     f" — below the {perf['min_days']}-day render threshold"))
+        else:
+            print("performance: pending (needs two snapshots)")
+    except Exception as exc:
+        print(f"performance: skipped ({exc})")
 
     print(f"wrote {prev_path} ({len(scored)} scored, {len(benchmarks)} benchmarks)")
     return payload

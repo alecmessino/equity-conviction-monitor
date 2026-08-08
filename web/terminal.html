@@ -810,6 +810,15 @@ table.mig th.l,table.mig td.l,
   <!-- ================= PORTFOLIO ================= -->
   <div class="view" id="view-portfolio" hidden>
     <div class="row strip" id="pf-kpis"></div>
+
+    <div class="card" id="alpha-card">
+      <div class="card-head">
+        <h2>Paper return — published book vs. <span id="alpha-bench">SPY</span></h2>
+        <span class="tag-new">New</span>
+      </div>
+      <div id="alpha"></div>
+    </div>
+
     <div class="row split">
       <div class="card">
         <h2>Held book</h2>
@@ -1220,6 +1229,7 @@ async function boot(){
   try{ S.trends=await fetch(base+'trends.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
   try{ S.mon=await fetch(base+'monitor.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
   try{ S.wl=await fetch(base+'watchlist.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
+  try{ S.perf=await fetch(base+'performance.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
 
   const moved=(j.attribution&&j.attribution.names)||{};
   S.rows.forEach(r=>{ r._delta = moved[r.symbol] ? moved[r.symbol].total : null; });
@@ -1227,6 +1237,7 @@ async function boot(){
   renderHeader(); renderMacro(); renderKPIs(); renderMap(); renderSale(); renderDist();
   renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
   buildSectorFilter(); renderGrid(); renderSectors(); renderPortfolio(); renderData();
+  renderAlpha();
   renderWatchlist(); renderMonitor();
 }
 
@@ -2179,6 +2190,109 @@ function renderPortfolio(){
     ? list('Entered the book',t.added,'up')+list('Left the book',t.removed,'down')
     : `<div class="tile-sub">No previous build to compare against yet. Turnover appears
        once two consecutive runs exist.</div>`;
+}
+
+/* ---------- paper return: the published book against the index ----------
+   The first panel here that describes what the board would have *earned* rather than
+   what it currently says, which is a much easier claim to get wrong. The series is
+   built in performance.py from recorded snapshots only and cannot be back-filled: it
+   needs the weights that were actually published on the earlier night.
+
+   The empty state is the default branch, not a fallback. Two points joined by a line
+   read as a trend and are one observation, so below the threshold this draws nothing
+   and says how far off it is. */
+function renderAlpha(){
+  const host=$('#alpha'); if(!host) return;
+  const p=S.perf;
+  const bench=$('#alpha-bench'); if(bench&&p&&p.benchmark) bench.textContent=p.benchmark;
+
+  if(!p || !p.days){
+    host.innerHTML=`<div class="pending"><b>No recorded history yet.</b> The curve is
+      chained across nightly snapshots and starts when recording started.</div>`;
+    return;
+  }
+  if(!p.renderable){
+    const have=p.days, need=p.min_days;
+    host.innerHTML=`<div class="pending">
+      <b>Awaiting historical baseline (${have}/${need} days accumulating).</b>
+      ${p.legs?`${p.legs} night${p.legs===1?'':'s'} measured so far, book
+      ${spct(p.book_total/100,2)}.`:'No night has been measured yet.'}
+      A curve drawn through ${have} point${have===1?'':'s'} would read as a trend and is
+      not one, so nothing is plotted until there are ${need}. Nothing here is back-filled
+      — the weights this needs are the ones that were published on the night, and they
+      were not recorded before the ledger started.</div>
+      ${p.legs_dropped?`<p class="card-note">${p.legs_dropped} night${p.legs_dropped===1?'':'s'}
+        excluded: too much of the book was unpriceable to call the result a return.</p>`:''}`;
+    return;
+  }
+
+  const s=p.series;
+  const W=fitW(host,760,1400),H=280,m={t:14,r:16,b:34,l:52};
+  const vals=s.flatMap(d=>[d.book,d.benchmark].filter(v=>v!=null));
+  const lo=Math.min(0,...vals), hi=Math.max(0,...vals), pad=Math.max(0.5,(hi-lo)*0.12);
+  const y=v=>H-m.b-(v-(lo-pad))/((hi+pad)-(lo-pad))*(H-m.t-m.b);
+  const x=i=>m.l+(s.length===1?0.5:i/(s.length-1))*(W-m.l-m.r);
+  const g=svgIn(host,W,H);
+  g.setAttribute('aria-label',`Cumulative paper return of the book against ${p.benchmark}`);
+
+  for(let i=0;i<=4;i++){
+    const v=(lo-pad)+((hi+pad)-(lo-pad))*i/4;
+    el('line',{x1:m.l,y1:y(v),x2:W-m.r,y2:y(v),class:'gridline'},g);
+    const t=el('text',{x:m.l-7,y:y(v)+3,class:'tick','text-anchor':'end'},g);
+    t.textContent=(v>0?'+':'')+v.toFixed(1)+'%';
+  }
+  // Zero is the line that matters — it is break-even, not just another gridline.
+  el('line',{x1:m.l,y1:y(0),x2:W-m.r,y2:y(0),class:'axisline'},g);
+
+  const line=(key,color,dash)=>{
+    // Segments, not one polyline: a gap where the benchmark was not recorded must
+    // break the line rather than be bridged straight across it.
+    let run=[];
+    const flush=()=>{
+      if(run.length>1) el('polyline',{points:run.map(q=>`${q[0].toFixed(1)},${q[1].toFixed(1)}`).join(' '),
+        fill:'none',stroke:color,'stroke-width':1.9,'stroke-linejoin':'round',
+        ...(dash?{'stroke-dasharray':'4 3'}:{})},g);
+      run=[];
+    };
+    s.forEach((d,i)=>{ if(d[key]==null){ flush(); return; } run.push([x(i),y(d[key])]); });
+    flush();
+    s.forEach((d,i)=>{ if(d[key]!=null) el('circle',{cx:x(i),cy:y(d[key]),r:2.4,fill:color},g); });
+  };
+  line('benchmark',cssVar('--ink-3')||cssVar('--muted'),true);
+  line('book',cssVar('--s1'),false);
+
+  const step=Math.max(1,Math.ceil(s.length/10));
+  s.forEach((d,i)=>{
+    if(i%step && i!==s.length-1) return;
+    const t=el('text',{x:x(i),y:H-m.b+14,class:'tick','text-anchor':'middle'},g);
+    t.textContent=d.date.slice(5);
+  });
+
+  const gap=nz(p.benchmark_total)?p.book_total-p.benchmark_total:null;
+  host.insertAdjacentHTML('beforeend',
+    `<div class="legend">
+       <span><i style="background:${cssVar('--s1')}"></i>Book — ${spct(p.book_total/100,2)}</span>
+       ${p.benchmark_available
+         ? `<span><i style="background:${cssVar('--ink-3')||cssVar('--muted')}"></i>${esc(p.benchmark)} — ${spct(p.benchmark_total/100,2)}</span>`
+         : `<span class="tile-sub">${esc(p.benchmark)} not recorded for these nights</span>`}
+       ${nz(p.equal_weight_total)?`<span class="tile-sub">Equal-weight universe ${spct(p.equal_weight_total/100,2)}</span>`:''}
+     </div>
+     <p class="card-note">
+       ${p.legs} night${p.legs===1?'':'s'} measured from ${esc(p.from)} to ${esc(p.to)}${
+         gap!=null?`, ${spct(gap/100,2)} against ${esc(p.benchmark)}`:''}.
+       Weights as published on the earlier night, priced at both ends from the snapshots
+       themselves — not back-filled and not reconstructed.
+       <b>This is not evidence the model works.</b> ${p.legs} night${p.legs===1?'':'s'} of
+       paper return is a handful of coin flips; whether high-conviction names outperform
+       is an Information Coefficient question that needs months inside one specification.
+       ${p.equal_weight_total!=null?`The equal-weight line is the control that matters —
+       beating ${esc(p.benchmark)} can be a sector tilt, where beating the universe the
+       names were picked from is the claim the model actually makes.`:''}
+       ${p.spec_stable?'':`<b>This window spans ${p.spec_hashes.length} specification
+       hashes</b>, so it is two series drawn end to end rather than one.`}
+       ${p.legs_dropped?`${p.legs_dropped} night${p.legs_dropped===1?'':'s'} excluded for
+       having too much of the book unpriceable to call the result a return.`:''}
+     </p>`);
 }
 
 /* ---------- data quality ---------- */
@@ -3158,7 +3272,7 @@ if($('#sandbox')){
 // itself, but a scaled viewBox scales the type with it.
 function redrawCharts(){
   if(!S.ledger) return;
-  renderMap(); renderDist(); renderSectors(); renderData(); renderMonitor();
+  renderMap(); renderDist(); renderSectors(); renderData(); renderMonitor(); renderAlpha();
 }
 $$('nav button').forEach(b=>{
   b.onclick=()=>{
@@ -3176,7 +3290,7 @@ $('#theme').onclick=()=>{
   document.documentElement.setAttribute('data-theme',next);
   try{ localStorage.setItem('ecm-theme',next); }catch{}
   if(S.ledger){ renderMacro(); renderMap(); renderGrid(); renderSectors();
-                renderPortfolio(); renderData(); renderSale(); renderDist();
+                renderPortfolio(); renderData(); renderSale(); renderDist(); renderAlpha();
                 renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
                 renderWatchlist(); renderMonitor(); }
 };
