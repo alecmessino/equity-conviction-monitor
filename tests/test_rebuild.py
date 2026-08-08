@@ -195,6 +195,11 @@ def test_the_disclosure_names_the_bias_rather_than_gesturing_at_it():
                     reason="needs the cached price history")
 def test_end_to_end_against_the_real_ledger(tmp_path):
     out = str(tmp_path / "rebuild")
+    # Read before, compare after. Pinning the expected list to a literal date asserted
+    # "the history is one day long" rather than "the reconstruction did not touch it",
+    # so the test broke the first night a second snapshot was recorded — which is the
+    # one thing this suite must never do, since it would train someone to ignore it.
+    before = snapshots.available(rebuild.LEDGER)
     got = rebuild.run(5, out)
 
     assert got["names"] > 500
@@ -212,8 +217,8 @@ def test_end_to_end_against_the_real_ledger(tmp_path):
     assert got["churn"]["reconstructed"] is True
     assert "look-ahead" in got["watchlist"]["disclosure"]
 
-    # And the real history is untouched.
-    assert snapshots.available(rebuild.LEDGER) == ["2026-08-07"]
+    # And the real history is untouched — the same stamps, neither added to nor removed.
+    assert snapshots.available(rebuild.LEDGER) == before
 
 
 @pytest.mark.skipif(not os.path.isdir(os.path.join(rebuild.LEDGER, "history")),
