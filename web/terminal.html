@@ -238,6 +238,7 @@ svg{display:block;max-width:100%;overflow:visible}
 .legend i{width:10px;height:10px;border-radius:2px;display:inline-block;margin-right:5px;vertical-align:-1px}
 .ramp{display:flex;align-items:center;gap:7px;font-size:10.5px;color:var(--muted)}
 .ramp-bar{width:104px;height:7px;border-radius:4px}
+.spark-wrap{display:inline-block;line-height:0;cursor:help;padding:2px}
 
 /* factor heatmap */
 /* Sized to its contents, not to the panel. Inheriting the global table{width:100%} put
@@ -631,6 +632,11 @@ table.mig th.l,table.mig td.l,
           <option value="500">Show 500</option>
           <option value="0">Show all</option>
         </select>
+        <div class="seg" id="f-mode" role="group" aria-label="Score display">
+          <button data-mode="abs" aria-pressed="true">Absolute</button>
+          <button data-mode="delta" aria-pressed="false"
+                  title="Overnight change in each pillar, in percentile points">Delta</button>
+        </div>
         <span class="count" id="count"></span>
       </div>
       <div class="tbl-wrap"><table id="grid">
@@ -1193,14 +1199,33 @@ function fitW(host,min,max){
   const w=host?Math.round(host.getBoundingClientRect().width):0;
   return w>0 ? Math.max(min,Math.min(max,w)) : min;
 }
-function sparkline(values,w,h,stroke){
+/* A sparkline is a shape until you can read a number off it. It has no axes by
+   construction — that is the point of the form — so the numbers have to arrive on
+   hover: where the window started, where it ended, and the worst peak-to-trough fall
+   inside it. The drawdown is the one a bare trendline hides completely, because a line
+   that starts and ends in the same place looks like nothing happened. */
+function sparkStats(values,fmt){
+  const a=values[0], b=values[values.length-1];
+  let peak=values[0], dd=0;
+  for(const v of values){ if(v>peak) peak=v; if(peak) dd=Math.min(dd,(v-peak)/Math.abs(peak)); }
+  const f=fmt||(v=>num(v,2));
+  return {start:f(a), end:f(b), change:(b-a>=0?'+':'')+f(b-a),
+          drawdown:(dd*100).toFixed(1)+'%', n:values.length};
+}
+function sparkline(values,w,h,stroke,opts){
   if(!values||values.length<2) return '';
   const mn=Math.min(...values), mx=Math.max(...values), rng=(mx-mn)||1;
   const pts=values.map((v,i)=>
     `${(i/(values.length-1)*(w-2)+1).toFixed(1)},${(h-1-(v-mn)/rng*(h-2)).toFixed(1)}`).join(' ');
-  return `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">`
+  const o=opts||{};
+  const s=sparkStats(values,o.fmt);
+  const meta=esc(JSON.stringify({label:o.label||'', unit:o.unit||'', ...s}));
+  // Wrapped rather than bare so the hover has a box to hit: a 1.5px polyline is not a
+  // pointer target.
+  return `<span class="spark-wrap" data-spark="${meta}">`
+       + `<svg viewBox="0 0 ${w} ${h}" width="${w}" height="${h}" aria-hidden="true">`
        + `<polyline points="${pts}" fill="none" stroke="${stroke}" stroke-width="1.5" `
-       + `stroke-linejoin="round" stroke-linecap="round"/></svg>`;
+       + `stroke-linejoin="round" stroke-linecap="round"/></svg></span>`;
 }
 
 /* ---------- state ---------- */
@@ -1279,7 +1304,9 @@ function renderMacro(){
           value:m.value.toFixed(dec)+(m.unit||''),
           delta:(up?'+':'')+m.change_1m.toFixed(dec)+' 1m',
           dir:up?'up':'down',
-          spark:sparkline(m.series,74,26,cssVar('--s1')),
+          spark:sparkline(m.series,74,26,cssVar('--s1'),
+                          {label:m.label, unit:m.unit||'',
+                           fmt:v=>num(v,dec)}),
         });
       }).join('')
     + (asOf?`<div class="rail-note">FRED · as of ${esc(asOf)}</div>`:'');
@@ -1607,6 +1634,43 @@ function tierPill(r){
   return `<span class="tier marginal" style="${tierStyle(r.signal,r.conviction)}"
     title="Was ${esc(b.from_tier)} last night and crossed on ${n} point${n===1?'':'s'} — the label moved, the view did not. ${b.from} → ${b.to}.">${esc(r.signal)}</span>`;
 }
+/* Absolute or overnight change, on one switch.
+   A percentile bar answers "where does this name stand"; a delta answers "what is it
+   doing", and those are different questions that the same column can serve. The deltas
+   come from the recorded attribution — pillar `to` minus `from` in percentile points —
+   rather than being recomputed, so the toggle cannot disagree with the attribution
+   panel about what moved.
+
+   Below two snapshots there is nothing to difference, so the toggle disables itself
+   rather than rendering a column of dashes. */
+S.mode='abs';
+function deltaAvailable(){
+  const a=S.ledger&&S.ledger.attribution;
+  return !!(a&&a.since&&a.names&&Object.keys(a.names).length);
+}
+function pillarDelta(r,pillar){
+  const a=S.ledger&&S.ledger.attribution;
+  const n=a&&a.names&&a.names[r.symbol];
+  const p=n&&n.pillars&&n.pillars[pillar];
+  if(!p||p.from==null||p.to==null) return null;
+  return (p.to-p.from)*100;          // percentile points, the unit the board uses
+}
+function pcell(r,pillar,key){
+  if(S.mode!=='delta') return pbar(r[key]);
+  const d=pillarDelta(r,pillar);
+  if(d==null) return '<span style="color:var(--muted)">—</span>';
+  if(Math.abs(d)<0.05) return '<span style="color:var(--muted)">·</span>';
+  const cls=d>0?'up':'down';
+  return `<span class="${cls}" style="font-variant-numeric:tabular-nums">${
+    d>0?'+':'−'}${Math.abs(d).toFixed(1)}</span>`;
+}
+function convCell(r){
+  if(S.mode!=='delta') return `<span style="color:${convInk(r.conviction)}">${r.conviction}</span>`;
+  // Same glyph convention as the Δ column, so the two never disagree about what an
+  // absent value means.
+  if(!nz(r._delta)||r._delta===0) return '<span style="color:var(--muted)">—</span>';
+  return `<span class="${r._delta>0?'up':'down'}">${r._delta>0?'+':''}${r._delta}</span>`;
+}
 function deltaCell(r){
   if(!S.ledger.attribution||!S.ledger.attribution.since) return '<span style="color:var(--muted)">·</span>';
   if(!nz(r._delta)||r._delta===0) return '<span style="color:var(--muted)">—</span>';
@@ -1648,6 +1712,23 @@ function renderGrid(){
   const shown=rowLimit?rows.slice(0,rowLimit):rows;
   const attr=S.ledger.attribution;
   $('#grid').classList.toggle('no-delta', !(attr&&attr.since));
+  // The toggle disables itself rather than offering a column of dashes.
+  // In delta mode the conviction column carries the change, so the Δ column would
+  // print the same number twice.
+  $('#grid').classList.toggle('no-delta', S.mode==='delta' || !(attr&&attr.since));
+  const canDelta=deltaAvailable();
+  const dBtn=$('#f-mode button[data-mode="delta"]');
+  if(dBtn){
+    dBtn.disabled=!canDelta;
+    dBtn.style.opacity=canDelta?'':'0.45';
+    dBtn.style.cursor=canDelta?'':'not-allowed';
+    dBtn.title=canDelta ? 'Overnight change in each pillar, in percentile points'
+      : 'Needs a second nightly snapshot — there is nothing to difference yet';
+    if(!canDelta && S.mode==='delta'){
+      S.mode='abs';
+      $$('#f-mode button').forEach(o=>o.setAttribute('aria-pressed',String(o.dataset.mode==='abs')));
+    }
+  }
   S._marginal=marginalTiers();
   // The legend only appears when there is something on screen wearing it.
   const marked=shown.filter(r=>S._marginal.has(r.symbol)).length;
@@ -1910,16 +1991,33 @@ function pillarTip(key, row){
     + `<div class="src" style="margin-top:5px">Hover any of these for its formula.</div>`;
 }
 document.addEventListener('mouseover', e=>{
-  const t=e.target.closest('[data-def],[data-pillar]');
+  const t=e.target.closest('[data-def],[data-pillar],[data-spark]');
   if(!t) return;
+  if(t.dataset.spark){ showTip(sparkTip(t.dataset.spark), e.clientX, e.clientY); return; }
   const sym=t.closest('[data-sym]')?.dataset.sym;
   const row=sym ? S.rows.find(r=>r.symbol===sym) : null;
   const html = t.dataset.def ? defTip(t.dataset.def, row) : pillarTip(t.dataset.pillar, row);
   if(html) showTip(html, e.clientX, e.clientY);
 });
 document.addEventListener('mouseout', e=>{
-  if(e.target.closest('[data-def],[data-pillar]')) hideTip();
+  if(e.target.closest('[data-def],[data-pillar],[data-spark]')) hideTip();
 });
+
+/* The numbers a sparkline cannot show. Drawdown is the one that matters most: a series
+   that starts and ends in the same place draws a flat-looking line whether it went
+   nowhere or fell 30% and recovered. */
+function sparkTip(meta){
+  let d; try{ d=JSON.parse(meta); }catch{ return ''; }
+  const u=d.unit||'';
+  return `<b>${esc(d.label||'Series')}</b>`
+    + `<div class="src" style="margin-bottom:4px">${d.n} observations</div>`
+    + `<div class="r"><span>Start</span><span>${esc(d.start)}${esc(u)}</span></div>`
+    + `<div class="r"><span>End</span><span>${esc(d.end)}${esc(u)}</span></div>`
+    + `<div class="r"><span>Change</span><span>${esc(d.change)}${esc(u)}</span></div>`
+    + `<div class="r"><span>Max drawdown</span><span>${esc(d.drawdown)}</span></div>`
+    + `<div class="src" style="margin-top:5px">Deepest peak-to-trough fall inside the
+       window — a line that ends where it started can still have had one.</div>`;
+}
 
 function factorBars(r){
   const w=weightsFor(r.profile||r.sector);
@@ -2248,6 +2346,17 @@ function renderAlpha(){
   }
   // Zero is the line that matters — it is break-even, not just another gridline.
   el('line',{x1:m.l,y1:y(0),x2:W-m.r,y2:y(0),class:'axisline'},g);
+  // A specification boundary, ruled where it happened. The caveat exists in the note
+  // below, but a regime change described only in prose beside a chart is a regime
+  // change most readers will miss.
+  (p.spec_boundaries||[]).forEach(d=>{
+    const i=s.findIndex(pt=>pt.date===d);
+    if(i<1) return;
+    el('line',{x1:x(i),y1:m.t,x2:x(i),y2:H-m.b,stroke:cssVar('--warn'),
+               'stroke-width':1,'stroke-dasharray':'3 3','stroke-opacity':0.9},g);
+    const t=el('text',{x:x(i)+4,y:m.t+9,class:'tick',fill:cssVar('--warn')},g);
+    t.textContent='spec change';
+  });
 
   const line=(key,color,dash)=>{
     // Segments, not one polyline: a gap where the benchmark was not recorded must
@@ -2366,13 +2475,13 @@ function gridRows(shown){
     <td class="pin pin-sym l"><span class="sym">${esc(r.symbol)}</span>
         <span class="co">${esc(r.name||'')}</span></td>
     <td class="l" style="color:var(--ink-2)">${esc(r.sector||'—')}</td>
-    <td class="grp conv n" style="color:${convInk(r.conviction)}">${r.conviction}</td>
+    <td class="grp conv n">${convCell(r)}</td>
     <td class="n col-delta ${nz(r._delta)?(r._delta>0?'up':r._delta<0?'down':''):''}"
         title="${deltaTitle(r)}">${deltaCell(r)}</td>
     <td class="l">${tierPill(r)}</td>
-    <td class="grp">${pbar(r.q_raw)}</td>
-    <td>${pbar(r.c_raw)}</td>
-    <td>${pbar(r.r_raw)}</td>
+    <td class="grp">${pcell(r,'quality','q_raw')}</td>
+    <td>${pcell(r,'confirmation','c_raw')}</td>
+    <td>${pcell(r,'risk','r_raw')}</td>
     <td class="grp n">${r.weight?num(r.weight,2)+'%':'—'}</td>
     <td class="n">${money(r.price)}</td>
     <td class="n ${(r.chg_1d??0)>=0?'up':'down'}">${spct(r.chg_1d,2)}</td>
@@ -3170,6 +3279,14 @@ function renderCovTrend(cov){
     t.textContent=d.date.slice(5);
   });
   el('line',{x1:m.l,y1:H-m.b,x2:W-m.r,y2:H-m.b,class:'axisline'},s);
+  // Boundaries ruled here too: a coverage step that coincides with a specification
+  // change is a different event from one that does not, and the chart should say which.
+  ((S.perf&&S.perf.spec_boundaries)||[]).forEach(d=>{
+    const i=series.findIndex(pt=>pt.date===d);
+    if(i<1) return;
+    el('line',{x1:x(i),y1:m.t,x2:x(i),y2:H-m.b,stroke:cssVar('--warn'),
+               'stroke-width':1,'stroke-dasharray':'3 3','stroke-opacity':0.9},s);
+  });
   // The axis stays anchored at 0–100%: these are shares, and a truncated axis would
   // turn ordinary run-to-run noise into an apparent collapse. The drift figure below
   // carries the small movements that the full axis compresses.
@@ -3257,6 +3374,14 @@ if($('#sandbox')){
     $('#sbx-max-v').textContent=S.sbx.max.toFixed(1)+'%';
     e.target.setAttribute('aria-valuetext',S.sbx.max.toFixed(1)+'%');
     renderSandbox();
+  });
+  $$('#f-mode button').forEach(b=>{
+    b.onclick=()=>{
+      if(b.disabled) return;
+      S.mode=b.dataset.mode;
+      $$('#f-mode button').forEach(o=>o.setAttribute('aria-pressed',String(o===b)));
+      renderGrid();
+    };
   });
   $$('#sbx-rule button').forEach(b=>{
     b.onclick=()=>{

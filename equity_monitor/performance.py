@@ -168,6 +168,10 @@ def build(ledger_dir: str = LEDGER) -> dict:
 
     hashes = sorted({h for l in usable for h in (l.get("spec_hash"), l.get("spec_from")) if h})
     crossed = any(l["spec_changed"] for l in usable)
+    # The dates the specification changed, so a chart can rule a line there rather than
+    # relying on a reader to find the caveat in a footnote. A regime change that is only
+    # described in prose beside the chart is a regime change most readers will miss.
+    boundaries = sorted({l["to"] for l in usable if l["spec_changed"]})
     return {
         "days": len(dates),
         "min_days": MIN_DAYS,
@@ -187,6 +191,7 @@ def build(ledger_dir: str = LEDGER) -> dict:
         "benchmark_total": round((bench - 1.0) * 100, 4) if bench_live else None,
         "equal_weight_total": round((eq - 1.0) * 100, 4) if usable else None,
         "spec_hashes": hashes,
+        "spec_boundaries": boundaries,
         "spec_stable": len(hashes) <= 1 and not crossed,
         "series": series,
         "basis": ("Weights as published on the earlier night, priced at both ends from "
