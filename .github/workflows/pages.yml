@@ -69,8 +69,14 @@ jobs:
           # factor decomposition is either recorded tonight or lost. ~200 KB/day.
           # ledger/history/ and ledger/factors/ are gitignored: both are regenerated
           # each run and shipped in the Pages artifact instead.
+          # performance.json is listed explicitly for the same reason as snapshots:
+          # the terminal fetches it by name, and a file that is written but never
+          # committed 404s on the deployed site behind a silent catch — the alpha
+          # curve then shows its "awaiting baseline" empty state forever, which looks
+          # exactly like honest patience rather than a missing file.
           git add ledger/index.json ledger/history.json ledger/macro.json \
                   ledger/trends.json ledger/monitor.json ledger/watchlist.json \
+                  ledger/performance.json \
                   ledger/snapshots \
                   docs/terminal.html
           if git diff --cached --quiet; then
@@ -90,6 +96,7 @@ jobs:
           cp ledger/trends.json     site/ledger/ 2>/dev/null || true
           cp ledger/monitor.json    site/ledger/ 2>/dev/null || true
           cp ledger/watchlist.json  site/ledger/ 2>/dev/null || true
+          cp ledger/performance.json site/ledger/ 2>/dev/null || true
           cp -r ledger/history      site/ledger/ 2>/dev/null || true
           cp -r ledger/factors      site/ledger/ 2>/dev/null || true
           cp -r ledger/snapshots    site/ledger/ 2>/dev/null || true
