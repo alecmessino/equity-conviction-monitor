@@ -825,6 +825,14 @@ table.mig th.l,table.mig td.l,
       <div id="alpha"></div>
     </div>
 
+    <div class="card" id="edge-card">
+      <div class="card-head">
+        <h2>Selection edge — does conviction predict the next session?</h2>
+        <span class="tag-new" id="edge-tag">New</span>
+      </div>
+      <div id="edge"></div>
+    </div>
+
     <div class="row split">
       <div class="card">
         <h2>Held book</h2>
@@ -1255,6 +1263,7 @@ async function boot(){
   try{ S.mon=await fetch(base+'monitor.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
   try{ S.wl=await fetch(base+'watchlist.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
   try{ S.perf=await fetch(base+'performance.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
+  try{ S.edge=await fetch(base+'edge.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
 
   const moved=(j.attribution&&j.attribution.names)||{};
   S.rows.forEach(r=>{ r._delta = moved[r.symbol] ? moved[r.symbol].total : null; });
@@ -1262,7 +1271,7 @@ async function boot(){
   renderHeader(); renderMacro(); renderKPIs(); renderMap(); renderSale(); renderDist();
   renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
   buildSectorFilter(); renderGrid(); renderSectors(); renderPortfolio(); renderData();
-  renderAlpha();
+  renderAlpha(); renderEdge();
   renderWatchlist(); renderMonitor();
 }
 
@@ -2419,6 +2428,76 @@ function renderAlpha(){
      </p>`);
 }
 
+/* ---------- selection edge ----------
+   The only panel that speaks to whether the score is worth acting on, and the one most
+   easily misread. It leads with the interval, never the point estimate: a mean IC of
+   +0.006 quoted alone reads as "slightly positive", and only the interval makes
+   "cannot be told apart from nothing" visible.
+
+   The realised gap sits beside it deliberately. A book losing to its equal-weight
+   control looks like proof the selection subtracts value; it is what a concentrated
+   book with no measurable edge does by construction, since concentration adds variance
+   and not expected return. Shown apart, each number invites the wrong conclusion. */
+function renderEdge(){
+  const host=$('#edge'); if(!host) return;
+  const e=S.edge;
+  const tag=$('#edge-tag');
+  if(!e){
+    host.innerHTML=`<div class="pending"><b>Not published yet.</b>
+      <code>ledger/edge.json</code> was not found, so nothing is known about the
+      score's predictive power — which is not the same as knowing it has none.</div>`;
+    return;
+  }
+  if(tag) tag.textContent = e.measurable ? 'Measured' : `${e.legs}/${e.min_legs} legs`;
+  if(!e.legs || e.mean_ic==null){
+    host.innerHTML=`<div class="pending">
+      <b>Nothing measured yet.</b> ${esc(e.verdict)}
+      ${e.legs?`${e.legs} leg${e.legs===1?'':'s'} on file; the estimate needs at least two,
+      and the interval is not worth reading below ${e.min_legs}.`:''}
+      An information coefficient cannot be back-filled any more than the curve can — it
+      is measured from sessions that were recorded, or it is not measured.</div>
+      ${e.book_total!=null&&e.equal_weight_total!=null?`<p class="card-note">Realised so far:
+        book ${spct(e.book_total/100,2)} against equal weight
+        ${spct(e.equal_weight_total/100,2)}. With no measured edge this difference is not
+        yet interpretable in either direction.</p>`:''}`;
+    return;
+  }
+  const tone = e.measurable ? (e.mean_ic>0?'var(--pos)':'var(--neg)') : 'var(--warn)';
+  const gap = (e.book_total!=null&&e.equal_weight_total!=null)
+      ? e.book_total-e.equal_weight_total : null;
+  const need=e.legs_needed||{};
+  host.innerHTML=`
+    <div class="row strip">
+      <div class="card"><div class="tile-label">Verdict</div>
+        <div class="tile-value" style="font-size:15px;color:${tone}">${
+          e.measurable?(e.mean_ic>0?'EDGE PRESENT':'EDGE INVERTED'):'NOT YET MEASURABLE'}</div>
+        <div class="tile-sub">${e.legs} of ${e.min_legs} legs needed</div></div>
+      <div class="card"><div class="tile-label">Information coefficient</div>
+        <div class="tile-value num">${e.mean_ic>=0?'+':''}${num(e.mean_ic,4)}</div>
+        <div class="tile-sub">rank correlation, conviction vs next session</div></div>
+      <div class="card"><div class="tile-label">95% interval</div>
+        <div class="tile-value num" style="color:${tone}">[${num(e.ci[0],3)}, ${num(e.ci[1],3)}]</div>
+        <div class="tile-sub">spans zero → not distinguishable from nothing</div></div>
+      <div class="card"><div class="tile-label">Top vs bottom quintile</div>
+        <div class="tile-value num">${e.mean_spread_bp>=0?'+':''}${num(e.mean_spread_bp,0)} bp</div>
+        <div class="tile-sub">${e.spreads_positive}/${e.legs} legs positive</div></div>
+    </div>
+    <p class="card-note" style="margin-top:0">${esc(e.verdict)}</p>
+    ${gap!=null?`<p class="card-note">Realised: book ${spct(e.book_total/100,2)} ·
+      equal weight ${spct(e.equal_weight_total/100,2)} · gap
+      <b style="color:${gap<0?'var(--neg)':'var(--pos)'}">${spct(gap/100,2)}</b>.
+      A concentrated book with no measurable edge underperforms an equal-weight control
+      as a matter of course — concentration adds variance without adding expected
+      return, so this gap is the expected cost of acting on an unmeasured signal rather
+      than evidence the signal is negative.</p>`:''}
+    <p class="card-note">Legs still needed to resolve a true IC of
+      ${Object.entries(need).map(([k,v])=>`<b>${k}</b> ${v}`).join(' · ')} — at one leg
+      per session, roughly ${Math.round((need['0.03']||0)/21)} trading months for a
+      respectable signal. Per-leg noise is ±${num(e.per_leg_noise,3)}.
+      ${e.dates_are_sessions===false?'Legs here are dated by run date rather than trading session; that affects the labels, not the measurement.':''}</p>
+    <p class="card-note">${esc(e.basis||'')}</p>`;
+}
+
 /* ---------- data quality ---------- */
 function renderData(){
   const cov=S.ledger.coverage||{};
@@ -3412,7 +3491,7 @@ if($('#sandbox')){
 // itself, but a scaled viewBox scales the type with it.
 function redrawCharts(){
   if(!S.ledger) return;
-  renderMap(); renderDist(); renderSectors(); renderData(); renderMonitor(); renderAlpha();
+  renderMap(); renderDist(); renderSectors(); renderData(); renderMonitor(); renderAlpha(); renderEdge();
 }
 $$('nav button').forEach(b=>{
   b.onclick=()=>{

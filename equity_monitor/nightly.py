@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from equity_monitor import (churn, features, model, monitor, performance,
+from equity_monitor import (churn, edge, features, model, monitor, performance,
                             snapshots, universe as uni, watchlist)
 from equity_monitor.sources import edgar, macro, prices
 
@@ -311,6 +311,10 @@ def build(limit: int | None = None, skip_macro: bool = False,
     # on the earlier night and those were not recorded before the ledger started.
     try:
         perf = performance.write(LEDGER)
+        # The edge measurement rides on the same legs as the curve, so it is written
+        # immediately after: whether the ordering is informative is the question that
+        # decides whether any of the rest is worth acting on.
+        edge.write(LEDGER)
         if perf["legs"]:
             print(f"performance: {perf['legs']} leg(s), book {perf['book_total']:+.2f}%"
                   + (f", {perf['benchmark']} {perf['benchmark_total']:+.2f}%"

@@ -86,7 +86,7 @@ jobs:
           # exactly like honest patience rather than a missing file.
           git add ledger/index.json ledger/history.json ledger/macro.json \
                   ledger/trends.json ledger/monitor.json ledger/watchlist.json \
-                  ledger/performance.json \
+                  ledger/performance.json ledger/edge.json \
                   ledger/snapshots \
                   docs/terminal.html
           if git diff --cached --quiet; then
@@ -107,6 +107,7 @@ jobs:
           cp ledger/monitor.json    site/ledger/ 2>/dev/null || true
           cp ledger/watchlist.json  site/ledger/ 2>/dev/null || true
           cp ledger/performance.json site/ledger/ 2>/dev/null || true
+          cp ledger/edge.json       site/ledger/ 2>/dev/null || true
           cp -r ledger/history      site/ledger/ 2>/dev/null || true
           cp -r ledger/factors      site/ledger/ 2>/dev/null || true
           cp -r ledger/snapshots    site/ledger/ 2>/dev/null || true
