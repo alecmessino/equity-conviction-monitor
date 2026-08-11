@@ -120,8 +120,28 @@ def _equal_weight_leg(prev_rows: dict, curr_rows: dict) -> float | None:
     return sum(rets) / len(rets) if rets else None
 
 
+def _session_of(snap: dict, filename_date: str) -> tuple:
+    """The trading day a snapshot's closes belong to, and whether that was recorded.
+
+    Snapshots written before `session_date` existed have no answer, and the run date is
+    the only thing available. That is a fallback, not an equivalent — it is the very
+    mislabelling this field was added to fix — so the caller is told which it got and
+    the curve discloses it rather than presenting both kinds of date as one series.
+    """
+    s = snap.get("session_date")
+    return (s, True) if s else (filename_date, False)
+
+
 def legs(ledger_dir: str = LEDGER) -> list[dict]:
-    """One entry per consecutive pair of recorded snapshots, oldest first."""
+    """One entry per consecutive pair of recorded snapshots, oldest first.
+
+    Legs are dated by the *session* the closes came from, not by the filename. A run at
+    23:00 UTC on a Friday can still be reading Thursday's bar, so 2026-08-07 held
+    Thursday's closes while 2026-08-08 held Friday's — a real Thursday-to-Friday move
+    that the filenames labelled Friday-to-Saturday. Every date on the published curve
+    was one day late, and the one weekend leg that genuinely had no trading in it was
+    indistinguishable from the rest.
+    """
     dates = snapshots.available(ledger_dir)
     out = []
     for a, b in zip(dates, dates[1:]):
@@ -133,9 +153,18 @@ def legs(ledger_dir: str = LEDGER) -> list[dict]:
         p0 = ((prev.get("benchmark") or {}).get("price"))
         p1 = ((curr.get("benchmark") or {}).get("price"))
         bench = (p1 / p0 - 1.0) if (p0 and p1 and p0 > 0) else None
-        stale = _nothing_traded(prev["rows"], curr["rows"])
+        s_from, dated_from = _session_of(prev, a)
+        s_to, dated_to = _session_of(curr, b)
+        # Two snapshots reading the same session are the same board twice, whatever
+        # their filenames say. This is the direct statement of the weekend case, and it
+        # is stronger than comparing prices: it holds even if a vendor revises a close
+        # between runs, which would make the boards differ while the session did not.
+        stale = (s_from == s_to and dated_from and dated_to) \
+            or _nothing_traded(prev["rows"], curr["rows"])
         out.append({
-            "from": a, "to": b,
+            "from": s_from, "to": s_to,
+            "session_dated": dated_from and dated_to,
+            "recorded_from": a, "recorded_to": b,
             "book": book["return"],
             "benchmark": bench,
             "equal_weight": _equal_weight_leg(prev["rows"], curr["rows"]),
@@ -218,6 +247,12 @@ def build(ledger_dir: str = LEDGER) -> dict:
         "to": usable[-1]["to"] if usable else (dates[-1] if dates else None),
         "recorded_from": dates[0] if dates else None,
         "recorded_to": dates[-1] if dates else None,
+        # Whether the dates above are trading sessions or run dates. Snapshots written
+        # before session_date existed can only be dated by their filename, which is the
+        # mislabelling this exists to fix — so a curve mixing the two says so instead of
+        # presenting one axis as if it were uniformly measured.
+        "session_dated_legs": sum(1 for l in usable if l.get("session_dated")),
+        "dates_are_sessions": bool(usable) and all(l.get("session_dated") for l in usable),
         "benchmark": "SPY",
         "benchmark_legs": sum(1 for l in usable if l["benchmark"] is not None),
         "benchmark_available": bench_live,

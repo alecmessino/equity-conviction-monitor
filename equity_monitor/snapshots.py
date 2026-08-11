@@ -91,7 +91,8 @@ def snapshot_path(ledger_dir: str, on: date | str) -> str:
 
 
 def write(rows: list[dict], ledger_dir: str, on: date | str | None = None,
-          as_of: str = "", benchmark: dict | None = None) -> str:
+          as_of: str = "", benchmark: dict | None = None,
+          session: dict | None = None) -> str:
     """Persist one dated snapshot of the full factor decomposition.
 
     Columnar rather than a list of objects: at ~1,000 names the repeated key names
@@ -103,6 +104,14 @@ def write(rows: list[dict], ledger_dir: str, on: date | str | None = None,
     that cache lags — it held 2026-08-05 on the night of the 2026-08-08 run — and a
     return series that silently substitutes a nearby date for a missing one is
     comparing the book against a different holding period than the one it ran.
+
+    ``session`` is :func:`prices.session_date` output — the trading day the closes in
+    this snapshot actually come from. The filename records when the run happened, which
+    is a different fact: a Friday run can be reading Thursday's bar, and a run triggered
+    on a Saturday reads Friday's. Both are stored, because the file date is what the
+    ledger is keyed on and the session date is what a return leg must be measured
+    between. ``session_date`` is the flat field readers use; the rest is the evidence
+    behind it, kept so a fragmented feed can be seen rather than inferred.
     """
     stamp = (on or date.today())
     path = snapshot_path(ledger_dir, stamp)
@@ -111,6 +120,8 @@ def write(rows: list[dict], ledger_dir: str, on: date | str | None = None,
     payload = {
         "date": stamp if isinstance(stamp, str) else stamp.isoformat(),
         "as_of": as_of,
+        "session_date": (session or {}).get("session"),
+        "session": session or None,
         "model_version": model.MODEL_VERSION,
         "spec_hash": model.spec_hash(),
         "columns": COLUMNS,
@@ -135,6 +146,12 @@ def read(path: str) -> dict:
     cols = payload.get("columns", COLUMNS)
     return {
         "date": payload.get("date"),
+        # The trading day the closes came from. None on snapshots written before this
+        # was recorded — callers must fall back to `date` and say that they did, rather
+        # than treat the run date as if it were the session.
+        "session_date": payload.get("session_date"),
+        "session": payload.get("session"),
+        "as_of": payload.get("as_of"),
         "model_version": payload.get("model_version"),
         "spec_hash": payload.get("spec_hash"),
         "sectors": payload.get("sectors", {}),

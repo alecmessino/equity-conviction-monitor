@@ -2404,8 +2404,18 @@ function renderAlpha(){
        names were picked from is the claim the model actually makes.`:''}
        ${p.spec_stable?'':`<b>This window spans ${p.spec_hashes.length} specification
        hashes</b>, so it is two series drawn end to end rather than one.`}
-       ${p.legs_dropped?`${p.legs_dropped} night${p.legs_dropped===1?'':'s'} excluded for
-       having too much of the book unpriceable to call the result a return.`:''}
+       ${p.legs_dropped?`${p.legs_dropped} night${p.legs_dropped===1?'':'s'} excluded${
+         p.legs_dropped_stale?` — ${p.legs_dropped_stale} because the market was shut and
+         there was no holding period to measure, the rest`:''} for having too much of the
+       book unpriceable to call the result a return.`:''}
+       ${p.dates_are_sessions
+         ? `Dates are trading sessions — the day the closes came from, not the day the
+            run happened. The two differ routinely: a run after the US close can still be
+            reading the prior session's bar.`
+         : `<b>Dates are run dates, not trading sessions.</b> ${p.session_dated_legs||0} of
+            ${p.legs} leg${p.legs===1?'':'s'} carry a recorded session, so the axis is
+            labelled by when the nightly ran rather than by the day it priced. Legs
+            recorded from here on carry the session and the axis corrects itself.`}
      </p>`);
 }
 

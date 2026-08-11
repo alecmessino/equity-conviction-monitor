@@ -195,7 +195,14 @@ def run(back: int, out_dir: str, ledger_dir: str = LEDGER) -> dict:
     scored = board(cutoff, bars, published, members)
 
     os.makedirs(os.path.join(out_dir, "snapshots"), exist_ok=True)
-    snapshots.write(scored, out_dir, on=cutoff, as_of=cutoff + "T23:00:00Z")
+    # cutoff comes from the benchmark's trading calendar, so it *is* a real session and
+    # can be recorded as one. `coverage` is 1.0 by construction here: sessions() already
+    # truncates every name to the same calendar, which is the whole reason a
+    # reconstruction can be dated at all.
+    snapshots.write(scored, out_dir, on=cutoff, as_of=cutoff + "T23:00:00Z",
+                    session={"session": cutoff, "coverage": 1.0,
+                             "symbols": len(scored), "spread": {},
+                             "source": "reconstructed from the benchmark calendar"})
 
     # The current recorded snapshot is copied in as the second point, so the diff runs
     # against the real board rather than a second reconstruction.
