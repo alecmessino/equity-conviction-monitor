@@ -76,6 +76,34 @@ def _book_leg(prev_rows: dict, curr_rows: dict) -> dict | None:
     }
 
 
+MIN_NAMES_FOR_STALE = 5
+
+
+def _nothing_traded(prev_rows: dict, curr_rows: dict) -> bool:
+    """True when every shared name carries the identical price on both dates.
+
+    A snapshot written when the market was shut holds the previous session's closes, so
+    the pair is not a holding period — it is the same board twice. One or two unchanged
+    names is an ordinary quiet day; a thousand unchanged to the cent is a calendar
+    artifact, and chaining it into the curve adds a 0.00% leg that dilutes the series
+    and inflates the day count the render gate reads.
+
+    Detected from the data rather than from a trading-day calendar on purpose: a
+    calendar has to be maintained, knows nothing about holidays in other venues, and
+    would not have caught the actual cause here, which was a push-triggered workflow
+    re-running the build on a Saturday.
+    """
+    shared = 0
+    for sym, row in prev_rows.items():
+        p0, p1 = row.get("price"), (curr_rows.get(sym) or {}).get("price")
+        if not p0 or not p1 or p0 <= 0:
+            continue
+        shared += 1
+        if p0 != p1:
+            return False
+    return shared >= MIN_NAMES_FOR_STALE
+
+
 def _equal_weight_leg(prev_rows: dict, curr_rows: dict) -> float | None:
     """The same window, every scored name weighted equally.
 
@@ -105,6 +133,7 @@ def legs(ledger_dir: str = LEDGER) -> list[dict]:
         p0 = ((prev.get("benchmark") or {}).get("price"))
         p1 = ((curr.get("benchmark") or {}).get("price"))
         bench = (p1 / p0 - 1.0) if (p0 and p1 and p0 > 0) else None
+        stale = _nothing_traded(prev["rows"], curr["rows"])
         out.append({
             "from": a, "to": b,
             "book": book["return"],
@@ -112,7 +141,8 @@ def legs(ledger_dir: str = LEDGER) -> list[dict]:
             "equal_weight": _equal_weight_leg(prev["rows"], curr["rows"]),
             "names": book["names"],
             "weight_lost": book["weight_lost"],
-            "usable": book["usable"],
+            "stale": stale,
+            "usable": book["usable"] and not stale,
             "spec_hash": curr.get("spec_hash"),
             "spec_from": prev.get("spec_hash"),
             "spec_changed": prev.get("spec_hash") != curr.get("spec_hash"),
@@ -180,6 +210,10 @@ def build(ledger_dir: str = LEDGER) -> dict:
         "renderable": len(usable) >= MIN_DAYS - 1,
         "legs": len(usable),
         "legs_dropped": len(ls) - len(usable),
+        # Split out because the two causes need different responses: a leg dropped for
+        # weight loss is a data-coverage problem, a stale one means the market was shut
+        # and there was never a holding period there to measure.
+        "legs_dropped_stale": sum(1 for l in ls if l.get("stale")),
         "from": usable[0]["from"] if usable else (dates[0] if dates else None),
         "to": usable[-1]["to"] if usable else (dates[-1] if dates else None),
         "recorded_from": dates[0] if dates else None,

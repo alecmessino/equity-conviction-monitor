@@ -220,3 +220,58 @@ def test_the_origin_is_the_first_measured_night_not_the_first_recorded_one(ledge
     assert out["recorded_from"] == "2026-01-01"
     assert out["series"][0]["date"] == "2026-01-02"
     assert out["series"][0]["book"] == 0.0
+
+
+# ---------------------------------------------------------------------------
+# days on which nothing traded
+# ---------------------------------------------------------------------------
+def board(n, price):
+    """n names at one price, equally weighted — enough to clear MIN_NAMES_FOR_STALE."""
+    return [(f"A{i}", price, 100.0 / n) for i in range(n)]
+
+
+def test_a_snapshot_pair_with_no_price_movement_at_all_is_not_a_holding_period(ledger):
+    """The real cause: a push-triggered workflow re-ran the build on a Saturday, so
+    2026-08-08 and 2026-08-09 both carried Friday's closes. Chained into the curve that
+    is a 0.00% leg on a day the market never opened — it dilutes the return series and
+    inflates the day count the render gate reads."""
+    snap(ledger, "2026-08-07", board(10, 100.0))
+    snap(ledger, "2026-08-08", board(10, 101.0))
+    snap(ledger, "2026-08-09", board(10, 101.0))     # Sunday: Friday's closes again
+    ls = performance.legs(str(ledger))
+    assert [l["stale"] for l in ls] == [False, True]
+    assert [l["usable"] for l in ls] == [True, False]
+
+    out = performance.build(str(ledger))
+    assert out["legs"] == 1
+    assert out["legs_dropped_stale"] == 1
+    assert out["to"] == "2026-08-08"          # the curve stops where measurement stops
+
+
+def test_one_unchanged_name_on_a_real_day_is_not_staleness(ledger):
+    """A quiet name is ordinary. Only the whole board frozen to the cent is a calendar
+    artifact, and the difference has to survive a single flat ticker."""
+    a = board(10, 100.0)
+    b = [(s, 101.0, w) for s, _, w in a]
+    b[0] = (b[0][0], 100.0, b[0][2])          # one name genuinely unchanged
+    snap(ledger, "2026-08-07", a)
+    snap(ledger, "2026-08-08", b)
+    ls = performance.legs(str(ledger))
+    assert ls[0]["stale"] is False and ls[0]["usable"] is True
+
+
+def test_too_few_shared_names_cannot_establish_staleness(ledger):
+    """Below the threshold an identical pair is as likely to be a thin board as a shut
+    market, and guessing wrong here silently deletes a real leg."""
+    snap(ledger, "2026-08-07", board(2, 100.0))
+    snap(ledger, "2026-08-08", board(2, 100.0))
+    assert performance.legs(str(ledger))[0]["stale"] is False
+
+
+def test_staleness_is_detected_from_prices_not_a_trading_calendar(ledger):
+    """A calendar would have to be maintained, knows nothing about other venues, and
+    would not have caught this bug anyway — the snapshots were mis-dated relative to
+    the closes they carried, so the dates looked entirely plausible."""
+    snap(ledger, "2026-08-11", board(10, 100.0))     # a Tuesday
+    snap(ledger, "2026-08-12", board(10, 100.0))     # a Wednesday, identical prices
+    assert performance.legs(str(ledger))[0]["stale"] is True
