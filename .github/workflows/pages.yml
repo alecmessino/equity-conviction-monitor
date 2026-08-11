@@ -30,13 +30,20 @@ jobs:
     outputs:
       ledger_ok: ${{ steps.validate.outcome }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
 
+      # A push must deploy the committed ledger, never rebuild it. US markets are shut
+      # at the weekend, so a Saturday merge produced a snapshot carrying Friday's
+      # closes — 2026-08-08 and 2026-08-09 are byte-for-byte the same board. That fed
+      # the watchlist two identical days (reported, correctly, as 1,016 names unchanged
+      # and zero movement, which reads exactly like a broken change feed) and handed
+      # the alpha curve zero-return legs on days when nothing traded.
       - name: Build ledger (Nasdaq/Yahoo prices + SEC XBRL fundamentals)
+        if: github.event_name != 'push'
         env:
           # SEC's fair-access policy rejects requests without a contact address.
           # Set SEC_CONTACT as a repository secret to an address you monitor.
@@ -46,6 +53,9 @@ jobs:
           PYTHONUNBUFFERED: "1"
         run: python -m equity_monitor.nightly
 
+      # Runs on a push too, against the committed ledger. The build above is skipped
+      # there, so this is validating what is about to deploy rather than what was just
+      # produced — which is the thing that actually matters to a visitor.
       - name: Validate ledger
         id: validate
         run: |
@@ -60,7 +70,7 @@ jobs:
           cp web/terminal.html docs/terminal.html
 
       - name: Commit refreshed data
-        if: github.event_name != 'pull_request'
+        if: github.event_name != 'pull_request' && github.event_name != 'push'
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
