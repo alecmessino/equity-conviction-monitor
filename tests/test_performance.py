@@ -275,3 +275,107 @@ def test_staleness_is_detected_from_prices_not_a_trading_calendar(ledger):
     snap(ledger, "2026-08-11", board(10, 100.0))     # a Tuesday
     snap(ledger, "2026-08-12", board(10, 100.0))     # a Wednesday, identical prices
     assert performance.legs(str(ledger))[0]["stale"] is True
+
+
+# ---------------------------------------------------------------------------
+# dating legs by the session, not the filename
+# ---------------------------------------------------------------------------
+def snap_session(tmp_path, date, rows, session=None, bench=None):
+    payload = [dict(symbol=s, conviction=60, sector="Information Technology",
+                    profile="default", price=p, weight=w)
+               for s, p, w in rows]
+    return snapshots.write(payload, str(tmp_path), on=date, as_of=date + "T23:00:00Z",
+                           benchmark=bench,
+                           session=None if session is None else
+                           {"session": session, "coverage": 1.0,
+                            "symbols": len(rows), "spread": {}})
+
+
+def test_a_leg_is_dated_by_the_session_its_closes_came_from(ledger):
+    """The real case: the 2026-08-07 run held Thursday's closes and the 2026-08-08 run
+    held Friday's, so the move between them was Thursday-to-Friday and the filenames
+    called it Friday-to-Saturday. Every date on the published curve was a day late."""
+    snap_session(ledger, "2026-08-07", board(10, 100.0), session="2026-08-06")
+    snap_session(ledger, "2026-08-08", board(10, 101.0), session="2026-08-07")
+    leg = performance.legs(str(ledger))[0]
+    assert (leg["from"], leg["to"]) == ("2026-08-06", "2026-08-07")
+    assert (leg["recorded_from"], leg["recorded_to"]) == ("2026-08-07", "2026-08-08")
+    assert leg["session_dated"] is True
+
+
+def test_two_snapshots_reading_the_same_session_are_one_board_twice(ledger):
+    """Stated directly by the dates rather than inferred from prices. Stronger, too: a
+    vendor revising a close between runs would make the boards differ while the session
+    did not, and the price comparison alone would then call it a real leg."""
+    snap_session(ledger, "2026-08-08", board(10, 100.0), session="2026-08-07")
+    snap_session(ledger, "2026-08-09", board(10, 100.5), session="2026-08-07")
+    leg = performance.legs(str(ledger))[0]
+    assert leg["stale"] is True and leg["usable"] is False
+
+
+def test_the_curve_axis_is_the_session_axis(ledger):
+    for i, (f, s) in enumerate([("2026-08-03", "2026-07-31"), ("2026-08-04", "2026-08-03"),
+                                ("2026-08-05", "2026-08-04"), ("2026-08-06", "2026-08-05"),
+                                ("2026-08-07", "2026-08-06"), ("2026-08-08", "2026-08-07")]):
+        snap_session(ledger, f, board(10, 100.0 + i), session=s)
+    out = performance.build(str(ledger))
+    assert [p["date"] for p in out["series"]] == ["2026-07-31", "2026-08-03", "2026-08-04",
+                                                  "2026-08-05", "2026-08-06", "2026-08-07"]
+    assert out["from"] == "2026-07-31" and out["to"] == "2026-08-07"
+    assert out["recorded_from"] == "2026-08-03" and out["recorded_to"] == "2026-08-08"
+    assert out["dates_are_sessions"] is True
+
+
+def test_a_snapshot_without_a_session_falls_back_and_declares_it(ledger):
+    """Snapshots written before session_date existed can only be dated by filename —
+    which is the mislabelling this field was added to fix. A curve mixing the two must
+    say so rather than presenting one uniformly-measured axis."""
+    snap_session(ledger, "2026-08-07", board(10, 100.0), session=None)
+    snap_session(ledger, "2026-08-08", board(10, 101.0), session="2026-08-07")
+    leg = performance.legs(str(ledger))[0]
+    assert leg["from"] == "2026-08-07"        # the filename, for want of anything better
+    assert leg["session_dated"] is False
+    assert performance.build(str(ledger))["dates_are_sessions"] is False
+
+
+def test_undated_snapshots_are_not_called_stale_by_matching_filenames(ledger):
+    """The session-equality test must not fire on two snapshots that merely lack the
+    field — that would silently delete every leg of the pre-existing history."""
+    snap_session(ledger, "2026-08-07", board(10, 100.0), session=None)
+    snap_session(ledger, "2026-08-08", board(10, 101.0), session=None)
+    leg = performance.legs(str(ledger))[0]
+    assert leg["stale"] is False and leg["usable"] is True
+
+
+# ---------------------------------------------------------------------------
+# deriving the session from the bars
+# ---------------------------------------------------------------------------
+def bars_at(dates):
+    from equity_monitor.sources import prices
+    out = {}
+    for i, d in enumerate(dates):
+        out[f"S{i}"] = prices.Bars(f"S{i}", [d], [1.0], [1.0], [1.0], [1.0], [1.0],
+                                   source="test")
+    return out
+
+
+def test_the_session_is_the_modal_last_bar_not_the_maximum():
+    """One symbol whose feed runs a day ahead must not drag the whole board's label
+    forward — that is exactly how a board gets dated to a day it never priced."""
+    from equity_monitor.sources import prices
+    out = prices.session_date(bars_at(["2026-08-07"] * 9 + ["2026-08-08"]))
+    assert out["session"] == "2026-08-07"
+    assert out["coverage"] == pytest.approx(0.9)
+    assert out["spread"] == {"2026-08-08": 1}
+
+
+def test_a_fragmented_feed_is_visible_rather_than_averaged():
+    from equity_monitor.sources import prices
+    out = prices.session_date(bars_at(["2026-08-06"] * 4 + ["2026-08-07"] * 6))
+    assert out["session"] == "2026-08-07" and out["coverage"] == pytest.approx(0.6)
+    assert out["spread"] == {"2026-08-06": 4}
+
+
+def test_no_bars_yields_no_session_rather_than_todays_date():
+    from equity_monitor.sources import prices
+    assert prices.session_date({})["session"] is None

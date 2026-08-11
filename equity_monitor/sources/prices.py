@@ -295,6 +295,42 @@ def features(bars: Bars) -> dict:
     }
 
 
+def session_date(all_bars: dict) -> dict:
+    """The trading day the board's closes actually come from.
+
+    Not the same thing as the day the run happened, which is what the snapshot filename
+    records. A run at 23:00 UTC on a Friday can still be reading Thursday's bar if the
+    vendor has not published Friday's yet, and a run triggered on a Saturday reads
+    Friday's — so 2026-08-07 held Thursday's closes while 2026-08-08 held Friday's, and
+    the leg between them was a real Thursday-to-Friday move labelled a day late.
+
+    Taken as the **modal** last-bar date across the universe rather than the maximum: a
+    single symbol whose feed runs ahead would otherwise drag the whole board's label
+    forward by a day. `coverage` is the share of symbols agreeing with it, and `spread`
+    lists the disagreeing dates, so a fragmented feed is visible instead of being
+    averaged into a confident-looking single date.
+
+    Returns ``{"session": str|None, "coverage": float, "symbols": int, "spread": {...}}``.
+    """
+    tally: dict[str, int] = {}
+    for b in all_bars.values():
+        d = b.dates[-1] if getattr(b, "dates", None) else None
+        if d:
+            tally[d] = tally.get(d, 0) + 1
+    total = sum(tally.values())
+    if not total:
+        return {"session": None, "coverage": 0.0, "symbols": 0, "spread": {}}
+    # Ties broken by the later date: two equally-sized cohorts means the feed is
+    # mid-publication, and the newer bar is the one the next run will agree with.
+    session = max(tally.items(), key=lambda kv: (kv[1], kv[0]))[0]
+    return {
+        "session": session,
+        "coverage": round(tally[session] / total, 4),
+        "symbols": total,
+        "spread": {d: n for d, n in sorted(tally.items()) if d != session},
+    }
+
+
 def ytd_return(bars: Bars, today: date | None = None) -> float | None:
     """Return since the last close of the prior calendar year."""
     year = (today or date.today()).year

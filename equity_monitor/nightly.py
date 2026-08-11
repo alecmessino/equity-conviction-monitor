@@ -23,7 +23,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from equity_monitor import (churn, features, model, monitor, performance,
                             snapshots, universe as uni, watchlist)
-from equity_monitor.sources import edgar, macro
+from equity_monitor.sources import edgar, macro, prices
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LEDGER = os.path.join(ROOT, "ledger")
@@ -199,9 +199,20 @@ def build(limit: int | None = None, skip_macro: bool = False,
     # later: the cache lags the run by days, and a return series that substitutes a
     # nearby close for a missing one is measuring a different holding period.
     bench_row = next((r for r in rows if r.get("symbol") == uni.BENCHMARK), None)
+    # as_of is the trading day the closes came from, not the wall clock of the run.
+    # These differ routinely — a Friday 23:00 UTC run can still be reading Thursday's
+    # bar, and a push-triggered Saturday run reads Friday's — so dating a leg by the
+    # filename mislabels a real Thursday-to-Friday move as Friday-to-Saturday.
+    sess = prices.session_date(bars)
     snap_path = snapshots.write(
-        scored, LEDGER, as_of=_now(),
+        scored, LEDGER, as_of=_now(), session=sess,
         benchmark={"symbol": uni.BENCHMARK, "price": (bench_row or {}).get("price")})
+    if sess["session"]:
+        print(f"session: closes are from {sess['session']} "
+              f"({sess['coverage']*100:.0f}% of {sess['symbols']} symbols agree"
+              + (f"; also seen {sess['spread']}" if sess["spread"] else "") + ")")
+    else:
+        print("session: no bar dates available — legs will fall back to the run date")
     n_snaps = len(snapshots.available(LEDGER))
     print(f"snapshot: {os.path.basename(snap_path)} "
           f"({os.path.getsize(snap_path)/1024:.0f} KB, {n_snaps} on file)")
