@@ -123,15 +123,27 @@ def quality_ranks() -> dict[str, float]:
 # ---------------------------------------------------------------------------
 # path-dependent exit
 # ---------------------------------------------------------------------------
-def simulate(highs: list[float], lows: list[float], closes: list[float], i: int,
-             entry: float, stop: float | None, target: float | None,
-             max_hold: int) -> dict:
+def simulate(highs: list[float], lows: list[float], opens: list[float],
+             closes: list[float], i: int, entry: float, stop: float | None,
+             target: float | None, max_hold: int) -> dict:
     """Walk the position forward bar by bar and exit on whatever is touched first.
 
-    Where a bar's low pierces the stop and its high reaches the target in the same
-    session, the stop is taken. A daily bar carries no intrabar sequence, and resolving
-    the ambiguity in the strategy's favour is how a backtest earns returns the account
-    would not have seen.
+    Three rules, each of which costs the strategy money and each of which is what an
+    account would actually have experienced:
+
+    **Ambiguous bars resolve against the strategy.** Where a bar's low pierces the stop
+    and its high reaches the target in the same session, the stop is taken. A daily bar
+    carries no intrabar sequence, and resolving it in the strategy's favour is how a
+    backtest earns returns the account never saw.
+
+    **A gap through the stop fills at the open, not at the stop.** Gapping down through
+    a stop is the primary failure mode of a dip-buy — the name that fell on news falls
+    again on news — and filling at the stop price pretends a resting order caught a
+    price that never traded. The target branch keeps the limit price, which is already
+    the conservative side: a gap *up* through a target fills better than modelled.
+
+    **MFE and MAE stop at the exit.** Recorded past the fill they describe a position
+    that was no longer open, so a −8% stop-out could report a −15% adverse excursion.
     """
     n = len(closes)
     mfe, mae = 0.0, 0.0
@@ -139,16 +151,19 @@ def simulate(highs: list[float], lows: list[float], closes: list[float], i: int,
         j = i + k
         if j >= n:
             break
-        mfe = max(mfe, (highs[j] - entry) / entry)
-        mae = min(mae, (lows[j] - entry) / entry)
         hit_stop = stop is not None and lows[j] <= stop
         hit_target = target is not None and highs[j] >= target
         if hit_stop:
-            return {"exit": "stop", "days": k, "ret": (stop - entry) / entry,
-                    "mfe": mfe, "mae": mae}
+            fill = min(stop, opens[j]) if j < len(opens) else stop
+            ret = (fill - entry) / entry
+            return {"exit": "stop", "days": k, "ret": ret,
+                    "mfe": mfe, "mae": min(mae, ret)}
         if hit_target:
-            return {"exit": "target", "days": k, "ret": (target - entry) / entry,
-                    "mfe": mfe, "mae": mae}
+            ret = (target - entry) / entry
+            return {"exit": "target", "days": k, "ret": ret,
+                    "mfe": max(mfe, ret), "mae": mae}
+        mfe = max(mfe, (highs[j] - entry) / entry)
+        mae = min(mae, (lows[j] - entry) / entry)
     j = min(i + max_hold, n - 1)
     return {"exit": "time", "days": j - i, "ret": (closes[j] - entry) / entry,
             "mfe": mfe, "mae": mae}
@@ -181,13 +196,20 @@ def run(series: dict[str, dict], ranks: dict[str, float], *, use_quality: bool,
                  f"here is measured against it, and an absolute number would be the "
                  f"market leg wearing the strategy's name.")
     bench_closes = bench["close"]
-    bench_index = {d: k for k, d in enumerate(bench["dates"])}
+    # Built rejecting empty and duplicate dates. A dict comprehension is last-write-wins,
+    # so a single malformed "" date from the price chain becomes a live key pointing at an
+    # arbitrary bar, and every lookup that misses lands on it.
+    bench_index: dict[str, int] = {}
+    for k, d in enumerate(bench["dates"]):
+        if d and d not in bench_index:
+            bench_index[d] = k
 
     events, controls = [], []
     for sym, d in series.items():
         if sym == BENCHMARK:
             continue
         closes, highs, lows = d["close"], d["high"], d["low"]
+        opens = d.get("open") or closes
         dates = d.get("dates") or [""] * len(closes)
         q = ranks.get(sym)
         if use_quality:
@@ -198,7 +220,15 @@ def run(series: dict[str, dict], ranks: dict[str, float], *, use_quality: bool,
             q_eff = 1.0            # gate open: every name passes on quality
 
         n = len(closes)
+        # One position per name at a time. Without this a name that sits in the drawdown
+        # band for six months emits an event every session — ~120 overlapping windows on
+        # ~5 non-overlapping trades' worth of information, each counted as an independent
+        # observation. It is the largest single source of false precision in the study,
+        # and it compounds with the bootstrap rather than being caught by it.
+        next_ok = warmup
         for i in range(warmup, n - max_hold, stride):
+            if i < next_ok:
+                continue
             c = closes[:i + 1]
             h, l = highs[:i + 1], lows[:i + 1]
             price = c[-1]
@@ -206,14 +236,17 @@ def run(series: dict[str, dict], ranks: dict[str, float], *, use_quality: bool,
             dd = (hi52 - price) / hi52 if hi52 > 0 else 0.0
             if dd < swing.MIN_DRAWDOWN or dd > swing.MAX_DRAWDOWN:
                 continue
-            ma50 = sum(c[-50:]) / 50
+            bi = _bidx(bench_index, dates, i)
+            if bi is None:
+                continue          # unknown benchmark date — drop rather than guess
+            ma50 = (sum(c[-50:]) / 50) if len(c) >= 50 else None
             atr = _atr(h, l, c)
             row = {"price": price, "ma50": ma50, "atr14": atr, "drawdown_52w": dd}
-            s = swing.evaluate(row, c, h, l, bench_closes[:_bidx(bench_index, dates, i)],
-                               quality_pctile=q_eff)
+            s = swing.evaluate(row, c, h, l, bench_closes[:bi], quality_pctile=q_eff)
             if s["swing_signal"] not in {"PRIME", "SETUP"}:
                 continue
-            sim = simulate(highs, lows, closes, i, price, s["stop"], s["target_1"], max_hold)
+            sim = simulate(highs, lows, opens, closes, i, price,
+                           s["stop"], s["target_1"], max_hold)
             mkt = bench_return(bench_closes, bench_index, dates, i, sim["days"])
             events.append({
                 "symbol": sym, "date": dates[i], "dd": dd,
@@ -222,23 +255,49 @@ def run(series: dict[str, dict], ranks: dict[str, float], *, use_quality: bool,
                 **sim, "mkt": mkt,
                 "excess": (sim["ret"] - mkt) if mkt is not None else None,
             })
-            # Matched control: same name, same holding rule, a date drawn at random from
-            # the tradeable range. Isolates the signal from the drift it sits on.
+            next_ok = i + max_hold
+
+            # Matched control: same name, same exit *rule*, a date drawn at random.
+            # The target is derived from the control date's own leg, not from the
+            # signal's. Taking the signal's upside while taking the control's own ATR
+            # stop builds a far target on a tight stop — a different strategy, which
+            # stops out far more often and makes the control look worse than the signal
+            # for a reason that has nothing to do with the signal.
             ci = rng.randrange(warmup, n - max_hold)
             cprice = closes[ci]
             catr = _atr(highs[:ci + 1], lows[:ci + 1], closes[:ci + 1])
             cstop = cprice - swing.STOP_ATR_MULT * catr if catr else None
-            ctarget = cprice * (1 + (s["upside_1"] or 0))
-            csim = simulate(highs, lows, closes, ci, cprice, cstop, ctarget, max_hold)
+            cleg = swing.selloff_leg(highs[:ci + 1], lows[:ci + 1])
+            if cleg:
+                ctarget = swing.targets(cleg, cprice, catr)["target_1"]
+            else:
+                # No leg at the control date: preserve the signal's reward-to-risk
+                # multiple rather than its raw upside, so the exit rule matches.
+                ctarget = (cprice + (s["reward_risk"] or 1.0) * (cprice - cstop)
+                           if cstop else None)
+            csim = simulate(highs, lows, opens, closes, ci, cprice, cstop, ctarget, max_hold)
             cmkt = bench_return(bench_closes, bench_index, dates, ci, csim["days"])
-            controls.append({**csim, "mkt": cmkt,
-                             "excess": (csim["ret"] - cmkt) if cmkt is not None else None})
+            controls.append({"symbol": sym, "date": dates[ci] if ci < len(dates) else "",
+                             **csim, "mkt": cmkt,
+                             "excess": (csim["ret"] - cmkt) if cmkt is not None else None,
+                             "pair_date": dates[i]})
     return {"events": events, "controls": controls}
 
 
-def _bidx(bench_index: dict[str, int], dates: list[str], i: int) -> int:
-    """Benchmark bars available as of the event date — never past it."""
-    return (bench_index.get(dates[i], i) + 1) if i < len(dates) else i + 1
+def _bidx(bench_index: dict[str, int], dates: list[str], i: int) -> int | None:
+    """Benchmark bars available as of the event date, or None if the date is unknown.
+
+    The previous version fell back to the *stock's* positional index when the date was
+    missing from the benchmark. The two series need not be aligned, so that fallback
+    could hand ``relative_drawdown`` a benchmark slice ending after the event date — a
+    look-ahead leak that produced a plausible number rather than an error. Returning
+    None and dropping the event is the only safe reading: a benchmark-relative measure
+    computed against the wrong bar is worse than one not computed at all.
+    """
+    if i >= len(dates):
+        return None
+    j = bench_index.get(dates[i])
+    return None if j is None else j + 1
 
 
 def _atr(highs: list[float], lows: list[float], closes: list[float],
@@ -256,26 +315,45 @@ def _atr(highs: list[float], lows: list[float], closes: list[float],
 # ---------------------------------------------------------------------------
 # reporting
 # ---------------------------------------------------------------------------
-def block_bootstrap(events: list[dict], key: str = "excess", draws: int = 2000,
-                    seed: int = 11) -> tuple[float, float] | None:
-    """95% interval, resampling **whole dates** rather than individual events.
+# Contiguous blocks below this and the interval is not worth printing. Resampling a
+# handful of blocks estimates its own width badly, and a confident-looking number is
+# worse than none.
+MIN_BLOCKS = 20
 
-    Dip events cluster: a hundred names trigger on one afternoon and carry one
-    afternoon's worth of information. Resampling events independently would treat them as
-    a hundred and report an interval several times too tight.
+
+def block_bootstrap(events: list[dict], key: str = "excess", draws: int = 2000,
+                    seed: int = 11, block: int = swing.MAX_HOLD_DAYS
+                    ) -> tuple[float, float] | None:
+    """95% interval by **circular block bootstrap over contiguous calendar runs**.
+
+    Resampling individual dates — which is what this did before — is a *cluster*
+    bootstrap. It removes the within-day correlation of a hundred names triggering on one
+    afternoon, and nothing else. It leaves the correlation *between adjacent days*
+    entirely intact, which for a strategy holding 25 sessions is most of the dependence
+    there is: an event on Monday and one on Tuesday are the same trade seen twice.
+
+    Contiguous blocks of at least the holding period keep neighbouring days together, so
+    a resample cannot break a drawdown episode into independent pieces. Below
+    ``MIN_BLOCKS`` distinct blocks the function returns None rather than an interval, and
+    the caller prints the block count instead. On a two-episode sample that is the
+    correct output: there is no interval to report.
     """
     by_date: dict[str, list[float]] = {}
     for e in events:
         v = e.get(key)
-        if v is not None:
+        if v is not None and e.get("date"):
             by_date.setdefault(e["date"], []).append(v)
-    dates = list(by_date)
-    if len(dates) < 5:
+    dates = sorted(by_date)                      # chronological, not insertion order
+    if not dates:
+        return None
+    blocks = [dates[k:k + block] for k in range(0, len(dates), block)]
+    if len(blocks) < MIN_BLOCKS:
         return None
     rng = random.Random(seed)
     means = []
     for _ in range(draws):
-        pool = [v for d in (rng.choice(dates) for _ in dates) for v in by_date[d]]
+        pool = [v for _ in blocks
+                for d in rng.choice(blocks) for v in by_date[d]]
         if pool:
             means.append(sum(pool) / len(pool))
     if not means:
@@ -294,14 +372,18 @@ def describe(events: list[dict], controls: list[dict], label: str) -> None:
     months = {e["date"][:7] for e in events if e["date"]}
     cex = [c["excess"] for c in controls if c["excess"] is not None]
 
+    span = f"{min(d for d in dates if d)} .. {max(d for d in dates if d)}" if any(dates) else "?"
     print(f"\n{label}")
     print(f"  events {len(events)}   distinct dates {len(dates)}   distinct months {len(months)}")
-    print(f"  -> the interval below is driven by {len(dates)} independent days, "
-          f"not {len(events)} events.")
+    print(f"  event window {span}")
+    print(f"  -> {max(1, len(dates)//swing.MAX_HOLD_DAYS)} independent {swing.MAX_HOLD_DAYS}-session "
+          f"blocks, not {len(events)} events. That is the sample size.")
     print(f"  raw return      mean {st.mean(raw):+7.2%}   median {st.median(raw):+7.2%}")
     if ex:
         ci = block_bootstrap(events)
-        band = f"   95% CI [{ci[0]:+.2%}, {ci[1]:+.2%}]" if ci else "   (too few dates for a CI)"
+        nblocks = max(1, len({e["date"] for e in events if e.get("date")}) // swing.MAX_HOLD_DAYS)
+        band = (f"   95% CI [{ci[0]:+.2%}, {ci[1]:+.2%}]" if ci else
+                f"   (no CI: {nblocks} independent blocks, need {MIN_BLOCKS})")
         print(f"  vs benchmark    mean {st.mean(ex):+7.2%}   median {st.median(ex):+7.2%}{band}")
     if cex:
         print(f"  control arm     mean {st.mean(cex):+7.2%}   "
@@ -357,6 +439,25 @@ def main() -> int:
     if args.warmup < 252:
         print(f"  WARNING: warmup {args.warmup} < 252, so 'drawdown from the 52-week "
               f"high' is really a drawdown from a {args.warmup}-bar high. Diagnostic only.")
+    if args.warmup < 50:
+        print(f"  WARNING: warmup {args.warmup} < 50 leaves ma50 undefined, so the z50 "
+              f"oversold trigger cannot fire and entries degenerate to RSI-only.")
+
+    # The burn-in is not free. The first `warmup` bars of every series can never be an
+    # event date, so a short history does not merely give a small sample — it silently
+    # removes the *oldest* market episodes, which on a two-year series is where the only
+    # severe selloff usually sits. Stating the loss is the difference between a small
+    # honest sample and a confident number about a period the study never looked at.
+    depth = min((len(d["close"]) for d in series.values()), default=0)
+    typical = max((len(d["close"]) for d in series.values()), default=0)
+    usable = max(0, typical - args.warmup - args.max_hold)
+    print(f"  history {typical} bars/name; burn-in consumes the first {args.warmup}, "
+          f"leaving {usable} event dates per name (~{usable/21:.0f} months).")
+    if usable < 500:
+        print(f"  WARNING: {usable} event dates is roughly {max(1, usable//swing.MAX_HOLD_DAYS)} "
+              f"independent {swing.MAX_HOLD_DAYS}-session blocks per name. Episodes older "
+              f"than ~{typical/21:.0f} months are inside the burn-in and are NOT sampled. "
+              f"Widen the price window before reading any number below as a result.")
     if not ranks:
         print("no ledger/index.json — the quality arms will be skipped.")
 

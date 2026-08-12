@@ -129,7 +129,11 @@ def selloff_leg(highs: list[float], lows: list[float], window: int = 252) -> dic
         return None
     tail_hi = highs[-window:]
     offset = len(highs) - len(tail_hi)
-    peak_local = max(range(len(tail_hi)), key=lambda i: tail_hi[i])
+    # Ties break toward the *most recent* equal high. Python's max returns the first
+    # maximal element, which would anchor the leg to the older of two equal peaks and
+    # bracket the later one inside it — producing exactly the leg-spans-a-later-high
+    # defect this function exists to prevent.
+    peak_local = max(range(len(tail_hi)), key=lambda i: (tail_hi[i], i))
     peak_idx = offset + peak_local
     peak = highs[peak_idx]
 
