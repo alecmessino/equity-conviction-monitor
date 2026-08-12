@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from equity_monitor import (churn, edge, features, model, monitor, performance,
+from equity_monitor import (churn, edge, features, health, model, monitor, performance,
                             snapshots, universe as uni, watchlist)
 from equity_monitor.sources import edgar, macro, prices
 
@@ -315,6 +315,10 @@ def build(limit: int | None = None, skip_macro: bool = False,
         # immediately after: whether the ordering is informative is the question that
         # decides whether any of the rest is worth acting on.
         edge.write(LEDGER)
+        # Cohort stickiness, persistence and tier flips — the ribbon that says
+        # whether tonight's board is a trend or a twitch. Read from the same
+        # snapshots; no schema extension was needed for any of it.
+        health.write(LEDGER)
         if perf["legs"]:
             print(f"performance: {perf['legs']} leg(s), book {perf['book_total']:+.2f}%"
                   + (f", {perf['benchmark']} {perf['benchmark_total']:+.2f}%"
