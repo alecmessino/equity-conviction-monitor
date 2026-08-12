@@ -89,6 +89,16 @@ nav{
   border-bottom:1px solid var(--border);position:sticky;top:53px;z-index:39;
   overflow-x:auto;
 }
+.health-ribbon{display:flex;gap:8px;flex-wrap:wrap;align-items:center;
+  padding:6px 20px;background:var(--bg-2,rgba(0,0,0,.03));border-left:2px solid var(--s1);
+  border-bottom:1px solid var(--rule)}
+.hp{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:2px 9px;
+  border-radius:11px;border:1px solid var(--rule);background:var(--bg);white-space:nowrap}
+.hp b{font-variant-numeric:tabular-nums;color:var(--ink)}
+.hp .lbl{color:var(--ink-3);text-transform:uppercase;letter-spacing:.5px;font-size:9px}
+.hp.act{cursor:pointer}
+.hp.act:hover{border-color:var(--s1);background:var(--bg-2)}
+.hp .dotc{width:6px;height:6px;border-radius:50%}
 nav button{
   padding:9px 14px;border:0;background:none;color:var(--muted);font-size:12.5px;
   border-bottom:2px solid transparent;white-space:nowrap;
@@ -527,6 +537,7 @@ table.mig th.l,table.mig td.l,
   <button role="tab" aria-selected="false" data-view="monitor">Monitor</button>
   <button role="tab" aria-selected="false" data-view="method">Method</button>
 </nav>
+<div class="health-ribbon" id="health" hidden></div>
 
 <main>
   <div id="alert"></div>
@@ -1237,7 +1248,8 @@ function sparkline(values,w,h,stroke,opts){
 }
 
 /* ---------- state ---------- */
-const S={ledger:null, rows:[], hist:{}, macro:null, mon:null, wl:null,
+const S={ledger:null, rows:[], hist:{}, macro:null, mon:null, wl:null, edge:null,
+         health:null, flipSet:null,
          sort:{k:'conviction',dir:-1}};
 
 async function boot(){
@@ -1264,6 +1276,7 @@ async function boot(){
   try{ S.wl=await fetch(base+'watchlist.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
   try{ S.perf=await fetch(base+'performance.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
   try{ S.edge=await fetch(base+'edge.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
+  try{ S.health=await fetch(base+'health.json',{cache:'no-cache'}).then(r=>r.json()); }catch{}
 
   const moved=(j.attribution&&j.attribution.names)||{};
   S.rows.forEach(r=>{ r._delta = moved[r.symbol] ? moved[r.symbol].total : null; });
@@ -1271,7 +1284,7 @@ async function boot(){
   renderHeader(); renderMacro(); renderKPIs(); renderMap(); renderSale(); renderDist();
   renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
   buildSectorFilter(); renderGrid(); renderSectors(); renderPortfolio(); renderData();
-  renderAlpha(); renderEdge();
+  renderAlpha(); renderEdge(); renderHealth();
   renderWatchlist(); renderMonitor();
 }
 
@@ -1619,6 +1632,10 @@ function buildSectorFilter(){
     secs.map(s=>`<option>${esc(s)}</option>`).join(''));
 }
 function filtered(){
+  // A pill selection is "these N names", which the search box cannot express. Held
+  // apart from it rather than stuffed into the query string so the two can be cleared
+  // independently and can never both be live.
+  if(S.flipSet && S.flipSet.size) return S.rows.filter(r=>S.flipSet.has(r.symbol));
   const q=$('#f-q').value.trim().toLowerCase();
   const sec=$('#f-sector').value, sig=$('#f-signal').value;
   const conf=parseFloat($('#f-conf').value)||0;
@@ -1773,7 +1790,16 @@ $$('#grid thead th').forEach(th=>{
   };
 });
 ['#f-q','#f-sector','#f-signal','#f-conf','#f-limit'].forEach(sel=>{
-  const n=$(sel); n.addEventListener(n.tagName==='INPUT'?'input':'change',renderGrid);
+  const n=$(sel);
+  n.addEventListener(n.tagName==='INPUT'?'input':'change',()=>{
+    // Touching any ordinary control supersedes a pill selection, so the screener never
+    // shows a filter the visible controls do not explain.
+    S.flipSet=null; renderGrid();
+  });
+});
+// Escape clears the pill selection, matching the crypto terminal.
+document.addEventListener('keydown',e=>{
+  if(e.key==='Escape' && S.flipSet){ S.flipSet=null; renderGrid(); }
 });
 $('#grid tbody').addEventListener('click',e=>{
   const tr=e.target.closest('tr[data-sym]');
@@ -2497,6 +2523,82 @@ function renderEdge(){
       ${e.dates_are_sessions===false?'Legs here are dated by run date rather than trading session; that affects the labels, not the measurement.':''}</p>
     <p class="card-note">${esc(e.basis||'')}</p>`;
 }
+
+/* ---------- model health ribbon ----------
+   Sits under the macro strip and above the views, because the question it answers comes
+   first: is tonight's board a trend or a twitch? A screener read before that is a list
+   of numbers whose reliability is unknown.
+
+   Every figure carries its own window. "Persistence 88.4% (30D)" is the badge a
+   terminal naturally writes and would be a fabrication on five recorded sessions, so
+   the window is interpolated from the data rather than written into the label. The
+   colour is graded against a stated convention, not a historical average — five
+   sessions is not a history to average, and a badge implying "normal for this model"
+   would invent the baseline it claims to measure against. */
+function hpill(label, value, o){
+  o=o||{};
+  const dot=o.tone?`<span class="dotc" style="background:${o.tone}"></span>`:'';
+  return `<span class="hp${o.click?' act':''}"${o.title?` title="${esc(o.title)}"`:''}${
+    o.click?` data-hp="${esc(o.click)}"`:''}>${dot}<span class="lbl">${esc(label)}</span><b>${value}</b></span>`;
+}
+function renderHealth(){
+  const host=$('#health'); if(!host) return;
+  const h=S.health;
+  if(!h){ host.hidden=true; return; }
+  host.hidden=false;
+  const st=h.stickiness||{}, fl=h.flips||{}, pe=h.persistence||{};
+  const bits=[];
+  if(st.stickiness==null){
+    bits.push(hpill('cohort stickiness','awaiting a second measured session',
+      {title:'Stickiness compares consecutive sessions the return curve counts as real holding periods. It cannot be computed from one.'}));
+  }else{
+    const ok=st.stickiness>=st.sticky_warn;
+    bits.push(hpill(`top ${Math.round(st.cohort_share*100)}% stickiness · ${st.pairs} pair${st.pairs===1?'':'s'}`,
+      (st.stickiness*100).toFixed(1)+'%',
+      {tone: ok?'var(--pos)':'var(--warn)', title: st.basis}));
+    if(st.latest){
+      const churn=st.latest.of-st.latest.retained;
+      bits.push(hpill('last session', `${st.latest.retained}/${st.latest.of} held`,
+        {tone: churn?'var(--warn)':'var(--pos)',
+         title: churn?`in: ${st.latest.entered.join(', ')||'—'}\nout: ${st.latest.left.join(', ')||'—'}`
+                     :'the leading cohort did not change'}));
+    }
+  }
+  // Clickable: a delta counter exists to get you to the names.
+  if(!fl.pending){
+    const mk=(label,list,n,tone)=>n
+      ? hpill(label, n, {tone, click:list.join('|'),
+          title:`${list.join(', ')}${n>list.length?` (+${n-list.length} more)`:''} — click to filter the screener`})
+      : hpill(label, 0, {title:'none between the last two sessions'});
+    bits.push(mk(`→ conviction ${fl.level}+`, fl.into_backed||[], fl.n_into||0, 'var(--pos)'));
+    bits.push(mk(`← below ${fl.level}`, fl.out_of_backed||[], fl.n_out||0, 'var(--neg)'));
+  }
+  if(pe.window){
+    bits.push(hpill('backed names', `${pe.n_backed} over ${pe.window} session${pe.window===1?'':'s'}`,
+      {title: pe.basis}));
+  }
+  if(st.dates_are_sessions===false){
+    bits.push(hpill('axis','run dates',
+      {tone:'var(--warn)',
+       title:`Only ${st.sessions_dated} of ${st.sessions} boards carry a recorded trading session, so the axis is labelled by when the nightly ran. Mixing the two would collide dates and silently drop a board, so it stays uniform until every snapshot has one.`}));
+  }
+  host.innerHTML=bits.join('');
+}
+// Delegated, so the pills survive any re-render.
+document.addEventListener('click',e=>{
+  const pill=e.target.closest && e.target.closest('#health [data-hp]');
+  if(!pill) return;
+  const syms=pill.dataset.hp.split('|').filter(Boolean);
+  if(!syms.length) return;
+  // Typed search and a pill selection are mutually exclusive. Two live filters would
+  // silently intersect, and neither could be cleared without guessing which was doing
+  // the work — the "0 rows found" dead end.
+  S.flipSet = new Set(syms);
+  const box=$('#f-q'); if(box) box.value='';
+  $$('nav button[role=tab]').forEach(b=>b.setAttribute('aria-selected', String(b.dataset.view==='screener')));
+  $$('.view').forEach(v=>{v.hidden = v.id!=='view-screener';});
+  renderGrid();
+});
 
 /* ---------- data quality ---------- */
 function renderData(){
@@ -3491,7 +3593,7 @@ if($('#sandbox')){
 // itself, but a scaled viewBox scales the type with it.
 function redrawCharts(){
   if(!S.ledger) return;
-  renderMap(); renderDist(); renderSectors(); renderData(); renderMonitor(); renderAlpha(); renderEdge();
+  renderMap(); renderDist(); renderSectors(); renderData(); renderMonitor(); renderAlpha(); renderEdge(); renderHealth();
 }
 $$('nav button').forEach(b=>{
   b.onclick=()=>{
