@@ -197,6 +197,30 @@ select,input[type=search]{
 input[type=search]{min-width:150px}
 input[type=range]{width:110px;accent-color:var(--s1)}
 .count{color:var(--muted);font-size:11.5px;margin-left:auto}
+/* Rebound gauge. A row of numbers cannot show that a name is 8% off its low and still
+   34% below the level being targeted; a bar can, in the width of a table cell. */
+.gauge{position:relative;height:16px;min-width:120px;background:var(--plane);
+       border-radius:3px;overflow:hidden}
+.gauge i{position:absolute;inset:0 auto 0 0;background:var(--s1);opacity:.32}
+.gauge u{position:absolute;top:0;bottom:0;width:2px;background:var(--ink-2);
+         text-decoration:none}
+/* The run still to travel before target 1, hatched rather than filled so it never reads
+   as progress already made. */
+.gauge b{position:absolute;top:0;bottom:0;background:repeating-linear-gradient(
+           135deg,color-mix(in srgb,var(--s1) 38%,transparent) 0 2px,transparent 2px 5px)}
+.gauge s{position:absolute;top:0;bottom:0;right:5px;display:grid;align-items:center;
+         font-size:9.5px;color:var(--ink-2);text-decoration:none;font-weight:600}
+.rr-hi{color:var(--pos);font-weight:600}
+.rr-lo{color:var(--muted)}
+.tier{font-size:10px;letter-spacing:.06em;font-weight:600;padding:2px 6px;border-radius:3px}
+.tier-PRIME{background:color-mix(in srgb,var(--pos) 18%,transparent);color:var(--pos)}
+.tier-SETUP{background:color-mix(in srgb,var(--s1) 18%,transparent);color:var(--s1)}
+.tier-WATCH{background:var(--plane);color:var(--muted)}
+.funnel{display:grid;gap:5px;margin-top:10px}
+.funnel div{display:grid;grid-template-columns:1fr auto;gap:10px;font-size:11.5px;
+            align-items:center}
+.funnel span{color:var(--muted)}
+.funnel em{font-style:normal;color:var(--ink-2);font-variant-numeric:tabular-nums}
 
 /* --- detail panel --- */
 .scrim{
@@ -529,6 +553,7 @@ table.mig th.l,table.mig td.l,
 
 <nav role="tablist">
   <button role="tab" aria-selected="true" data-view="screener">Screener</button>
+  <button role="tab" aria-selected="false" data-view="swing">Swing dips</button>
   <button role="tab" aria-selected="false" data-view="watchlist">Watchlist diff</button>
   <button role="tab" aria-selected="false" data-view="sectors">Sectors</button>
   <button role="tab" aria-selected="false" data-view="research">Research</button>
@@ -547,6 +572,69 @@ table.mig th.l,table.mig td.l,
        collapsed to one strip, which is ~110px above the fold — on a 13" screen the
        difference between the factor map being visible on load and not. -->
   <div class="rail" id="macro"></div>
+
+  <!-- ================= SWING DIPS ================= -->
+  <div class="view" id="view-swing" hidden>
+    <div class="card">
+      <div class="card-head"><h2>Why this is a separate board</h2></div>
+      <p class="card-note" style="margin:0">
+        Conviction answers "is this a good business I can own". This answers a shorter
+        question — <b>this name has fallen, is the bounce worth taking, and what does it
+        pay against what it risks</b>. The gate here is <b>reward-to-risk</b>, not
+        drawdown depth. Volatility scales with the fall, so a 3×ATR stop widens roughly in
+        step with it while a fixed-fraction retracement target grows faster than linearly:
+        on this board the median name 10–15% off its high offers <b>+5.3% against −9.8%</b>,
+        and the same arithmetic at 30–40% off pays <b>1.35 to one</b>. Depth is an output
+        of the ratio, not a threshold to guess.
+      </p>
+    </div>
+
+    <div class="row split">
+      <div class="card">
+        <div class="card-head"><h2>Quality versus drawdown</h2></div>
+        <div id="swing-map"></div>
+        <p class="card-note">
+          Quality percentile (y) against distance below the 52-week high (x). The
+          upper-right is the thesis: durable businesses the tape has marked down. The
+          lower-right is where the same drawdown is not a sale. Shaded from the
+          reward-to-risk floor rightward — left of that line the retracement does not
+          cover the stop, whatever the quality.
+        </p>
+      </div>
+      <div style="display:grid;gap:12px;align-content:start;min-width:0">
+        <div class="card">
+          <h2>Tonight's funnel</h2>
+          <div class="funnel" id="swing-funnel"></div>
+          <p class="card-note" id="swing-funnel-note"></p>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head" style="margin-bottom:10px">
+        <h2>Swing candidates — 5 to 25 sessions</h2>
+        <span class="count" id="swing-count"></span>
+      </div>
+      <div class="tbl-wrap"><table id="swing-grid">
+        <thead><tr>
+          <th class="l" data-k="symbol">Ticker</th>
+          <th class="l" data-k="sector">Sector</th>
+          <th data-k="quality_pctile">Qual</th>
+          <th class="grp" data-k="drawdown_52w">52w DD</th>
+          <th data-k="rel_drawdown_52w" title="Drawdown of the stock/benchmark ratio — the part of the fall that is not the market">vs SPY</th>
+          <th data-k="rsi14">RSI</th>
+          <th data-k="z50">Z50</th>
+          <th class="grp" data-k="reward_risk" title="Upside to target 1 divided by the distance to a 3xATR stop">R:R</th>
+          <th data-k="upside_1">To T1</th>
+          <th data-k="target_1">T1</th>
+          <th data-k="stop">Stop</th>
+          <th class="grp" data-k="rebound_progress">Rebound off the low</th>
+          <th data-k="swing_signal">Signal</th>
+        </tr></thead><tbody></tbody>
+      </table></div>
+      <p class="card-note" id="swing-note"></p>
+    </div>
+  </div>
 
   <!-- ================= SCREENER ================= -->
   <div class="view" id="view-screener">
@@ -1282,6 +1370,7 @@ async function boot(){
   S.rows.forEach(r=>{ r._delta = moved[r.symbol] ? moved[r.symbol].total : null; });
 
   renderHeader(); renderMacro(); renderKPIs(); renderMap(); renderSale(); renderDist();
+  renderSwingMap(); renderSwing();
   renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
   buildSectorFilter(); renderGrid(); renderSectors(); renderPortfolio(); renderData();
   renderAlpha(); renderEdge(); renderHealth();
@@ -1432,6 +1521,179 @@ function renderSale(){
     `Quality percentile ≥ 55 <em>and</em> at least 15% below the 52-week high — the two
      conditions the mean-reversion uplift requires. The quality gate is what separates a
      sale from a falling knife; ${hits.length} of ${S.rows.length} names clear both.`;
+}
+
+/* ---------- swing dips ----------
+   A second board over the same names, answering a shorter question. The gate it draws is
+   reward-to-risk rather than drawdown depth, because depth alone is not a decision: the
+   stop widens with volatility, and volatility rises with the fall. Everything here is
+   read from fields the nightly build computes (equity_monitor/swing.py); nothing is
+   recomputed in the browser, so the scanner and the alert cannot disagree. */
+const SWING_RR_FLOOR=1.5;
+
+function swingRows(){
+  return S.rows.filter(r=>nz(r.reward_risk)&&nz(r.drawdown_52w));
+}
+
+function renderSwingMap(){
+  const host=$('#swing-map'); if(!host) return;
+  const W=fitW(host,700,900), H=440, m={t:16,r:20,b:48,l:54};
+  const s=svgIn(host,W,H);
+  s.setAttribute('aria-label','Quality percentile against 52-week drawdown');
+  const maxDD=0.60;
+  const x=v=>m.l+Math.min(v,maxDD)/maxDD*(W-m.l-m.r);
+  const y=v=>H-m.b-v*(H-m.t-m.b);
+
+  /* The reward-to-risk floor is a curve, not a vertical line — it depends on each name's
+     ATR. Drawn at the depth where the median name on tonight's board first clears it, so
+     the shaded region is the one the arithmetic actually admits rather than a decoration
+     at a round number. */
+  const cleared=swingRows().filter(r=>r.reward_risk>=SWING_RR_FLOOR)
+                           .map(r=>r.drawdown_52w).sort((a,b)=>a-b);
+  const gate=cleared.length?cleared[Math.floor(cleared.length*0.1)]:0.25;
+  el('rect',{x:x(gate),y:m.t,width:Math.max(0,W-m.r-x(gate)),height:H-m.b-m.t,
+             fill:cssVar('--s1'),opacity:0.05},s);
+  el('line',{x1:x(gate),y1:m.t,x2:x(gate),y2:H-m.b,stroke:cssVar('--s1'),
+             'stroke-width':1,'stroke-dasharray':'4 3','stroke-opacity':0.7},s);
+  const gl=el('text',{x:x(gate)+6,y:m.t+12,class:'tick',fill:cssVar('--s1')},s);
+  gl.textContent=`R:R ≥ ${SWING_RR_FLOOR} from ≈${(gate*100).toFixed(0)}% down`;
+
+  for(let i=0;i<=4;i++){
+    const t=i/4;
+    el('line',{x1:x(t*maxDD),y1:m.t,x2:x(t*maxDD),y2:H-m.b,class:'gridline'},s);
+    el('line',{x1:m.l,y1:y(t),x2:W-m.r,y2:y(t),class:'gridline'},s);
+    const tx=el('text',{x:x(t*maxDD),y:H-m.b+15,class:'tick','text-anchor':'middle'},s);
+    tx.textContent='−'+(t*maxDD*100).toFixed(0)+'%';
+    const ty=el('text',{x:m.l-8,y:y(t)+3,class:'tick','text-anchor':'end'},s);
+    ty.textContent=(t*100).toFixed(0);
+  }
+  el('line',{x1:m.l,y1:H-m.b,x2:W-m.r,y2:H-m.b,class:'axisline'},s);
+  el('line',{x1:m.l,y1:m.t,x2:m.l,y2:H-m.b,class:'axisline'},s);
+  const xt=el('text',{x:(m.l+W-m.r)/2,y:H-8,class:'axis-title','text-anchor':'middle'},s);
+  xt.textContent='Below the 52-week high';
+  const yt=el('text',{transform:`rotate(-90 12 ${(m.t+H-m.b)/2})`,x:12,y:(m.t+H-m.b)/2,
+                      class:'axis-title','text-anchor':'middle'},s);
+  yt.textContent='Quality percentile (universe rank)';
+
+  /* The quality gate. Drawn where the model's own gate sits, so the quadrant boundary is
+     the one the scanner uses rather than a visually convenient half. */
+  el('line',{x1:m.l,y1:y(0.65),x2:W-m.r,y2:y(0.65),stroke:cssVar('--axis'),
+             'stroke-width':1,'stroke-opacity':0.6},s);
+
+  const rows=swingRows();
+  const placed=[];
+  for(const r of rows){
+    const tier=r.swing_signal;
+    const prime = tier==='PRIME'||tier==='SETUP';
+    const cx=x(r.drawdown_52w), cy=y(r.quality_pctile??0.5);
+    const c=el('circle',{cx,cy,r:prime?4.5:2.2,
+      fill: prime?cssVar('--pos') : (r.quality_pctile??0)>=0.65?cssVar('--s1'):cssVar('--muted'),
+      opacity: prime?0.95:0.28},s);
+    const t=el('title',{},c);
+    t.textContent=`${r.symbol} — ${r.name||''}\n`
+      +`quality ${((r.quality_pctile??0)*100).toFixed(0)} pct · ${pct(r.drawdown_52w,1)} below the high\n`
+      +`R:R ${nz(r.reward_risk)?r.reward_risk.toFixed(2):'—'} · `
+      +`${tier==='NONE'?('blocked: '+(r.swing_block||'—')):tier}`;
+    if(prime){
+      const lbl=el('text',{x:cx+7,y:cy+3,class:'tick',fill:cssVar('--ink-2')},s);
+      lbl.textContent=r.symbol;
+      // Two named points within a few pixels overprint into an unreadable smear. Push
+      // each label clear of the ones already down rather than letting them stack.
+      let ly=cy+3;
+      while(placed.some(q=>Math.abs(q.y-ly)<11 && Math.abs(q.x-(cx+7))<44)) ly+=11;
+      lbl.setAttribute('y',ly);
+      placed.push({x:cx+7,y:ly});
+    }
+  }
+}
+
+function gauge(r){
+  /* Where price sits in the leg it is retracing — low at the left, the high that started
+     the fall at the right. The bar is the leg, not the 52-week range: a retracement is
+     measured against the decline it retraces.
+
+     Target 1 is drawn as the edge of a shaded band rather than as a labelled marker,
+     because its position is 38.2% of the leg *by construction* and is therefore identical
+     on every row. A number that never varies is not information; the distance still worth
+     reading is the gap between the fill and the band, which is what the eye picks up and
+     what the "To T1" column states in percent. */
+  const lo=r.leg_low, hi=r.leg_high, px=r.price;
+  if(!nz(lo)||!nz(hi)||hi<=lo) return '<span class="rr-lo">—</span>';
+  const at=v=>Math.max(0,Math.min(100,(v-lo)/(hi-lo)*100));
+  const p=at(px), t=at(r.target_1);
+  return `<div class="gauge" role="img" aria-label="retraced ${p.toFixed(0)} percent of `
+    +`the fall; target 1 sits at ${t.toFixed(0)} percent">`
+    +`<i style="width:${p}%"></i>`
+    +`<b style="left:${Math.min(p,t)}%;width:${Math.max(0,t-p)}%"></b>`
+    +`<u style="left:${p}%"></u>`
+    +`<s>${p.toFixed(0)}%</s></div>`;
+}
+
+function renderSwing(){
+  const tb=$('#swing-grid tbody'); if(!tb) return;
+  const rows=S.rows.filter(r=>r.swing_signal==='PRIME'||r.swing_signal==='SETUP'
+                              ||r.swing_signal==='WATCH')
+    .sort((a,b)=>{
+      const rank=t=>t==='PRIME'?0:t==='SETUP'?1:2;
+      return rank(a.swing_signal)-rank(b.swing_signal)
+             || (b.reward_risk??0)-(a.reward_risk??0);
+    });
+
+  if(!rows.length){
+    tb.innerHTML=`<tr><td colspan="13" class="l" style="color:var(--muted)">
+      Nothing clears the gates tonight. That is an ordinary outcome — the funnel beside
+      the chart shows which gate did the work.</td></tr>`;
+  }else{
+    tb.innerHTML=rows.map(r=>`<tr data-sym="${esc(r.symbol)}">
+      <td class="l"><span class="sym">${esc(r.symbol)}</span></td>
+      <td class="l" style="color:var(--muted)">${esc(r.sector||'')}</td>
+      <td>${((r.quality_pctile??0)*100).toFixed(0)}</td>
+      <td class="down">−${pct(r.drawdown_52w,1)}</td>
+      <td class="${(r.rel_drawdown_52w??0)>0.05?'down':''}">${nz(r.rel_drawdown_52w)?'−'+pct(r.rel_drawdown_52w,1):'—'}</td>
+      <td>${nz(r.rsi14)?r.rsi14.toFixed(0):'—'}</td>
+      <td>${nz(r.z50)?r.z50.toFixed(2):'—'}</td>
+      <td class="${(r.reward_risk??0)>=SWING_RR_FLOOR?'rr-hi':'rr-lo'}">${nz(r.reward_risk)?r.reward_risk.toFixed(2):'—'}</td>
+      <td class="up">${spct(r.upside_1,1)}</td>
+      <td>${nz(r.target_1)?num(r.target_1,2):'—'}</td>
+      <td class="down">${nz(r.stop)?num(r.stop,2):'—'}</td>
+      <td>${gauge(r)}</td>
+      <td><span class="tier tier-${esc(r.swing_signal)}">${esc(r.swing_signal)}</span></td>
+    </tr>`).join('');
+    tb.onclick=e=>{
+      const tr=e.target.closest('tr[data-sym]');
+      if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+    };
+  }
+  const prime=rows.filter(r=>r.swing_signal==='PRIME').length;
+  const setup=rows.filter(r=>r.swing_signal==='SETUP').length;
+  $('#swing-count').textContent=`${prime} prime · ${setup} setup · `
+    +`${rows.length-prime-setup} watch`;
+  $('#swing-note').innerHTML=
+    `<b>R:R</b> is upside to target 1 (a 38.2% retracement of the fall) over the distance
+     to a 3×ATR stop. <b>vs SPY</b> is the drawdown of the stock/benchmark ratio — the part
+     of the fall that is not the market, and the part the thesis is actually about. A name
+     25% down while the index is 25% down has fallen for reasons no amount of quality will
+     mean-revert. Click any row for the full decomposition.`;
+  renderSwingFunnel();
+}
+
+function renderSwingFunnel(){
+  const host=$('#swing-funnel'); if(!host) return;
+  const sw=S.ledger&&S.ledger.swing;
+  const blocks=(sw&&sw.blocks)||{};
+  const entries=Object.entries(blocks).sort((a,b)=>b[1]-a[1]);
+  if(!entries.length){
+    host.innerHTML='<div class="pending">No funnel in this ledger — rebuild to populate it.</div>';
+    return;
+  }
+  const total=entries.reduce((a,[,n])=>a+n,0);
+  host.innerHTML=entries.map(([k,n])=>
+    `<div><span>${esc(k)}</span><em>${n}</em></div>`).join('');
+  $('#swing-funnel-note').innerHTML=
+    `Each name is counted at the <em>first</em> gate it failed, so this is a funnel rather
+     than ${entries.length} independent tallies. ${total} names were rejected. Publishing
+     it is the difference between "eight candidates" and knowing whether the market gave
+     the scanner nothing or the thresholds did.`;
 }
 
 /* ---------- conviction distribution ----------
@@ -3593,7 +3855,7 @@ if($('#sandbox')){
 // itself, but a scaled viewBox scales the type with it.
 function redrawCharts(){
   if(!S.ledger) return;
-  renderMap(); renderDist(); renderSectors(); renderData(); renderMonitor(); renderAlpha(); renderEdge(); renderHealth();
+  renderMap(); renderSwingMap(); renderDist(); renderSectors(); renderData(); renderMonitor(); renderAlpha(); renderEdge(); renderHealth();
 }
 $$('nav button').forEach(b=>{
   b.onclick=()=>{
@@ -3610,7 +3872,7 @@ $('#theme').onclick=()=>{
     : (matchMedia('(prefers-color-scheme: dark)').matches ? 'light' : 'dark');
   document.documentElement.setAttribute('data-theme',next);
   try{ localStorage.setItem('ecm-theme',next); }catch{}
-  if(S.ledger){ renderMacro(); renderMap(); renderGrid(); renderSectors();
+  if(S.ledger){ renderMacro(); renderMap(); renderSwingMap(); renderSwing(); renderGrid(); renderSectors();
                 renderPortfolio(); renderData(); renderSale(); renderDist(); renderAlpha();
                 renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
                 renderWatchlist(); renderMonitor(); }
