@@ -90,7 +90,10 @@ def _get(url: str, headers: dict | None = None, tries: int = 3) -> dict | list |
                 return json.load(r)
         except urllib.error.HTTPError as e:
             if e.code in (429, 502, 503):
-                _cooldown["until"] = time.time() + 30 * (attempt + 1) + random.random() * 5
+                # Tiingo's free cap is 50 requests per *hour*, so a 429 there means the
+                # window is spent and nothing shorter than the hour rolling over will
+                # help. A 30-second retry just burns symbols marking them failed.
+                _cooldown["until"] = time.time() + (600 if "tiingo" in url else 30) * (attempt + 1)
                 continue
             return None
         except Exception:
