@@ -191,7 +191,20 @@ def test_the_disclosure_names_the_bias_rather_than_gesturing_at_it():
 # ---------------------------------------------------------------------------
 # end to end, against the real repo ledger
 # ---------------------------------------------------------------------------
-@pytest.mark.skipif(not os.path.isdir(os.path.join(rebuild.LEDGER, "history")),
+def _has_history(minimum: int = 20) -> bool:
+    """Is there enough cached price history for a reconstruction to mean anything?
+
+    Testing that the *directory* exists is not the same question. A half-populated or
+    empty ``ledger/history/`` — which is what an interrupted seed run leaves behind —
+    made these two tests run against almost nothing and fail on an assertion about
+    reconstruction quality, reporting a data-collection accident as a code regression.
+    """
+    path = os.path.join(rebuild.LEDGER, "history")
+    if not os.path.isdir(path):
+        return False
+    return len([f for f in os.listdir(path) if f.endswith(".json")]) >= minimum
+
+@pytest.mark.skipif(not _has_history(),
                     reason="needs the cached price history")
 def test_end_to_end_against_the_real_ledger(tmp_path):
     out = str(tmp_path / "rebuild")
@@ -221,7 +234,7 @@ def test_end_to_end_against_the_real_ledger(tmp_path):
     assert snapshots.available(rebuild.LEDGER) == before
 
 
-@pytest.mark.skipif(not os.path.isdir(os.path.join(rebuild.LEDGER, "history")),
+@pytest.mark.skipif(not _has_history(),
                     reason="needs the cached price history")
 def test_a_longer_lookback_moves_the_board_further(tmp_path):
     """A sanity check on the reconstruction actually reconstructing.
