@@ -1,0 +1,365 @@
+#!/usr/bin/env python3
+"""Compare entry screens head to head on one panel, with the exit held constant.
+
+The reward-to-risk sweep established that the exit rule is not what decides this
+strategy's outcome. That leaves the entry, and the entry has a problem that is visible in
+the literature before it is visible in the data:
+
+**The 52-week drawdown screen is a momentum-loser screen.** Jegadeesh and Titman's result
+is that stocks ranked on 3-to-12-month returns *continue* in the same direction over the
+following 3 to 12 months — losers keep losing. Short-term reversal is a different effect
+living at a one-week-to-one-month horizon, and the two are so easily confused that J&T
+themselves skip the most recent month when forming momentum, specifically to keep
+reversal out of it.
+
+Selecting on a 52-week drawdown puts a book squarely in momentum losers. Holding it for
+5-25 sessions tries to harvest reversal. The selection is on the twelve-month axis and
+the harvest is on the one-month axis, so the momentum penalty is paid in full and the
+reversal premium is collected on whatever is left. That is a coherent explanation for a
+matched random-date control returning -1% to -5.5% against the benchmark in the same
+names: the *pool* is the problem, not the timing within it.
+
+So this script does not tune the strategy. It asks which screen the pool should come from
+at all, holding the exit fixed at a plain N-session time exit. No stop, deliberately: a
+stop confounds the entry test, and the sweep already showed the stop is entangled with
+the reward-to-risk gate rather than separable from it.
+
+Every screen is measured the same way — forward excess return against SPY over the same
+window, a matched random-date control in the same name, and a block bootstrap over
+calendar time.
+
+    python scripts/research_screens.py --hold 10
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import math
+import os
+import random
+import statistics as st
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LEDGER = os.path.join(ROOT, "ledger")
+HISTORY = os.path.join(LEDGER, "history")
+BENCH = "SPY"
+WARMUP = 252
+
+
+def rolling_rsi(closes: list[float], window: int = 14) -> list[float | None]:
+    """Wilder RSI at every bar, in one pass.
+
+    Recomputing from bar zero at each date is quadratic in the history depth, which is
+    the whole point of having deep history. This is O(n).
+    """
+    out: list[float | None] = [None] * len(closes)
+    if len(closes) < window + 1:
+        return out
+    gains = losses = 0.0
+    for i in range(1, window + 1):
+        ch = closes[i] - closes[i - 1]
+        gains += max(ch, 0.0)
+        losses += max(-ch, 0.0)
+    ag, al = gains / window, losses / window
+    out[window] = 100.0 if al == 0 else 100.0 - 100.0 / (1.0 + ag / al)
+    for i in range(window + 1, len(closes)):
+        ch = closes[i] - closes[i - 1]
+        ag = (ag * (window - 1) + max(ch, 0.0)) / window
+        al = (al * (window - 1) + max(-ch, 0.0)) / window
+        out[i] = 100.0 if al == 0 else 100.0 - 100.0 / (1.0 + ag / al)
+    return out
+
+
+def rolling_max(vals: list[float], window: int) -> list[float]:
+    """Trailing maximum. Monotonic deque — O(n), not O(n*window)."""
+    from collections import deque
+    dq: deque = deque()
+    out = [0.0] * len(vals)
+    for i, v in enumerate(vals):
+        while dq and vals[dq[-1]] <= v:
+            dq.pop()
+        dq.append(i)
+        if dq[0] <= i - window:
+            dq.popleft()
+        out[i] = vals[dq[0]]
+    return out
+
+
+def rolling_mean_sd(vals: list[float], window: int):
+    s = ss = 0.0
+    means: list[float | None] = [None] * len(vals)
+    sds: list[float | None] = [None] * len(vals)
+    for i, v in enumerate(vals):
+        s += v
+        ss += v * v
+        if i >= window:
+            s -= vals[i - window]
+            ss -= vals[i - window] ** 2
+        if i >= window - 1:
+            m = s / window
+            means[i] = m
+            sds[i] = math.sqrt(max(ss / window - m * m, 0.0))
+    return means, sds
+
+
+def rolling_atr(highs, lows, closes, window: int = 14) -> list[float | None]:
+    out: list[float | None] = [None] * len(closes)
+    trs = [0.0] * len(closes)
+    for i in range(1, len(closes)):
+        pc = closes[i - 1]
+        trs[i] = max(highs[i] - lows[i], abs(highs[i] - pc), abs(lows[i] - pc))
+    s = 0.0
+    for i in range(1, len(closes)):
+        s += trs[i]
+        if i > window:
+            s -= trs[i - window]
+        if i >= window:
+            out[i] = s / window
+    return out
+
+
+def rolling_beta(closes: list[float], bench_closes: list[float],
+                 window: int = 252) -> list[float | None]:
+    """Trailing beta against the benchmark, estimated only on data available at the bar.
+
+    Without this, "excess return vs SPY" quietly rewards leverage: drawdown screens select
+    high-beta names, and in a rising market a beta of 1.4 shows up as excess return that
+    any levered index position would have produced. Beta-adjusting is what separates the
+    screen from the leverage it happens to pick up.
+    """
+    n = min(len(closes), len(bench_closes))
+    out: list[float | None] = [None] * len(closes)
+    rs = [0.0] * n
+    rb = [0.0] * n
+    for i in range(1, n):
+        rs[i] = closes[i] / closes[i - 1] - 1.0 if closes[i - 1] else 0.0
+        rb[i] = bench_closes[i] / bench_closes[i - 1] - 1.0 if bench_closes[i - 1] else 0.0
+    sxy = sxx = sx = sy = 0.0
+    for i in range(1, n):
+        sxy += rs[i] * rb[i]
+        sxx += rb[i] * rb[i]
+        sx += rb[i]
+        sy += rs[i]
+        if i > window:
+            j = i - window
+            sxy -= rs[j] * rb[j]
+            sxx -= rb[j] * rb[j]
+            sx -= rb[j]
+            sy -= rs[j]
+        if i >= window:
+            k = window
+            cov = sxy - sx * sy / k
+            var = sxx - sx * sx / k
+            out[i] = (cov / var) if var > 1e-12 else None
+    return out
+
+
+def features(d: dict) -> dict:
+    """Every rolling input a screen might read, computed once per name."""
+    c, h, l = d["close"], d["high"], d["low"]
+    n = len(c)
+    hi252 = rolling_max(h, 252)
+    hi21 = rolling_max(h, 21)
+    ma50, sd50 = rolling_mean_sd(c, 50)
+    ma200, _ = rolling_mean_sd(c, 200)
+    return {
+        "dates": d["dates"], "close": c, "high": h, "low": l, "n": n,
+        "rsi": rolling_rsi(c),
+        "atr": rolling_atr(h, l, c),
+        "dd252": [(hi252[i] - c[i]) / hi252[i] if hi252[i] > 0 else 0.0 for i in range(n)],
+        "dd21": [(hi21[i] - c[i]) / hi21[i] if hi21[i] > 0 else 0.0 for i in range(n)],
+        "ma50": ma50, "sd50": sd50, "ma200": ma200,
+        # 12-month return skipping the most recent month, which is how momentum is
+        # formed precisely so that short-term reversal does not contaminate it.
+        "mom": [((c[i - 21] / c[i - 252] - 1.0) if i >= 252 and c[i - 252] > 0 else None)
+                for i in range(n)],
+    }
+
+
+# --- the screens -------------------------------------------------------------
+# Each returns True if the name is a candidate at bar i.
+def _oversold(f, i, rsi_max=35.0, z_max=-1.5):
+    r, ma, sd = f["rsi"][i], f["ma50"][i], f["sd50"][i]
+    z = (f["close"][i] - ma) / sd if (ma is not None and sd) else None
+    return (r is not None and r <= rsi_max) or (z is not None and z <= z_max)
+
+
+def _rr(f, i, fib=0.382):
+    """Reward-to-risk against a 3xATR stop, entry assumed at the low."""
+    a = f["atr"][i]
+    if not a:
+        return 0.0
+    hi = f["close"][i] / (1 - f["dd252"][i]) if f["dd252"][i] < 1 else f["close"][i]
+    return (fib * (hi - f["close"][i])) / (3.0 * a)
+
+
+SCREENS = {
+    "A baseline (your spec)":
+        lambda f, i, q: f["dd252"][i] >= 0.15 and _rr(f, i) >= 1.5 and _oversold(f, i),
+    "B baseline + quality":
+        lambda f, i, q: f["dd252"][i] >= 0.15 and _rr(f, i) >= 1.5 and _oversold(f, i)
+                        and q is not None and q >= 0.65,
+    "C deep drawdown only":
+        lambda f, i, q: f["dd252"][i] >= 0.25,
+    "D pure short-term oversold":
+        lambda f, i, q: f["rsi"][i] is not None and f["rsi"][i] <= 30,
+    "E dip in uptrend":
+        lambda f, i, q: (f["ma200"][i] is not None and f["close"][i] > f["ma200"][i]
+                         and f["rsi"][i] is not None and f["rsi"][i] <= 35),
+    "F dip in uptrend + quality":
+        lambda f, i, q: (f["ma200"][i] is not None and f["close"][i] > f["ma200"][i]
+                         and f["rsi"][i] is not None and f["rsi"][i] <= 35
+                         and q is not None and q >= 0.65),
+    "G momentum winner + dip":
+        lambda f, i, q: (f["mom"][i] is not None and f["mom"][i] > 0.10
+                         and f["rsi"][i] is not None and f["rsi"][i] <= 35),
+    "H momentum loser + dip":
+        lambda f, i, q: (f["mom"][i] is not None and f["mom"][i] < -0.10
+                         and f["rsi"][i] is not None and f["rsi"][i] <= 35),
+}
+
+
+def block_ci(rows, key="ex", block_days=36, draws=4000, seed=5):
+    by: dict[int, list[float]] = {}
+    for r in rows:
+        d = r["date"]
+        b = dt.date(int(d[:4]), int(d[5:7]), int(d[8:10])).toordinal() // block_days
+        by.setdefault(b, []).append(r[key])
+    blocks = [v for _, v in sorted(by.items())]
+    if len(blocks) < 20:
+        return None, len(blocks)
+    rng = random.Random(seed)
+    means = []
+    for _ in range(draws):
+        pool = [v for _ in blocks for v in rng.choice(blocks)]
+        means.append(sum(pool) / len(pool))
+    means.sort()
+    return (means[int(0.025 * len(means))], means[int(0.975 * len(means))]), len(blocks)
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--hold", type=int, default=10)
+    ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--min-adv", type=float, default=0.0)
+    args = ap.parse_args()
+
+    files = sorted(f for f in os.listdir(HISTORY) if f.endswith(".json"))
+    series = {}
+    for fn in files:
+        with open(os.path.join(HISTORY, fn)) as fh:
+            d = json.load(fh)
+        if len(d.get("close") or []) >= WARMUP + args.hold + 30:
+            series[fn[:-5]] = d
+        if args.limit and len(series) >= args.limit and BENCH in series:
+            break
+    if BENCH not in series:
+        sys.exit(f"{BENCH} missing from {HISTORY}")
+
+    bench = series.pop(BENCH)
+    bidx = {d: i for i, d in enumerate(bench["dates"])}
+    bc = bench["close"]
+
+    ranks = {}
+    path = os.path.join(LEDGER, "index.json")
+    if os.path.exists(path):
+        with open(path) as fh:
+            rows = [r for r in json.load(fh).get("all", []) if r.get("q_raw") is not None]
+        rows.sort(key=lambda r: r["q_raw"])
+        ranks = {r["symbol"]: i / (len(rows) - 1) for i, r in enumerate(rows)}
+
+    print(f"panel: {len(series)} names + {BENCH}   hold {args.hold} sessions   "
+          f"exit: time only (no stop, so this measures the entry)")
+    span = (min(d["dates"][0] for d in series.values()),
+            max(d["dates"][-1] for d in series.values()))
+    print(f"history spans {span[0]} .. {span[1]}\n")
+
+    # Align each name's bars to the benchmark's calendar before estimating beta, so the
+    # regression is on same-day pairs rather than on two series that merely have the same
+    # length.
+    feats = {}
+    for sym, d in series.items():
+        f = features(d)
+        paired_b = [bc[bidx[dt_]] if dt_ in bidx else None for dt_ in d["dates"]]
+        last = None
+        for k, v in enumerate(paired_b):
+            if v is None:
+                paired_b[k] = last if last is not None else (bc[0] if bc else 1.0)
+            else:
+                last = v
+        f["beta"] = rolling_beta(d["close"], paired_b)
+        feats[sym] = f
+    rng = random.Random(17)
+    results = {k: {"ev": [], "ct": []} for k in SCREENS}
+
+    for sym, f in feats.items():
+        q = ranks.get(sym)
+        n = f["n"]
+        nxt = {k: WARMUP for k in SCREENS}
+        for i in range(WARMUP, n - args.hold):
+            date = f["dates"][i]
+            bi = bidx.get(date)
+            if bi is None or bi + args.hold >= len(bc):
+                continue
+            mkt = bc[bi + args.hold] / bc[bi] - 1.0
+            fwd = f["close"][i + args.hold] / f["close"][i] - 1.0
+            beta = f["beta"][i]
+            if beta is None:
+                continue
+            beta = max(0.2, min(3.0, beta))     # trim, do not let a bad fit dominate
+            alpha = fwd - beta * mkt
+            for name, test in SCREENS.items():
+                if i < nxt[name]:
+                    continue
+                try:
+                    hit = test(f, i, q)
+                except Exception:
+                    hit = False
+                if not hit:
+                    continue
+                nxt[name] = i + args.hold          # one position per name at a time
+                results[name]["ev"].append({"date": date, "ex": fwd - mkt,
+                                            "al": alpha, "beta": beta, "sym": sym})
+                ci_ = rng.randrange(WARMUP, n - args.hold)
+                cd = f["dates"][ci_]
+                cbi = bidx.get(cd)
+                if cbi is None or cbi + args.hold >= len(bc):
+                    continue
+                cfwd = f["close"][ci_ + args.hold] / f["close"][ci_] - 1.0
+                cmkt = bc[cbi + args.hold] / bc[cbi] - 1.0
+                cb = f["beta"][ci_]
+                if cb is None:
+                    continue
+                cb = max(0.2, min(3.0, cb))
+                results[name]["ct"].append({"date": cd, "ex": cfwd - cmkt,
+                                            "al": cfwd - cb * cmkt})
+
+    print(f"{'screen':<30}{'events':>7}{'beta':>6}{'raw ex':>8}{'ALPHA':>8}"
+          f"{'95% CI on alpha':>20}{'control a':>10}{'win%':>6}")
+    print("-" * 102)
+    for name in SCREENS:
+        ev, ct = results[name]["ev"], results[name]["ct"]
+        if len(ev) < 30:
+            print(f"{name:<30}{len(ev):>8}   too few events")
+            continue
+        ex = [e["ex"] for e in ev]
+        al = [e["al"] for e in ev]
+        cal = [c["al"] for c in ct]
+        bt = st.mean([e["beta"] for e in ev])
+        ci, nb = block_ci(ev, key="al")
+        band = f"[{ci[0]:+.2%}, {ci[1]:+.2%}]" if ci else f"({nb} blocks, need 20)"
+        win = sum(1 for v in al if v > 0) / len(al)
+        print(f"{name:<30}{len(ev):>7}{bt:>6.2f}{st.mean(ex):>+8.2%}{st.mean(al):>+8.2%}"
+              f"{band:>20}{st.mean(cal) if cal else 0:>+10.2%}{win:>6.0%}")
+    print("\n  ALPHA is the return after subtracting beta x market, using a trailing beta")
+    print("  known at entry. RAW EX is the same figure before that subtraction; where the")
+    print("  two diverge, the gap was leverage rather than selection.")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
