@@ -72,6 +72,14 @@ LEDGER = os.path.join(ROOT, "ledger")
 HISTORY = os.path.join(LEDGER, "history")
 
 WARMUP = 252          # bars needed before a 52-week high means anything
+
+# Bars handed to swing.evaluate at each event date. Every measure it computes is bounded:
+# the retracement leg looks back 252, ma50 and sd50 fifty, Wilder RSI converges in far
+# fewer. Passing the whole series from bar 0 instead made each event re-walk the entire
+# history — on a 13-year file that is most of the runtime, and it grows quadratically in
+# the depth the study is supposed to benefit from. Numerically inert at 300: the RSI
+# difference against a full walk is ~1e-8 against two-decimal publication.
+LOOKBACK = 300
 HORIZONS = (5, 10, 20, 25)
 BENCHMARK = "SPY"
 DD_BUCKETS = ((0.10, 0.15), (0.15, 0.20), (0.20, 0.25),
@@ -229,8 +237,11 @@ def run(series: dict[str, dict], ranks: dict[str, float], *, use_quality: bool,
         for i in range(warmup, n - max_hold, stride):
             if i < next_ok:
                 continue
-            c = closes[:i + 1]
-            h, l = highs[:i + 1], lows[:i + 1]
+            # max(0, ...) is load-bearing: without it a small i yields start > stop and
+            # the slice comes back empty, which fails downstream rather than here.
+            lo_i = max(0, i + 1 - LOOKBACK)
+            c = closes[lo_i:i + 1]
+            h, l = highs[lo_i:i + 1], lows[lo_i:i + 1]
             price = c[-1]
             hi52 = max(h[-min(252, warmup):])
             dd = (hi52 - price) / hi52 if hi52 > 0 else 0.0
@@ -242,7 +253,9 @@ def run(series: dict[str, dict], ranks: dict[str, float], *, use_quality: bool,
             ma50 = (sum(c[-50:]) / 50) if len(c) >= 50 else None
             atr = _atr(h, l, c)
             row = {"price": price, "ma50": ma50, "atr14": atr, "drawdown_52w": dd}
-            s = swing.evaluate(row, c, h, l, bench_closes[:bi], quality_pctile=q_eff)
+            s = swing.evaluate(row, c, h, l,
+                               bench_closes[max(0, bi - LOOKBACK):bi],
+                               quality_pctile=q_eff)
             if s["swing_signal"] not in {"PRIME", "SETUP"}:
                 continue
             sim = simulate(highs, lows, opens, closes, i, price,
@@ -265,9 +278,10 @@ def run(series: dict[str, dict], ranks: dict[str, float], *, use_quality: bool,
             # for a reason that has nothing to do with the signal.
             ci = rng.randrange(warmup, n - max_hold)
             cprice = closes[ci]
-            catr = _atr(highs[:ci + 1], lows[:ci + 1], closes[:ci + 1])
+            clo = max(0, ci + 1 - LOOKBACK)
+            catr = _atr(highs[clo:ci + 1], lows[clo:ci + 1], closes[clo:ci + 1])
             cstop = cprice - swing.STOP_ATR_MULT * catr if catr else None
-            cleg = swing.selloff_leg(highs[:ci + 1], lows[:ci + 1])
+            cleg = swing.selloff_leg(highs[clo:ci + 1], lows[clo:ci + 1])
             if cleg:
                 ctarget = swing.targets(cleg, cprice, catr)["target_1"]
             else:
@@ -321,9 +335,22 @@ def _atr(highs: list[float], lows: list[float], closes: list[float],
 MIN_BLOCKS = 20
 
 
+def _block_count(events: list[dict], block: int = swing.MAX_HOLD_DAYS) -> int:
+    """Distinct calendar blocks the events fall into — the honest sample size."""
+    import datetime as _dt
+    span = max(1, int(block * 1.45))
+    seen = set()
+    for e in events:
+        d = e.get("date")
+        if d:
+            seen.add(_dt.date(int(d[:4]), int(d[5:7]), int(d[8:10])).toordinal() // span)
+    return len(seen)
+
+
 def block_bootstrap(events: list[dict], key: str = "excess", draws: int = 2000,
                     seed: int = 11, block: int = swing.MAX_HOLD_DAYS
                     ) -> tuple[float, float] | None:
+    # `block` is a count of trading sessions; calendar spans are ~1.45x longer.
     """95% interval by **circular block bootstrap over contiguous calendar runs**.
 
     Resampling individual dates — which is what this did before — is a *cluster*
@@ -346,7 +373,20 @@ def block_bootstrap(events: list[dict], key: str = "excess", draws: int = 2000,
     dates = sorted(by_date)                      # chronological, not insertion order
     if not dates:
         return None
-    blocks = [dates[k:k + block] for k in range(0, len(dates), block)]
+    # Blocks are spans of CALENDAR time, not runs of the event-date list. Chunking the
+    # sorted list k-at-a-time merges observations that happen to be adjacent *in the
+    # list* — which, on a 12-year window where signals fire in scattered clusters, can
+    # put dates years apart into one block and collapse 346 event dates into 13. Two
+    # events months apart are independent and must be able to land in different blocks;
+    # two within a holding period must not.
+    import datetime as _dt
+    def _bucket(d: str) -> int:
+        y, m, dd = int(d[:4]), int(d[5:7]), int(d[8:10])
+        return (_dt.date(y, m, dd).toordinal()) // max(1, int(block * 1.45))
+    grouped: dict[int, list[str]] = {}
+    for d in dates:
+        grouped.setdefault(_bucket(d), []).append(d)
+    blocks = [grouped[k] for k in sorted(grouped)]
     if len(blocks) < MIN_BLOCKS:
         return None
     rng = random.Random(seed)
@@ -376,12 +416,12 @@ def describe(events: list[dict], controls: list[dict], label: str) -> None:
     print(f"\n{label}")
     print(f"  events {len(events)}   distinct dates {len(dates)}   distinct months {len(months)}")
     print(f"  event window {span}")
-    print(f"  -> {max(1, len(dates)//swing.MAX_HOLD_DAYS)} independent {swing.MAX_HOLD_DAYS}-session "
+    print(f"  -> {_block_count(events)} independent {swing.MAX_HOLD_DAYS}-session "
           f"blocks, not {len(events)} events. That is the sample size.")
     print(f"  raw return      mean {st.mean(raw):+7.2%}   median {st.median(raw):+7.2%}")
     if ex:
         ci = block_bootstrap(events)
-        nblocks = max(1, len({e["date"] for e in events if e.get("date")}) // swing.MAX_HOLD_DAYS)
+        nblocks = _block_count(events)
         band = (f"   95% CI [{ci[0]:+.2%}, {ci[1]:+.2%}]" if ci else
                 f"   (no CI: {nblocks} independent blocks, need {MIN_BLOCKS})")
         print(f"  vs benchmark    mean {st.mean(ex):+7.2%}   median {st.median(ex):+7.2%}{band}")

@@ -119,41 +119,43 @@ def test_defect_the_bootstrap_refuses_an_interval_it_cannot_support():
     A confident-looking interval on a two-episode sample is worse than no interval, and
     the previous version always produced one.
     """
-    few = [_ev(f"2026-01-{d:02d}", 0.01) for d in range(1, 20)]
+    few = [_ev(d, 0.01) for d in _spread_dates(4)]
     assert rs.block_bootstrap(few) is None
 
 
-def test_bootstrap_returns_an_interval_once_there_are_enough_blocks():
+def _spread_dates(n_blocks: int, per_block: int = 3):
+    """Event dates spanning `n_blocks` distinct calendar blocks.
+
+    Blocks are calendar spans, so consecutive days collapse into one. Generating a run of
+    consecutive dates — which an earlier version of these tests did — produces far fewer
+    blocks than dates and tests the wrong thing.
+    """
     import datetime as dt
-    base = dt.date(2024, 1, 1)
-    events = [_ev((base + dt.timedelta(days=k)).isoformat(), 0.01 * (k % 7 - 3))
-              for k in range(25 * rs.MIN_BLOCKS + 40)]
+    base = dt.date(2016, 1, 4)
+    span = int(rs.swing.MAX_HOLD_DAYS * 1.45) + 2
+    return [(base + dt.timedelta(days=b * span + i)).isoformat()
+            for b in range(n_blocks) for i in range(per_block)]
+
+
+def test_bootstrap_returns_an_interval_once_there_are_enough_blocks():
+    events = [_ev(d, 0.01 * (i % 7 - 3))
+              for i, d in enumerate(_spread_dates(rs.MIN_BLOCKS + 6))]
     ci = rs.block_bootstrap(events)
     assert ci is not None
     lo, hi = ci
     assert lo < hi
 
 
-def test_bootstrap_blocks_are_contiguous_in_time():
-    """Blocks must be built from chronologically sorted dates.
-
-    Built from insertion order, a 'block' is an arbitrary set of days and keeps none of
-    the adjacency it exists to preserve.
-    """
-    import datetime as dt
-    base = dt.date(2024, 1, 1)
-    days = [(base + dt.timedelta(days=k)).isoformat() for k in range(25 * rs.MIN_BLOCKS + 40)]
-    forward = [_ev(d, 0.01) for d in days]
+def test_bootstrap_is_insensitive_to_the_order_events_arrive_in():
+    """Blocks are a property of the calendar, not of insertion order."""
+    forward = [_ev(d, 0.01) for d in _spread_dates(rs.MIN_BLOCKS + 6)]
     shuffled = list(reversed(forward))
     assert rs.block_bootstrap(forward) == rs.block_bootstrap(shuffled)
 
 
 def test_events_without_a_date_never_enter_the_interval():
     """An undated event cannot be placed in a block, so it cannot be resampled."""
-    import datetime as dt
-    base = dt.date(2024, 1, 1)
-    dated = [_ev((base + dt.timedelta(days=k)).isoformat(), 0.0)
-             for k in range(25 * rs.MIN_BLOCKS + 40)]
+    dated = [_ev(d, 0.0) for d in _spread_dates(rs.MIN_BLOCKS + 6)]
     ci = rs.block_bootstrap([_ev("", 5.0)] * 500 + dated)
     assert ci is not None
     assert abs(ci[0]) < 0.01 and abs(ci[1]) < 0.01     # the undated 5.0s are excluded
