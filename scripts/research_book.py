@@ -27,6 +27,9 @@ import statistics as st
 import sys
 from collections import deque
 
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from equity_monitor import panel
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HISTORY = os.path.join(ROOT, "ledger", "history")
 ETFS = {"SPY", "RSP", "IWB", "IWV", "IWM", "VTI"}
@@ -64,6 +67,11 @@ def rolling_max(v, w):
 
 
 SCREENS = {
+    # Calibration control: buys anything. A book with enough slots must track the
+    # equal-weighted pool. If it does not, the portfolio arithmetic is wrong and no
+    # other row in the table means anything.
+    "Z control: buy anything":
+        lambda f, i: True,
     "A baseline (52w dd + oversold)":
         lambda f, i: f["dd"][i] >= 0.15 and f["rsi"][i] is not None and f["rsi"][i] <= 35,
     "G momentum winner + dip":
@@ -81,7 +89,7 @@ def main() -> int:
     ap.add_argument("--slots", type=int, default=10)
     ap.add_argument("--cost-bps", type=float, default=20.0)
     ap.add_argument("--benchmark", default="RSP")
-    ap.add_argument("--pick", default="alpha", choices=("alpha", "random", "deepest", "weakest"),
+    ap.add_argument("--pick", default="random", choices=("alpha", "random", "deepest", "weakest"),
                     help="how to choose among same-day candidates when signals outnumber "
                          "slots. At a 3-6%% fill rate this choice does most of the work, so "
                          "it must be varied rather than left at whatever was convenient.")
@@ -92,10 +100,13 @@ def main() -> int:
     for fn in sorted(os.listdir(HISTORY)):
         if not fn.endswith(".json"):
             continue
+        sym = fn[:-5]
         with open(os.path.join(HISTORY, fn)) as fh:
             d = json.load(fh)
+        if panel.is_etf(sym) and sym not in (args.benchmark, "SPY"):
+            continue
         if len(d.get("close") or []) >= 320:
-            series[fn[:-5]] = d
+            series[sym] = d
     bench = series.get(args.benchmark) or series.get("SPY")
     if not bench:
         sys.exit("no benchmark on disk")
@@ -109,6 +120,10 @@ def main() -> int:
         hi = rolling_max(h, 252)
         feats[sym] = {
             "dates": d["dates"], "close": c,
+            "open": d.get("open") or c,
+            # Windows spanning an unadjusted reorg or a hole are unusable. Excluding the
+            # window rather than the name keeps the genuine history a name does have.
+            "ok": panel.clean_windows(panel.bar_flags(d), 252, 25),
             "rsi": rsi_series(c),
             "dd": [(hi[i] - c[i]) / hi[i] if hi[i] > 0 else 0.0 for i in range(len(c))],
             "mom": [(c[i - 21] / c[i - 252] - 1.0) if i >= 252 and c[i - 252] > 0 else None
@@ -126,37 +141,48 @@ def main() -> int:
     print(f"{args.slots} slots, {args.hold}-session hold, {args.cost_bps:.0f}bp round trip, "
           f"benchmark {args.benchmark}\n")
     print(f"{'strategy':<32}{'CAGR':>8}{'bench':>8}{'excess':>9}{'Sharpe':>8}"
-          f"{'maxDD':>8}{'trades':>8}{'fill%':>7}")
+          f"{'maxDD':>8}{'trades':>8}{'fill%':>7}{'invested':>8}")
     print("-" * 88)
 
     for label, test in SCREENS.items():
-        equity, open_pos, daily, trades, wanted, filled = 1.0, [], [], 0, 0, 0
+        # Cash plus per-slot positions, marked every day. The previous version only
+        # touched equity on an exit and appended that stale value to the daily series,
+        # so open positions were invisible between entry and exit — which overstates
+        # Sharpe and materially understates max drawdown, since the drawdown happens
+        # while positions are open.
+        cash, slots_open, daily, trades, wanted, filled = 1.0, [], [], 0, 0, 0
+        invested, invested_days = [], [0]
         for di, dt_ in enumerate(all_dates):
-            # close positions that reached the horizon
             still = []
-            for p in open_pos:
+            for p in slots_open:
                 f = feats[p["sym"]]
                 j = f["idx"].get(dt_)
                 if j is None:
                     still.append(p)
                     continue
+                p["mark"] = f["close"][j] / p["px"]
                 if j - p["i"] >= args.hold:
-                    r = f["close"][j] / p["px"] - 1.0 - cost
-                    equity *= 1.0 + r / args.slots
+                    # One round-trip charge per completed trade. Charging (1-cost) on
+                    # both entry and exit bills the spread twice, which at ~25 turns per
+                    # slot per year is a spurious drag of roughly 5 points annually.
+                    cash += p["cap"] * p["mark"] * (1.0 - cost)
+                    invested_days[0] += 1
                     trades += 1
                 else:
                     still.append(p)
-            open_pos = still
+            slots_open = still
             # fill free slots from today's signals
-            free = args.slots - len(open_pos)
+            free = args.slots - len(slots_open)
             if free > 0:
-                held = {p["sym"] for p in open_pos}
+                held = {p["sym"] for p in slots_open}
                 cands = []
                 for sym, f in feats.items():
                     if sym in held:
                         continue
                     i = f["idx"].get(dt_)
                     if i is None or i < 260 or i >= len(f["close"]) - 1:
+                        continue
+                    if not f["ok"][i]:
                         continue
                     try:
                         if test(f, i):
@@ -173,9 +199,31 @@ def main() -> int:
                 else:
                     cands.sort(key=lambda t: t[3])
                 for sym, i, px, _dd in cands[:free]:
-                    open_pos.append({"sym": sym, "i": i, "px": px})
+                    # Entry at the NEXT open. Filling at the close that generated the
+                    # signal uses the same bar as both input and execution price, which
+                    # is not a tradeable sequence.
+                    f = feats[sym]
+                    if i + 1 >= len(f["open"]):
+                        continue
+                    entry = f["open"][i + 1]
+                    if entry <= 0:
+                        continue
+                    # Size against CURRENT equity, not the initial. Fixing the slot at
+                    # 1/N of the starting capital stops the book compounding: positions
+                    # stay the same absolute size while gains pile into idle cash, and
+                    # the strategy silently de-risks toward a cash return over time.
+                    equity_now = cash + sum(q["cap"] * q["mark"] for q in slots_open)
+                    stake = min(equity_now / args.slots, cash)
+                    if stake <= 0:
+                        continue
+                    cash -= stake
+                    slots_open.append({"sym": sym, "i": i + 1, "px": entry,
+                                       "cap": stake, "mark": 1.0})
                     filled += 1
-            # mark to market
+            pos_val = sum(p["cap"] * p["mark"] for p in slots_open)
+            equity = cash + pos_val
+            if equity > 0:
+                invested.append(pos_val / equity)
             if di > 0:
                 b = bpx.get(dt_)
                 pb = bpx.get(all_dates[di - 1])
@@ -199,7 +247,8 @@ def main() -> int:
             peak = max(peak, v)
             mdd = min(mdd, v / peak - 1)
         print(f"{label:<32}{cagr:>+7.1%}{bcagr:>+8.1%}{cagr-bcagr:>+9.1%}{sharpe:>8.2f}"
-              f"{mdd:>8.0%}{trades:>8}{filled/max(wanted,1):>6.0%}")
+              f"{mdd:>8.0%}{trades:>8}{filled/max(wanted,1):>6.0%}"
+              f"{st.mean(invested) if invested else 0:>8.0%}")
 
     print(f"\n  fill% is the share of signals the book had room for. A low number means the")
     print(f"  event-average results were reporting trades this book could never have taken.")

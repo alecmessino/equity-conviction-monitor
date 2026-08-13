@@ -43,6 +43,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
+from equity_monitor import panel
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LEDGER = os.path.join(ROOT, "ledger")
 HISTORY = os.path.join(LEDGER, "history")
@@ -59,6 +61,10 @@ BENCH = "SPY"
 # answers "did the screened names beat the average name available to the screen", which
 # is the only question a stock-selection rule is actually responsible for.
 BENCHMARKS = ("SPY", "RSP", "IWB", "IWV", "IWM", "VTI", "PANEL")
+FALLBACK = "SPY"
+# The panel is fixed at the longest horizon any run uses, so --hold never changes the
+# universe underneath a comparison.
+MAX_HOLD_FOR_PANEL = 25
 WARMUP = 252
 
 
@@ -257,19 +263,43 @@ def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--hold", type=int, default=10)
     ap.add_argument("--limit", type=int, default=None)
-    ap.add_argument("--min-adv", type=float, default=0.0)
+    ap.add_argument("--min-adv", type=float, default=0.0,
+                    help="minimum 21-day average dollar volume at entry. Previously "
+                         "declared and never read, which mattered: the alpha concentrates "
+                         "in deep-drawdown names and a corrupted entry bar traded at $0.07.")
+    ap.add_argument("--min-price", type=float, default=0.0,
+                    help="minimum close at entry")
+    ap.add_argument("--manifest", default="",
+                    help="write the panel manifest (symbol, bars, span, file hash) here. "
+                         "Nothing in this repo is reproducible without one — the history "
+                         "directory was rewritten continuously while it was being read.")
     ap.add_argument("--benchmark", default="SPY", choices=BENCHMARKS)
     args = ap.parse_args()
 
+    # One panel, fixed independently of --hold, so results at different horizons are
+    # comparable. The old loader admitted a name whenever it had WARMUP+hold+30 bars,
+    # which silently changed the universe (1058/1057/1053 names) between runs.
     files = sorted(f for f in os.listdir(HISTORY) if f.endswith(".json"))
-    series = {}
+    series, dropped = {}, {"short": 0, "etf": 0, "unreadable": 0}
+    keep_bench = {args.benchmark, FALLBACK} if hasattr(args, "benchmark") else {BENCH}
     for fn in files:
-        with open(os.path.join(HISTORY, fn)) as fh:
-            d = json.load(fh)
-        if len(d.get("close") or []) >= WARMUP + args.hold + 30:
-            series[fn[:-5]] = d
-        if args.limit and len(series) >= args.limit and BENCH in series:
-            break
+        sym = fn[:-5]
+        try:
+            with open(os.path.join(HISTORY, fn)) as fh:
+                d = json.load(fh)
+        except Exception:
+            dropped["unreadable"] += 1
+            continue
+        if panel.is_etf(sym) and sym not in keep_bench:
+            dropped["etf"] += 1
+            continue
+        if len(d.get("close") or []) < WARMUP + MAX_HOLD_FOR_PANEL + 30:
+            dropped["short"] += 1
+            continue
+        series[sym] = d
+    if args.limit:
+        keep = [s for s in sorted(series) if s not in keep_bench][:args.limit]
+        series = {s: series[s] for s in keep + [b for b in keep_bench if b in series]}
     for etf in BENCHMARKS:
         if etf != "PANEL" and etf in series and etf != args.benchmark:
             series.pop(etf)               # never screen an index fund
@@ -294,7 +324,8 @@ def main() -> int:
         bidx = {d: i for i, d in enumerate(bdates)}
     else:
         bench = series.pop(args.benchmark)
-        bidx = {d: i for i, d in enumerate(bench["dates"])}
+        bdates = bench["dates"]
+        bidx = {d: i for i, d in enumerate(bdates)}
         bc = bench["close"]
 
     ranks = {}
@@ -307,6 +338,12 @@ def main() -> int:
 
     print(f"panel: {len(series)} names   benchmark {args.benchmark}   "
           f"hold {args.hold} sessions   exit: time only")
+    print(f"  excluded from the panel: " +
+          ", ".join(f"{k} {v}" for k, v in dropped.items() if v))
+    if args.manifest:
+        with open(args.manifest, "w") as fh:
+            json.dump(panel.manifest(HISTORY, sorted(series)), fh, indent=0)
+        print(f"  panel manifest -> {args.manifest}")
     span = (min(d["dates"][0] for d in series.values()),
             max(d["dates"][-1] for d in series.values()))
     print(f"history spans {span[0]} .. {span[1]}\n")
@@ -317,6 +354,10 @@ def main() -> int:
     feats = {}
     for sym, d in series.items():
         f = features(d)
+        # Per-bar usability, and the windows that span a bad bar. Excluding the window
+        # rather than the name keeps every genuine observation the name has.
+        f["ok"] = panel.clean_windows(panel.bar_flags(d), WARMUP, MAX_HOLD_FOR_PANEL)
+        f["volume"] = d.get("volume") or [0.0] * len(d["close"])
         paired_b = [bc[bidx[dt_]] if dt_ in bidx else None for dt_ in d["dates"]]
         last = None
         for k, v in enumerate(paired_b):
@@ -328,20 +369,45 @@ def main() -> int:
         feats[sym] = f
     rng = random.Random(17)
     results = {k: {"ev": [], "ct": []} for k in SCREENS}
+    skipped = {"bad window": 0, "no benchmark date": 0, "window misaligned": 0,
+               "below min-adv": 0, "below min-price": 0, "no beta": 0, "no control": 0}
+    controls_rng = {k: random.Random(1000 + h) for h, k in enumerate(SCREENS)}
 
     for sym, f in feats.items():
         q = ranks.get(sym)
         n = f["n"]
         nxt = {k: WARMUP for k in SCREENS}
         for i in range(WARMUP, n - args.hold):
+            if not f["ok"][i]:
+                skipped["bad window"] += 1
+                continue
             date = f["dates"][i]
             bi = bidx.get(date)
             if bi is None or bi + args.hold >= len(bc):
+                skipped["no benchmark date"] += 1
+                continue
+            # The forward window is indexed positionally on the name and on the
+            # benchmark separately. A hole in either makes those two land on different
+            # calendar days — CHK produced one event whose name-side window ran 1,312
+            # days longer than the benchmark's, recorded as +2,574% of alpha.
+            if f["dates"][i + args.hold] != bdates[bi + args.hold]:
+                skipped["window misaligned"] += 1
+                continue
+            if args.min_adv > 0:
+                w = f["volume"][max(0, i - 20):i + 1]
+                px = f["close"][max(0, i - 20):i + 1]
+                adv = sum(a * b for a, b in zip(w, px)) / max(1, len(w))
+                if adv < args.min_adv:
+                    skipped["below min-adv"] += 1
+                    continue
+            if f["close"][i] < args.min_price:
+                skipped["below min-price"] += 1
                 continue
             mkt = bc[bi + args.hold] / bc[bi] - 1.0
             fwd = f["close"][i + args.hold] / f["close"][i] - 1.0
             beta = f["beta"][i]
             if beta is None:
+                skipped["no beta"] += 1
                 continue
             beta = max(0.2, min(3.0, beta))     # trim, do not let a bad fit dominate
             alpha = fwd - beta * mkt
@@ -354,23 +420,48 @@ def main() -> int:
                     hit = False
                 if not hit:
                     continue
-                nxt[name] = i + args.hold          # one position per name at a time
-                results[name]["ev"].append({"date": date, "ex": fwd - mkt,
-                                            "al": alpha, "beta": beta, "sym": sym})
-                ci_ = rng.randrange(WARMUP, n - args.hold)
-                cd = f["dates"][ci_]
-                cbi = bidx.get(cd)
-                if cbi is None or cbi + args.hold >= len(bc):
+                pending = {"date": date, "ex": fwd - mkt,
+                           "al": alpha, "beta": beta, "sym": sym}
+                # The control was drawn uniformly over the name's whole history from a
+                # single RNG shared across screens, so its dates depended on which
+                # earlier screens had fired, and it `continue`d after the event was
+                # already appended — desyncing the arms by up to 22 events and making
+                # the control column irreproducible run to run. Now: per-screen RNG,
+                # bounded retries, and the event is only kept if its control is valid.
+                crng = controls_rng[name]
+                ctl = None
+                for _ in range(8):
+                    ci_ = crng.randrange(WARMUP, n - args.hold)
+                    if not f["ok"][ci_]:
+                        continue
+                    cd = f["dates"][ci_]
+                    cbi = bidx.get(cd)
+                    if cbi is None or cbi + args.hold >= len(bc):
+                        continue
+                    if f["dates"][ci_ + args.hold] != bdates[cbi + args.hold]:
+                        continue
+                    ctl = (ci_, cd, cbi)
+                    break
+                if ctl is None:
+                    skipped["no control"] += 1
                     continue
+                ci_, cd, cbi = ctl
                 cfwd = f["close"][ci_ + args.hold] / f["close"][ci_] - 1.0
                 cmkt = bc[cbi + args.hold] / bc[cbi] - 1.0
                 cb = f["beta"][ci_]
                 if cb is None:
+                    skipped["no control"] += 1
                     continue
                 cb = max(0.2, min(3.0, cb))
+                # Both arms are appended together or neither is, so they can never
+                # drift out of correspondence.
+                results[name]["ev"].append(pending)
                 results[name]["ct"].append({"date": cd, "ex": cfwd - cmkt,
                                             "al": cfwd - cb * cmkt})
+                nxt[name] = i + args.hold          # one position per name at a time
 
+    print("  bars discarded: " + ", ".join(f"{k} {v:,}" for k, v in skipped.items() if v))
+    print()
     print(f"{'screen':<30}{'events':>7}{'beta':>6}{'raw ex':>8}{'ALPHA':>8}"
           f"{'95% CI on alpha':>20}{'control a':>10}{'win%':>6}")
     print("-" * 102)
@@ -388,6 +479,47 @@ def main() -> int:
         win = sum(1 for v in al if v > 0) / len(al)
         print(f"{name:<30}{len(ev):>7}{bt:>6.2f}{st.mean(ex):>+8.2%}{st.mean(al):>+8.2%}"
               f"{band:>20}{st.mean(cal) if cal else 0:>+10.2%}{win:>6.0%}")
+    # Comparing two screens by eyeballing their separate intervals is not a test, and it
+    # is the error that produced the "G beats H" claim: two CIs that barely overlap can
+    # still have a difference indistinguishable from zero. The difference needs its own
+    # interval, bootstrapped on the *same* calendar blocks for both arms so the market
+    # conditions cancel.
+    print(f"\nPAIRED DIFFERENCES  (same blocks both arms, 4000 draws)")
+    print(f"  {'comparison':<44}{'diff':>8}{'95% CI':>20}{'blocks won':>12}")
+    pairs = [("G momentum winner + dip", "H momentum loser + dip"),
+             ("B baseline + quality", "A baseline (your spec)"),
+             ("F dip in uptrend + quality", "E dip in uptrend"),
+             ("G momentum winner + dip", "A baseline (your spec)")]
+    import datetime as _dt
+    for a, b in pairs:
+        ea, eb = results.get(a, {}).get("ev", []), results.get(b, {}).get("ev", [])
+        if len(ea) < 50 or len(eb) < 50:
+            continue
+        def blocks(rows):
+            out = {}
+            for r in rows:
+                d = r["date"]
+                k = _dt.date(int(d[:4]), int(d[5:7]), int(d[8:10])).toordinal() // 36
+                out.setdefault(k, []).append(r["al"])
+            return out
+        ba, bb = blocks(ea), blocks(eb)
+        shared = sorted(set(ba) & set(bb))
+        if len(shared) < 20:
+            continue
+        diffs = [st.mean(ba[k]) - st.mean(bb[k]) for k in shared]
+        won = sum(1 for v in diffs if v > 0) / len(diffs)
+        rr = random.Random(41)
+        means = []
+        for _ in range(4000):
+            pool = [diffs[rr.randrange(len(diffs))] for _ in diffs]
+            means.append(sum(pool) / len(pool))
+        means.sort()
+        lo, hi = means[100], means[3899]
+        print(f"  {a.split()[0]} - {b.split()[0]:<38}"[:46]
+              + f"{st.mean(diffs):>+7.2%}{f'[{lo:+.2%}, {hi:+.2%}]':>20}{won:>11.0%}")
+    print(f"  blocks won is the share of shared calendar blocks the first screen led in.")
+    print(f"  Near 50% means a coin flip whatever the point estimate says.")
+
     print("\n  ALPHA is the return after subtracting beta x market, using a trailing beta")
     print("  known at entry. RAW EX is the same figure before that subtraction; where the")
     print("  two diverge, the gap was leverage rather than selection.")
