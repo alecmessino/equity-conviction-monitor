@@ -58,22 +58,43 @@ FMP = "https://financialmodelingprep.com/api/v3/historical-price-full/{sym}?from
 MIN_BARS = 260
 
 
-def _get(url: str, headers: dict | None = None, tries: int = 5) -> dict | list | None:
-    """One request, with a long backoff on 429. A Yahoo lockout outlasts a short retry."""
+# Never request compression. Measured against Yahoo from a datacenter IP, at the same
+# second: a plain request returned 200 and the identical request carrying
+# ``Accept-Encoding: gzip, deflate`` returned 429, rejected in 0.3s — a fingerprint rule
+# rather than a rate counter. urllib sends no Accept-Encoding header at all unless told
+# to, so it happens to sit on the working side of that rule; ``identity`` is stated
+# explicitly because inheriting the behaviour from a library default is not the same as
+# choosing it, and a future switch to requests or httpx would silently enable gzip.
+BASE_HEADERS = {"User-Agent": UA, "Accept": "application/json",
+                "Accept-Encoding": "identity"}
+
+_cooldown = {"until": 0.0}
+
+
+def _get(url: str, headers: dict | None = None, tries: int = 3) -> dict | list | None:
+    """One request, with a *shared* cooldown rather than a per-symbol backoff.
+
+    The first version backed off 45s, then 90, then 135 inside each symbol. During a
+    lockout that spends eleven minutes per symbol discovering the same fact, so a run
+    that began at a bad moment made no progress for half an hour while looking alive.
+    A rate limit is a property of the host, not of the symbol: one process-wide cooldown
+    is both faster to recover from and honest about what is being waited on.
+    """
     for attempt in range(tries):
+        wait = _cooldown["until"] - time.time()
+        if wait > 0:
+            time.sleep(wait)
         try:
-            req = urllib.request.Request(url, headers={"User-Agent": UA,
-                                                       "Accept": "application/json",
-                                                       **(headers or {})})
+            req = urllib.request.Request(url, headers={**BASE_HEADERS, **(headers or {})})
             with urllib.request.urlopen(req, timeout=40) as r:
                 return json.load(r)
         except urllib.error.HTTPError as e:
             if e.code in (429, 502, 503):
-                time.sleep(45 + attempt * 45 + random.random() * 10)
+                _cooldown["until"] = time.time() + 30 * (attempt + 1) + random.random() * 5
                 continue
             return None
         except Exception:
-            time.sleep(3 + attempt * 3)
+            time.sleep(2 + attempt * 2)
     return None
 
 
@@ -258,6 +279,13 @@ def main() -> int:
             ok += 1
         else:
             failed += 1
+        # One line per symbol. Reporting only every 25th made a run that stalled on its
+        # first request indistinguishable from one that was working, because the 25th
+        # symbol is never reached during a lockout — which is exactly how a stalled run
+        # went unnoticed for half an hour.
+        print(f"  [{i}/{len(syms)}] {sym}: "
+              f"{len(rows['close']) if rows else 0} bars"
+              f"{'' if rows else '  FAILED'}", flush=True)
         if i % 25 == 0:
             rate = (time.time() - started) / max(1, ok + failed)
             left = (len(syms) - i) * rate / 60
