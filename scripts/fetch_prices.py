@@ -29,6 +29,27 @@ the retracement leg, the 52-week band, ATR. Open, high and low are scaled by the
 
     python scripts/fetch_prices.py --source yahoo --years 10
     python scripts/fetch_prices.py --source parquet --path ~/prices.parquet
+
+**Yahoo cannot see delisted names, and that is the whole of survivorship bias.** Measured:
+six delisted tickers, six 404s — Altaba, AMR and Atlas Air, and clean acquisitions in
+Abiomed, Xilinx and Activision alike. Tiingo serves every one of them with full history to
+the final trading day. So the two are complements rather than alternatives: Yahoo for
+survivors, where it is free and fast, and Tiingo's scarce quota spent only where it is the
+only option. A study built on yfinance alone is not making a sampling choice about dead
+names; it is structurally unable to see them.
+
+**The registry says when a ticker stopped, not how large it was**, which makes a blind
+delisted sample mostly microcaps. Kaggle's 2017 bulk dump (free, no key) carries the
+missing field: cross-referencing 3,362 delisted names against 2016-17 dollar volume leaves
+1,479 with usable history, 180 above $30m/day and 53 above $100m/day. That cohort is
+Allergan, Celgene, Time Warner, Monsanto, Aetna, Express Scripts, Raytheon, Anadarko,
+Alexion, Shire, Twitter, Activision, Mylan, Valeant, Chesapeake, US Steel — former index
+members, several of them S&P 500, absent from every current-constituent panel.
+
+It contains both channels, which is what makes the *sign* of the bias answerable rather
+than assumed: premium takeouts (Celgene, Time Warner, Aetna) alongside long declines
+ending in bankruptcy or a take-private (Chesapeake at $4.14, Valeant, Walgreens). The
+usual claim that survivorship inflates dip-buying only covers the second kind.
 """
 from __future__ import annotations
 
