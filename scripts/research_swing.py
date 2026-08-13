@@ -459,6 +459,46 @@ def by_bucket(events: list[dict]) -> None:
               f"{st.mean(ex):>+8.2%} {win:>5.0%} {tgt:>6.0%} {stp:>5.0%}")
 
 
+def _sweep(series: dict, ranks: dict, args) -> int:
+    """Grid the exit rule. Entry is held fixed, so any difference is the exit.
+
+    Reported against the benchmark and against the matched control, because a shorter
+    horizon mechanically shrinks both — comparing raw returns across horizons would rank
+    the longest one first for reasons that have nothing to do with the rule.
+    """
+    import statistics as _st
+    fibs = (0.236, 0.382, 0.5)
+    holds = (5, 10, 25)
+    print(f"\n{'target':>8}{'hold':>6}{'events':>8}{'blocks':>8}{'vs bench':>10}"
+          f"{'control':>10}{'sig-ctl':>9}{'target%':>9}{'stop%':>7}{'time%':>7}")
+    base_fib = swing.FIB_1
+    try:
+        for fib in fibs:
+            for hold in holds:
+                swing.FIB_1 = fib
+                out = run(series, ranks, use_quality=False, max_hold=hold,
+                          stride=args.stride, warmup=args.warmup)
+                ev, ct = out["events"], out["controls"]
+                if not ev:
+                    print(f"{fib:>8.3f}{hold:>6}{0:>8}   no events")
+                    continue
+                ex = [e["excess"] for e in ev if e["excess"] is not None]
+                cx = [c["excess"] for c in ct if c["excess"] is not None]
+                n = len(ev)
+                tg = sum(1 for e in ev if e["exit"] == "target") / n
+                sp = sum(1 for e in ev if e["exit"] == "stop") / n
+                tm = sum(1 for e in ev if e["exit"] == "time") / n
+                print(f"{fib:>8.3f}{hold:>6}{n:>8}{_block_count(ev):>8}"
+                      f"{_st.mean(ex) if ex else 0:>+9.2%}{_st.mean(cx) if cx else 0:>+10.2%}"
+                      f"{(_st.mean(ex)-_st.mean(cx)) if ex and cx else 0:>+9.2%}"
+                      f"{tg:>8.0%}{sp:>7.0%}{tm:>7.0%}")
+    finally:
+        swing.FIB_1 = base_fib
+    print("\n  target% is the share of trades that actually reached target 1. A rule that "
+          "\n  never finishes is not an exit rule, whatever its theoretical payoff.")
+    return 0
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--limit", type=int, default=None, help="cap the symbol count")
@@ -470,6 +510,11 @@ def main() -> int:
                          "high a real 52-week high. Lower it only to exercise the "
                          "harness on a short series, never to report a result.")
     ap.add_argument("--json", default="", help="write the event table here")
+    ap.add_argument("--sweep", action="store_true",
+                    help="grid the exit rule over target fraction x holding horizon. "
+                         "The base configuration reaches its target in 13% of trades and "
+                         "times out in 53%, which is a statement about the exit rather "
+                         "than the entry — this is how you find out which.")
     args = ap.parse_args()
 
     series = load_series(args.limit, args.warmup)
@@ -500,6 +545,9 @@ def main() -> int:
               f"Widen the price window before reading any number below as a result.")
     if not ranks:
         print("no ledger/index.json — the quality arms will be skipped.")
+
+    if args.sweep:
+        return _sweep(series, ranks, args)
 
     arms = [("quality gate OFF  (price signal alone)", dict(use_quality=False))]
     if ranks:
