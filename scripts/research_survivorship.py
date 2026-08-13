@@ -25,10 +25,23 @@ explanation for whichever way that number comes out.
 
 One limitation stated plainly: the model's quality pillar cannot be computed for delisted
 names, because it is built from filings this project reads for current constituents only.
-The quality axis of the difference-in-differences therefore uses a price-based proxy —
-trailing three-year return consistency and realised volatility — which is a *different
-measure* from the fundamental score, and is labelled as such everywhere it appears.
-Reading it as the model's Q would be reading a correlate as the thing itself.
+The second axis of the difference-in-differences is therefore a price measure — trailing
+three-year return over volatility — and it is **not** a quality proxy. Measured against the
+605 survivors that carry both:
+
+    price measure vs the model's fundamental Q   -0.165
+    price measure vs 12-month momentum           +0.495
+    fundamental Q vs 12-month momentum           -0.251
+
+It is *negatively* related to quality and strongly related to momentum, so calling it a
+quality proxy would report the momentum effect as a fundamental one. It is named `trend`
+throughout for that reason.
+
+That third correlation is the mechanism behind a result that kept recurring and had no
+explanation: gating on fundamental quality made every screen worse, in four independent
+tests. In this universe high-quality names carry *lower* twelve-month momentum, so a
+quality gate is partly a momentum-loser filter — and momentum is the axis that pays. The
+gate was not failing to help; it was selecting against the thing that works.
 """
 from __future__ import annotations
 
@@ -177,17 +190,18 @@ def main() -> int:
             if bi is None or bi + H >= len(bc):
                 continue
             nxt = i + H
-            # price-based quality proxy: consistency of the 3-year path per unit of
-            # volatility. NOT the model's fundamental Q, which delisted names lack.
+            # Trailing 3-year return per unit of volatility. NOT quality — measured at
+            # -0.165 against the model's Q and +0.495 against 12-month momentum. It is a
+            # trend measure and is named one.
             w = c[max(0, i - 756):i + 1]
             rets = [math.log(w[k] / w[k - 1]) for k in range(1, len(w)) if w[k - 1] > 0]
             if len(rets) < 200:
                 continue
             sd = st.pstdev(rets)
-            qproxy = (st.mean(rets) / sd) if sd > 0 else 0.0
+            trend = (st.mean(rets) / sd) if sd > 0 else 0.0
             events.append({
                 "sym": sym, "date": dates[i], "cohort": tag[sym], "dd": dd,
-                "mom": c[i - 21] / c[i - 252] - 1.0, "q": qproxy,
+                "mom": c[i - 21] / c[i - 252] - 1.0, "q": trend,
                 "ex": (c[i + H] / c[i] - 1.0) - (bc[bi + H] / bc[bi] - 1.0),
                 "ending": endings.get(sym, ""),
             })
@@ -220,12 +234,13 @@ def main() -> int:
         print(f"\n  SURVIVORSHIP EFFECT = combined - survivors = {m_c - m_s:+.2%} per {H}-session hold")
         print(f"  Positive means the biased panel UNDERSTATED the strategy.")
 
-    print(f"\nDIFFERENCE-IN-DIFFERENCES  (quality PROXY x drawdown depth, excess return)")
-    print(f"quality proxy = 3y return/volatility, cut at the 65th percentile ({qcut:+.3f})")
+    print(f"\nDIFFERENCE-IN-DIFFERENCES  (TREND x drawdown depth, excess return)")
+    print(f"trend = 3y return/volatility, cut at the 65th percentile ({qcut:+.3f}).")
+    print(f"NOT quality: -0.165 against the model's Q, +0.495 against 12-month momentum.")
     for cohort, rows in (("survivors", surv), ("delisted [diagnostic]", dele),
                          ("combined", events)):
         print(f"\n  {cohort}")
-        print(f"    {'drawdown':<14}{'low quality':>16}{'high quality':>16}{'difference':>14}")
+        print(f"    {'drawdown':<14}{'weak trend':>16}{'strong trend':>16}{'difference':>14}")
         for lo, hi_ in ((0.15, 0.30), (0.30, 0.50), (0.50, 1.01)):
             lq = [r for r in rows if lo <= r["dd"] < hi_ and r["q"] < qcut]
             hq = [r for r in rows if lo <= r["dd"] < hi_ and r["q"] >= qcut]
