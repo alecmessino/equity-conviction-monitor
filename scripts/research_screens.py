@@ -47,6 +47,18 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 LEDGER = os.path.join(ROOT, "ledger")
 HISTORY = os.path.join(LEDGER, "history")
 BENCH = "SPY"
+# Anything cap-weighted carries the same mega-cap concentration, so switching from SPY to
+# the Russell 1000 or 3000 barely moves the bar (14.0% and 13.7% a year against SPY's
+# 14.3% over 2013-2026). The equal-weighted S&P is the one that actually measures the
+# average large-cap stock, at 11.7% — a 2.6%/yr difference that every alpha in this file
+# was being charged.
+#
+# PANEL is stronger still: the equal-weighted return of the panel itself on the same day.
+# It removes the market, the concentration *and* the panel's own survivorship tilt in one
+# step, because the benchmark is drawn from the same biased pool as the candidates. It
+# answers "did the screened names beat the average name available to the screen", which
+# is the only question a stock-selection rule is actually responsible for.
+BENCHMARKS = ("SPY", "RSP", "IWB", "IWV", "IWM", "VTI", "PANEL")
 WARMUP = 252
 
 
@@ -246,6 +258,7 @@ def main() -> int:
     ap.add_argument("--hold", type=int, default=10)
     ap.add_argument("--limit", type=int, default=None)
     ap.add_argument("--min-adv", type=float, default=0.0)
+    ap.add_argument("--benchmark", default="SPY", choices=BENCHMARKS)
     args = ap.parse_args()
 
     files = sorted(f for f in os.listdir(HISTORY) if f.endswith(".json"))
@@ -257,12 +270,32 @@ def main() -> int:
             series[fn[:-5]] = d
         if args.limit and len(series) >= args.limit and BENCH in series:
             break
-    if BENCH not in series:
-        sys.exit(f"{BENCH} missing from {HISTORY}")
+    for etf in BENCHMARKS:
+        if etf != "PANEL" and etf in series and etf != args.benchmark:
+            series.pop(etf)               # never screen an index fund
+    if args.benchmark != "PANEL" and args.benchmark not in series:
+        sys.exit(f"{args.benchmark} missing from {HISTORY}")
 
-    bench = series.pop(BENCH)
-    bidx = {d: i for i, d in enumerate(bench["dates"])}
-    bc = bench["close"]
+    if args.benchmark == "PANEL":
+        # Equal-weighted daily return of every name in the panel, chained into a level.
+        by_date: dict[str, list[float]] = {}
+        for d in series.values():
+            c, dts = d["close"], d["dates"]
+            for i in range(1, len(c)):
+                if c[i - 1] > 0:
+                    by_date.setdefault(dts[i], []).append(c[i] / c[i - 1] - 1.0)
+        days = sorted(by_date)
+        lvl, bdates, bc = 1.0, [], []
+        for dt_ in days:
+            r = by_date[dt_]
+            lvl *= 1.0 + sum(r) / len(r)
+            bdates.append(dt_)
+            bc.append(lvl)
+        bidx = {d: i for i, d in enumerate(bdates)}
+    else:
+        bench = series.pop(args.benchmark)
+        bidx = {d: i for i, d in enumerate(bench["dates"])}
+        bc = bench["close"]
 
     ranks = {}
     path = os.path.join(LEDGER, "index.json")
@@ -272,8 +305,8 @@ def main() -> int:
         rows.sort(key=lambda r: r["q_raw"])
         ranks = {r["symbol"]: i / (len(rows) - 1) for i, r in enumerate(rows)}
 
-    print(f"panel: {len(series)} names + {BENCH}   hold {args.hold} sessions   "
-          f"exit: time only (no stop, so this measures the entry)")
+    print(f"panel: {len(series)} names   benchmark {args.benchmark}   "
+          f"hold {args.hold} sessions   exit: time only")
     span = (min(d["dates"][0] for d in series.values()),
             max(d["dates"][-1] for d in series.values()))
     print(f"history spans {span[0]} .. {span[1]}\n")
