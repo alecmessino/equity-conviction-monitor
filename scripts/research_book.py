@@ -81,6 +81,11 @@ def main() -> int:
     ap.add_argument("--slots", type=int, default=10)
     ap.add_argument("--cost-bps", type=float, default=20.0)
     ap.add_argument("--benchmark", default="RSP")
+    ap.add_argument("--pick", default="alpha", choices=("alpha", "random", "deepest", "weakest"),
+                    help="how to choose among same-day candidates when signals outnumber "
+                         "slots. At a 3-6%% fill rate this choice does most of the work, so "
+                         "it must be varied rather than left at whatever was convenient.")
+    ap.add_argument("--seed", type=int, default=1)
     args = ap.parse_args()
 
     series = {}
@@ -114,6 +119,8 @@ def main() -> int:
     all_dates = sorted({d for f in feats.values() for d in f["dates"] if d in bpx})
     all_dates = [d for d in all_dates if d >= "2014-09-01"]
     cost = args.cost_bps / 10000.0
+    import random as _r
+    rng = _r.Random(args.seed)
 
     print(f"panel {len(series)} names   {all_dates[0]} .. {all_dates[-1]}")
     print(f"{args.slots} slots, {args.hold}-session hold, {args.cost_bps:.0f}bp round trip, "
@@ -153,12 +160,19 @@ def main() -> int:
                         continue
                     try:
                         if test(f, i):
-                            cands.append((sym, i, f["close"][i]))
+                            cands.append((sym, i, f["close"][i], f["dd"][i]))
                     except Exception:
                         pass
                 wanted += len(cands)
-                cands.sort()
-                for sym, i, px in cands[:free]:
+                if args.pick == "alpha":
+                    cands.sort(key=lambda t: t[0])
+                elif args.pick == "random":
+                    rng.shuffle(cands)
+                elif args.pick == "deepest":
+                    cands.sort(key=lambda t: -t[3])
+                else:
+                    cands.sort(key=lambda t: t[3])
+                for sym, i, px, _dd in cands[:free]:
                     open_pos.append({"sym": sym, "i": i, "px": px})
                     filled += 1
             # mark to market
