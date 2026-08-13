@@ -49,8 +49,12 @@ from equity_monitor import universe as uni
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 HISTORY = os.path.join(ROOT, "ledger", "history")
 
-UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
-      "(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+# Deliberately terse. A full Chrome user-agent arriving *without* the rest of a browser's
+# headers is a worse disguise than no disguise: measured against Yahoo at the same second,
+# the long Chrome string with Accept/Accept-Encoding returned 429 on every call while a
+# plain "Mozilla/5.0" returned 2513 bars in 0.5s, repeatedly. Trying to look like a browser
+# is what got the requests classified as a scraper.
+UA = "Mozilla/5.0"
 YAHOO = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range={r}&interval=1d"
 TIINGO = "https://api.tiingo.com/tiingo/daily/{sym}/prices?startDate={start}&format=json"
 FMP = "https://financialmodelingprep.com/api/v3/historical-price-full/{sym}?from={start}&apikey={key}"
@@ -65,8 +69,10 @@ MIN_BARS = 260
 # to, so it happens to sit on the working side of that rule; ``identity`` is stated
 # explicitly because inheriting the behaviour from a library default is not the same as
 # choosing it, and a future switch to requests or httpx would silently enable gzip.
-BASE_HEADERS = {"User-Agent": UA, "Accept": "application/json",
-                "Accept-Encoding": "identity"}
+# Nothing beyond the user-agent. Every header added here has been tested and each one
+# moved Yahoo from 200 to 429; Tiingo and FMP take their auth via the per-call headers
+# argument and do not care about the rest.
+BASE_HEADERS = {"User-Agent": UA}
 
 _cooldown = {"until": 0.0}
 
