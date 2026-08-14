@@ -31,17 +31,20 @@ three-year return over volatility — and it is **not** a quality proxy. Measure
 
     price measure vs the model's fundamental Q   -0.165
     price measure vs 12-month momentum           +0.495
-    fundamental Q vs 12-month momentum           -0.251
+    fundamental Q vs 12-month momentum           -0.132
 
 It is *negatively* related to quality and strongly related to momentum, so calling it a
 quality proxy would report the momentum effect as a fundamental one. It is named `trend`
 throughout for that reason.
 
-That third correlation is the mechanism behind a result that kept recurring and had no
-explanation: gating on fundamental quality made every screen worse, in four independent
-tests. In this universe high-quality names carry *lower* twelve-month momentum, so a
-quality gate is partly a momentum-loser filter — and momentum is the axis that pays. The
-gate was not failing to help; it was selecting against the thing that works.
+That third correlation is weak, and it is worth being precise about what it does and does
+not explain. It is driven almost entirely by the *yield* pillars, where price sits in the
+denominator and the relationship is close to mechanical (fcf_yield -0.226, cfo_yield
+-0.242); the operating pillars barely move (roic -0.016, gross_margin -0.056). So the
+quality gate leans against momentum only through its valuation legs. That is far too
+small to carry the recurring finding that gating on quality made screens worse — at 1,020
+names the quality effect is not distinguishable from zero in either direction, and the
+earlier readings in both directions were small-sample artifacts.
 """
 from __future__ import annotations
 
@@ -55,6 +58,9 @@ import statistics as st
 import sys
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+from equity_monitor import panel  # noqa: E402
+
 HISTORY = os.path.join(ROOT, "ledger", "history")
 BENCH = "RSP"          # equal weight: the average large-cap stock, not seven of them
 FALLBACK_BENCH = "SPY"
@@ -117,25 +123,66 @@ def classify_ending(c, dates, last_trading_date):
     return "other"
 
 
+BAR_FIELDS = ("dates", "close", "high", "low", "open", "volume", "adjclose")
+
+
 def load_panel(meta_path):
+    """Series and cohort tag per symbol, with each name truncated at its own delisting.
+
+    Cohort comes from the listing registry, not from where the price file happens to end.
+    Reading the file was the earlier rule and it is exactly backwards on the names that
+    matter: a recycled ticker carries a successor's bars right up to today, so the names
+    this study exists to measure were being filed under *survivors*.
+
+    Of 370 delisted names requested from the vendor, 325 returned data and 297 of those
+    are the company that was asked for. The other 28 are successors holding the same
+    symbol — S returns SentinelOne rather than Sprint, STI a 2024 relisting rather than
+    SunTrust — and they are counted as the ordinary live companies they are, not as
+    delisted ones. The delisted arm is 297 names, and saying it is 370 would be the
+    survivorship error restated one level down.
+    """
     listing = {}
     if os.path.exists(meta_path):
         with open(meta_path) as fh:
             listing = json.load(fh)
     series, tag = {}, {}
+    dropped = {"recycled_whole": [], "short": 0, "etf": 0, "truncated": 0}
     for fn in sorted(os.listdir(HISTORY)):
-        if not fn.endswith(".json"):
+        if not fn.endswith(".json") or fn.startswith("_"):
             continue
         sym = fn[:-5]
+        if panel.is_etf(sym) and sym not in (BENCH, FALLBACK_BENCH):
+            dropped["etf"] += 1
+            continue
         with open(os.path.join(HISTORY, fn)) as fh:
             d = json.load(fh)
         if len(d.get("close") or []) < WARMUP + 40:
+            dropped["short"] += 1
             continue
+        meta = listing.get(sym) or {}
+        first, last, status = (meta.get("first_listed"), meta.get("last_listed"),
+                               meta.get("status") or "unresolved")
+        if status == "recycled":
+            # No bar in the file belongs to the company that held this symbol: it is a
+            # successor's history end to end and there is nothing here to measure.
+            dropped["recycled_whole"].append(sym)
+            continue
+        keep = panel.episode_flags(d["dates"], first, last)
+        if not all(keep):
+            dropped["truncated"] += 1
+            lo = keep.index(True)
+            hi = len(keep) - keep[::-1].index(True)
+            for f in BAR_FIELDS:
+                if isinstance(d.get(f), list):
+                    d[f] = d[f][lo:hi]
+        if len(d["close"]) < WARMUP + 40:
+            dropped["short"] += 1
+            continue
+        d["_ok"] = panel.bar_flags(d)
         series[sym] = d
-        # A name whose data stops well before the panel's end stopped trading, whatever
-        # the registry says — the price series is the authority here.
-        tag[sym] = "delisted" if d["dates"][-1] < "2026-06-01" else "survivor"
-    return series, tag
+        tag[sym] = ("delisted" if status != "unresolved" and last
+                    and last < "2026-06-01" else "survivor")
+    return series, tag, dropped
 
 
 def main() -> int:
@@ -144,7 +191,7 @@ def main() -> int:
     ap.add_argument("--benchmark", default=BENCH)
     args = ap.parse_args()
 
-    series, tag = load_panel(os.path.join(HISTORY, "_listing.json"))
+    series, tag, dropped = load_panel(os.path.join(HISTORY, "_listing.json"))
     bsym = args.benchmark if args.benchmark in series else FALLBACK_BENCH
     if bsym not in series:
         sys.exit("no benchmark in the panel")
@@ -157,6 +204,11 @@ def main() -> int:
 
     nd = sum(1 for v in tag.values() if v == "delisted")
     print(f"panel {len(series)} names   survivors {len(series)-nd}   delisted {nd}")
+    rec = dropped["recycled_whole"]
+    print(f"dropped {len(rec)} wholly-recycled tickers "
+          f"({', '.join(rec[:8])}{'...' if len(rec) > 8 else ''}); "
+          f"truncated {dropped['truncated']} at their delisting; "
+          f"{dropped['etf']} ETFs and {dropped['short']} short series excluded")
     print(f"benchmark {bsym} (equal weight)   hold {args.hold} sessions\n")
 
     endings = {}
@@ -179,9 +231,12 @@ def main() -> int:
         n = len(c)
         rsi = rsi_series(c)
         hi252 = rolling_max(h, 252)
+        # No event may span a suspect bar in either direction: not the 756-session trend
+        # window behind it, nor the H-session hold in front of it.
+        clean = panel.clean_windows(d["_ok"], 756, H)
         nxt = WARMUP
         for i in range(WARMUP, n - H):
-            if i < nxt or hi252[i] <= 0 or c[i - 252] <= 0:
+            if i < nxt or not clean[i] or hi252[i] <= 0 or c[i - 252] <= 0:
                 continue
             dd = (hi252[i] - c[i]) / hi252[i]
             if dd < 0.15:

@@ -25,6 +25,13 @@ Two honest limits, both worth stating rather than papering over:
   liquidity has to be measured from the price history after fetching — which means paying
   the request before knowing whether the name qualifies. That cost is the price of an
   unbiased sample; skipping it is how the bias gets back in.
+* **A ticker is not a row, and a row is not a company.** The registry carries one row
+  per listing episode, so an exchange transfer leaves a closed row behind while the
+  company keeps trading, and a symbol reissued years later opens a fresh row under the
+  same ticker. Reading endDate off a single row put 2,789 of the 2016 cohort in the
+  ground; resolving each ticker to the episode that was actually running on the as-of
+  date leaves 2,688, a 45.8% death rate rather than 47.2%. The correction is small in
+  aggregate and decisive per name — it is what separates Sprint from SentinelOne.
 """
 from __future__ import annotations
 
@@ -36,6 +43,9 @@ import os
 import sys
 import urllib.request
 import zipfile
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from equity_monitor import panel  # noqa: E402
 
 TICKERS = "https://apimedia.tiingo.com/docs/tiingo/daily/supported_tickers.zip"
 US_EXCHANGES = {"NYSE", "NASDAQ", "NYSE ARCA", "AMEX", "NYSE MKT"}
@@ -78,12 +88,35 @@ def main() -> int:
     ap.add_argument("--cache", default="/tmp/tiingo_tickers.zip")
     ap.add_argument("--out", default="universe_pit.json")
     ap.add_argument("--seed", type=int, default=11)
+    ap.add_argument("--dead-before", default="2026-06-01",
+                    help="a ticker whose last listing episode closed before this date is "
+                         "counted dead; the gap absorbs registry lag on recent names")
     args = ap.parse_args()
 
     rows = fetch_registry(args.cache)
     live = alive_on(rows, args.as_of)
-    dead = [r for r in live if (r.get("endDate") or "9999") < "2026-06-01"]
-    survived = [r for r in live if (r.get("endDate") or "9999") >= "2026-06-01"]
+    # Collapse to one entry per ticker before asking whether it died, and take the last
+    # trading day from every episode the registry holds rather than from the episode that
+    # happens to be alive on as-of. A ticker with any open episode is not dead.
+    us = [r for r in rows if r.get("exchange") in US_EXCHANGES
+          and r.get("assetType") == "Stock" and r.get("priceCurrency") == "USD"]
+    eps = panel.episodes(us)
+    seen: set[str] = set()
+    members = []
+    for r in live:
+        if r["ticker"] in seen:
+            continue
+        seen.add(r["ticker"])
+        members.append(r)
+    live = members
+    for r in live:
+        # The episode that was running on as-of, not the ticker's latest: a symbol
+        # reissued years later belongs to a different company and says nothing about
+        # whether the one picked here survived.
+        first, last = panel.episode_covering(eps.get(r["ticker"]), args.as_of)
+        r["firstListed"], r["lastListed"] = first, last
+    dead = [r for r in live if (r["lastListed"] or "9999") < args.dead_before]
+    survived = [r for r in live if (r["lastListed"] or "9999") >= args.dead_before]
     rate = len(dead) / max(1, len(live))
     print(f"universe as of {args.as_of}: {len(live):,} US common stocks")
     print(f"  still trading today : {len(survived):,}")
@@ -99,7 +132,12 @@ def main() -> int:
     syms = [r["ticker"] for r in pick]
     with open(args.out, "w") as fh:
         json.dump(syms, fh)
-    meta = {r["ticker"]: {"start": r.get("startDate"), "end": r.get("endDate")}
+    # `last_listed` is what a study must truncate on: bars past it are a different issuer
+    # that took the symbol over. `end` is kept as the as-of episode's own close for
+    # provenance, but it is the wrong field to filter with.
+    meta = {r["ticker"]: {"start": r.get("startDate"), "end": r.get("endDate"),
+                          "first_listed": r.get("firstListed"),
+                          "last_listed": r.get("lastListed")}
             for r in pick}
     with open(args.out.replace(".json", "_meta.json"), "w") as fh:
         json.dump(meta, fh)

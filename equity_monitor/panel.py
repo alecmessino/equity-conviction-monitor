@@ -1,7 +1,7 @@
 """Panel hygiene: which bars are usable, and which names belong in a study at all.
 
 A backtest harness that globs a directory is trusting whatever a vendor happened to
-serve. Three things in this panel were not survivable, and each produced a plausible
+serve. Four things in this panel were not survivable, and each produced a plausible
 number rather than an error:
 
 **Unadjusted reorganisations.** CHRD closes at 0.073592 on 2020-11-19 and 19.011288 on
@@ -18,6 +18,15 @@ years away from where the calendar says it should.
 
 **Instruments that are not the thing being studied.** Eleven ETFs and eight dual-class
 pairs were being screened as though they were ordinary common stock.
+
+**Recycled tickers.** A symbol is a slot on an exchange, not an identity. Thirty-five of
+the 290 names in the delisted panel carry bars belonging to a *different issuer* that took
+the symbol over later: S is Sprint until 2020-04-01 and SentinelOne after it, STI is
+SunTrust then a 2024 relisting, CA is CA Inc. then an unrelated 2023 name. Fifteen of the
+thirty-five contain no bars from the original company at all — the delisted-cohort study
+was reading a successor's entire price history as the dead company's. The price API offers
+no way to tell them apart, so the split has to come from the listing registry: bars dated
+past a ticker's true last trading day are a different security and are marked unusable.
 
 The guard is per **bar**, not per name. A per-name filter that drops anything with a large
 single session removes MDGL (+268% on phase-3 data), SMMT, VKTX, GME and others whose moves
@@ -41,6 +50,21 @@ MAX_ABS_SESSION_MOVE = 3.0        # +300% / -75% in one session
 # Consecutive bars further apart than this have a hole between them. Ten calendar days
 # clears every US market holiday cluster including the Thanksgiving and Christmas weeks.
 MAX_BAR_GAP_DAYS = 10
+
+# Slack between a registry endDate and the last bar the original issuer actually printed.
+# Settlement and the final tape run a few sessions past the recorded delisting; a
+# reissued symbol reappears months or years later, so nothing sits near the boundary.
+RECYCLE_GRACE_DAYS = 10
+
+# A follow-on listing opening within a week of the previous one closing is the same company
+# continuing — an exchange transfer (PNFP, NASDAQ to NYSE over a New Year) or a relisting
+# after reorganisation (BTU, three days). A symbol reissued to an unrelated company sits
+# idle for months: S waited 455 days between Sprint and SentinelOne.
+CONTINUATION_GAP_DAYS = 7
+
+# A listing episode shorter than this is a registry artifact, not a company's life on an
+# exchange. BRKB resolves to a nineteen-day row against a file holding ten years of bars.
+MIN_EPISODE_DAYS = 90
 
 # Screened as common stock and are not. The dual-class pairs are left in — they are real
 # equities — but are listed so a study can collapse them if it wants one vote per company.
@@ -81,6 +105,125 @@ def bar_flags(d: dict) -> list[bool]:
             except ValueError:
                 ok[i] = False
     return ok
+
+
+def episode_flags(dates: list[str], first: str | None, last: str | None) -> list[bool]:
+    """False on bars outside [first, last] — those belong to a different holder of the symbol.
+
+    A ticker is a slot on an exchange, not an identity, and both ends of the slot matter.
+    Bars *after* `last` are the successor that took the symbol over: S is Sprint through
+    2020-04-01 and SentinelOne from 2021-06-30. Bars *before* `first` are the predecessor:
+    the company holding MRNA in 2016 stopped trading in October 2018 and Moderna listed
+    that December. Guarding only the far end deletes Moderna's entire history as though it
+    were the dead company's; guarding only the near end reads SentinelOne as Sprint.
+
+    A None bound is open — the episode has no known edge on that side.
+    """
+    lo = _as_date(first)
+    hi = _as_date(last)
+    if hi is not None:
+        hi += dt.timedelta(days=RECYCLE_GRACE_DAYS)
+    if lo is None and hi is None:
+        return [True] * len(dates)
+    out = []
+    for d in dates:
+        v = _as_date(d)
+        out.append(v is not None and (lo is None or v >= lo) and (hi is None or v <= hi))
+    return out
+
+
+def _as_date(v):
+    try:
+        return dt.date.fromisoformat(v)
+    except (ValueError, TypeError):
+        return None
+
+
+def episodes(rows: list[dict]) -> dict:
+    """Ticker -> its listing episodes as sorted (start, end) pairs, continuations merged.
+
+    Tiingo's registry is one row per (ticker, exchange, listing), so a single company holds
+    several: PNFP has a NASDAQ row closing 2025-12-31 and an NYSE row opening two sessions
+    later, and BTU relisted three days after its reorganisation. Those are the same company
+    continuing and are merged. A symbol reissued to an unrelated company sits idle for
+    months first — S waited 455 days between Sprint and SentinelOne — so the gap threshold
+    separates the two cases cleanly with nothing near the boundary.
+
+    Overlapping rows are merged too. They are usually one listing recorded twice across
+    venues (COHR carries identical 1990-03-26 NYSE and NASDAQ rows), and occasionally a
+    predecessor's book backfilled onto the symbol (DOC holds Physicians Realty from 2013
+    and Healthpeak's history from 1987). The registry does not distinguish them, so both
+    merge — which errs toward keeping data rather than deleting a live company's history.
+    """
+    by: dict[str, list] = {}
+    for r in rows:
+        t, s_, e = r.get("ticker"), r.get("startDate") or "", r.get("endDate") or ""
+        if t and s_:
+            by.setdefault(t, []).append((s_, e))
+    out = {}
+    for t, eps in by.items():
+        eps.sort()
+        merged = [list(eps[0])]
+        for s_, e in eps[1:]:
+            prev = merged[-1]
+            pe, ps = _as_date(prev[1]), _as_date(s_)
+            gap = (ps - pe).days if (pe and ps) else 0
+            if not prev[1] or gap <= CONTINUATION_GAP_DAYS:
+                if not e or (prev[1] and e > prev[1]):
+                    prev[1] = e
+            else:
+                merged.append([s_, e])
+        out[t] = [(a, b or None) for a, b in merged]
+    return out
+
+
+def resolve_episode(eps: list, dates: list[str]) -> tuple:
+    """Which listing episode the bars on disk belong to, and how far to trust the answer.
+
+    Returns ``(first, last, status)``. Status is the point of the function: a guard that
+    silently truncates whenever the registry disagrees with the file does more damage than
+    the contamination it removes. Measured on this panel, matching each file to the
+    episode covering its own first bar resolves 1,317 of 1,349 names outright; of the
+    thirty-two that straddle a boundary, eleven hold nothing but a successor's history.
+
+        clean       every bar falls inside one episode — nothing to do
+        truncated   the file spans a boundary; the bars outside it are a different company
+        recycled    no bar falls inside the episode at all; the file is entirely successor
+        unresolved  registry and file disagree structurally — bounds are left open
+
+    The unresolved class exists because the registry is not clean either. BRKB resolves to
+    a nineteen-day row that is plainly an artifact of the dashed-symbol convention, against
+    a file holding ten years of Berkshire. Truncating to the row would delete the name;
+    reporting it as unresolved keeps the bars and keeps the disagreement visible.
+    """
+    if not eps or not dates:
+        return (None, None, "unresolved")
+    # Bind to whichever episode holds the most of the file. Anchoring on the first bar
+    # instead looks reasonable and is wrong on every symbol the vendor backfills: AA's
+    # file opens with two months of Alcoa Inc. before Alcoa Corp listed, and matching on
+    # that opening bar keeps the two months and discards ten years of the company the file
+    # is actually about. Counting settles it without a rule about which end to believe.
+    best, first, last = -1, None, None
+    for a, b in sorted(eps):
+        span = ((_as_date(b) or dt.date.today()) - (_as_date(a) or dt.date.min)).days
+        if span < MIN_EPISODE_DAYS:
+            continue
+        n = sum(episode_flags(dates, a, b))
+        if n >= best:                       # ties go to the later episode
+            best, first, last = n, a, b
+    if first is None or best <= 0:
+        return (None, None, "unresolved") if first is None else (first, last, "recycled")
+    if best == len(dates):
+        return (first, last, "clean")
+    return (first, last, "truncated")
+
+
+def episode_covering(eps: list, date: str) -> tuple:
+    """The (start, end) episode containing `date`, or (None, None) if none does."""
+    for s_, e in eps or ():
+        if s_ <= date and (e is None or date <= e):
+            return (s_, e)
+    return (None, None)
 
 
 def clean_windows(ok: list[bool], lookback: int, hold: int) -> list[bool]:
