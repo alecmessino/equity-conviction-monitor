@@ -111,6 +111,7 @@ equity_monitor/
   snapshots.py         nightly factor-level history + score-change attribution
   monitor.py           self-grading: stability, coverage trend, regime, health
   churn.py             why the board moved: information vs. model sensitivity
+  swing.py             the 5-25 session board: reward-to-risk gated mean reversion
   watchlist.py         the overnight diff: what changed and whether it matters
   rebuild.py           reconstruct an earlier board from cached prices (never committed)
   nightly.py           orchestrator; writes ledger/
@@ -120,6 +121,7 @@ equity_monitor/
     prices.py          OHLCV chain + all price-derived features
     macro.py           FRED series
 scripts/validate_ledger.py   CI gate — degenerate ledger, and snapshot-history integrity
+scripts/research_swing.py    event study for the swing layer, with its bias controls
 web/terminal.html            the terminal (self-contained, no CDN)
 tests/                       model behaviour, v2 regressions, JS<->Python parity
 ```
@@ -141,6 +143,107 @@ Whether high-conviction names outperform is an Information Coefficient question 
 months of accumulated snapshots within a single specification hash — it is not measured
 here, and every panel that depends on history states its sample size and what it is still
 waiting for rather than rendering a default.
+
+## The swing board
+
+Conviction answers "is this a good business I can own". `equity_monitor/swing.py` answers
+a shorter question over 5 to 25 sessions: **this name has fallen, is the bounce worth
+taking, and what does it pay against what it risks.** It is a separate board on the same
+names, and three of its choices are deliberate departures from how the strategy is usually
+written down.
+
+**Reward-to-risk is the gate, not drawdown depth.** A fixed "-15% off the high" entry
+paired with a 3xATR stop loses by construction rather than by luck. Volatility scales with
+the fall, so the stop widens roughly in step with it, while a fixed-fraction retracement
+target grows faster than linearly. Measured across the 1016-name board:
+
+| Below the 52-week high | 38.2% retracement | 3xATR stop | Reward:risk | Share clearing 1.5 |
+|---|---|---|---|---|
+| 10–15% | +5.3% | −9.8% | **0.53** | 1% |
+| 15–20% | +7.9% | −10.5% | **0.75** | 1% |
+| 20–25% | +10.9% | −11.9% | 0.93 | 10% |
+| 25–30% | +14.2% | −13.5% | 1.07 | 11% |
+| 30–40% | +19.9% | −14.9% | 1.35 | 35% |
+| 40%+ | +35.0% | −17.9% | 2.35 | 78% |
+
+At the threshold the strategy is usually written with, the trade pays 0.75 for every 1.00
+risked and needs a 57% strike rate merely to break even. So the depth threshold is an
+*output* of requiring a reward-to-risk floor, not an input to be guessed.
+
+The same arithmetic constrains the stop. Across every band, `3 x ATR(14)` lands within a
+point or two of the name's own 25-day standard deviation — 9.8% against 10.0% at the
+shallow end, 17.9% against 20.9% at the deep end. A stop at one sigma over the holding
+period is inside the noise: roughly **30% of positions are stopped out by drift-free
+random walk alone**, before the thesis is right or wrong about anything. Widening the stop
+without deepening the entry only moves the loss around.
+
+**Drawdown is measured against the benchmark as well as against the high.** A name 25% off
+its high while the index is 20% off its own is beta, and it mean-reverts with the market or
+not at all. `rel_drawdown_52w` is the drawdown of the *stock/benchmark ratio*, which
+isolates the idiosyncratic part of the fall. It is a ratio of two observed series and needs
+no estimated beta — there is no regression to degrade silently on a short history.
+
+**The retracement leg is anchored to the high that started it.** The swing low is the
+lowest low *since* the 52-week high, not `lo_52w`, which can predate the high entirely.
+Anchoring to it describes a decline that never happened, and every Fibonacci level derived
+from it is a number about nothing. `tests/test_swing.py` pins this case.
+
+The 50-day moving average is reported and is deliberately **not** used as a target. It is a
+10-week reference being asked to price a 52-week decline: on the current board the median
+name 20–25% off its high sits *above* its own 50-day average, so the "target" is behind the
+price, and across every band the median touch is worth 0.4% to 5.3%.
+
+One consequence for the existing model. `model.score()` already applies a mean-reversion
+uplift to the confirmation pillar for quality names in drawdown, worth a median 1.7
+conviction points and up to 5.2. Three names currently sit above the BUY line only because
+of it. A swing scanner gated on *conviction* would therefore count the drawdown twice —
+once inside the score, once in its own filter. The gate here is the **quality percentile**,
+which carries no drawdown term.
+
+The gate is written as a percentile of the score distribution, not as a raw value, because
+`q_raw` is a weighted mean of five percentiles and a mean of percentiles is not itself
+uniform. On the current board the 65th percentile of `q_raw` is 0.563, while the literal cut
+`q_raw >= 0.65` keeps 16% of names rather than 35%.
+
+Every rejected name is counted at the **first gate it failed**, and the funnel is published
+alongside the candidates. "Eight candidates tonight" invites the reader to assume the other
+thousand were unsuitable businesses; "427 never fell far enough, 379 failed quality, 143
+cleared both and failed reward-to-risk" says which. The terminal's **Swing dips** tab draws
+the board as quality against drawdown, shaded from the reward-to-risk floor rightward.
+
+### Validating it
+
+`scripts/research_swing.py` runs the event study, against the per-symbol OHLCV
+`ledger/history/` already holds. Four things separate it from the study this strategy is
+usually validated with, each because the naive version reports a number that cannot be
+traded:
+
+* **The exit is simulated along the path, not sampled at the horizon.** Reading
+  `close[t+20]` credits the strategy with recoveries a stopped-out position never saw. Every
+  event walks forward bar by bar; where a bar touches both stop and target the **stop is
+  assumed to fill first**, because a daily bar carries no intrabar sequence and the other
+  assumption pays for a coin flip that was not won.
+* **Returns are stated against the benchmark over the identical window**, and against a
+  **matched control arm** — same name, same exit rule, a random date. Signal minus control
+  is the number worth reading; a positive average in a rising market is drift.
+* **The interval is a block bootstrap over dates.** A hundred names triggering on one
+  afternoon are one observation about one afternoon. Resampling events independently gives
+  an interval several times too tight, which is the most common way a dip-buying backtest
+  claims 4,000 observations when it has about twenty. `events` and `distinct dates` are
+  printed side by side.
+* **Two biases are stated rather than removed, because this data cannot remove them.**
+  *Survivorship*: the universe is today's constituents, so a name that fell and kept falling
+  until it was acquired, delisted or dropped from the index never enters the sample — and
+  dip-buying is the strategy most distorted by that, because the excluded names are excluded
+  for precisely the outcome being measured. *Quality look-ahead*: fundamentals are as-filed
+  today, the same leak `rebuild.py` refuses to write into `ledger/snapshots/`. The
+  quality-on and quality-off arms bound it; their gap is edge **plus** leak, so it reads as
+  a ceiling. An inverted-quality arm runs as falsification.
+
+Both biases inflate dip-buying, so every number it prints is an upper bound. That is a
+reason to hold sizing until `ledger/snapshots/` is deep enough to answer the question
+without a leak — the same standard `edge.py` already holds itself to — not a reason to skip
+the study.
 
 ### Diagnosing churn
 

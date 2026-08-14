@@ -45,6 +45,17 @@ COLUMNS: list[str] = [
     # inserting keeps every snapshot written before that date readable with the
     # same decoder.
     "p_roe", "p_capital", "p_cash_yield", "p_ffo_yield", "p_leverage_assets",
+    # Appended when the swing layer landed. This is the forward record: the swing
+    # state of every name, written *before* the outcome is known, which is the only
+    # evidence about this strategy that is survivorship-free and look-ahead-free by
+    # construction. A study run over accumulated price history can only ever bound
+    # those two biases; a snapshot series does not have them to bound.
+    #
+    # Every field needed to reconstruct the trade is here, not just the signal — a
+    # recorded "PRIME" with no entry, stop or target cannot be scored later, and a
+    # forward record that cannot be scored is a log file.
+    "drawdown_52w", "rel_drawdown_52w", "reward_risk", "rsi14", "z50",
+    "rebound_progress", "quality_pctile", "target_1", "stop", "swing_signal",
 ]
 
 # Percentile columns per pillar. Quality depends on the row's sector profile, so it
@@ -67,7 +78,8 @@ def pillar_factors_for(profile: str) -> dict[str, list[str]]:
                                          model.QUALITY_PROFILES["default"])
     return {**PILLAR_FACTORS, "quality": list(quality)}
 
-_PRECISION = {"conviction": 0, "price": 4, "market_cap": 0, "weight": 3}
+_PRECISION = {"conviction": 0, "price": 4, "market_cap": 0, "weight": 3,
+              "rsi14": 2, "reward_risk": 3, "target_1": 4, "stop": 4}
 _DEFAULT_PRECISION = 4
 
 

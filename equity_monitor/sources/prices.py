@@ -259,8 +259,14 @@ def features(bars: Bars) -> dict:
     c = bars.close
     price = c[-1]
     prev = c[-2] if len(c) > 1 else price
-    window52 = c[-252:] if len(c) >= 252 else c
-    hi52, lo52 = max(window52), min(window52)
+    # Anchored to the real intraday extremes, not to closes. The swing layer measures its
+    # retracement leg from ``bars.high`` (swing.selloff_leg), so taking the 52-week band
+    # off closes here left ``drawdown_52w`` and ``leg_high`` measured from different peaks
+    # — and both feed the same reward-to-risk gate. A stock that printed its high at
+    # 11:40 and closed lower genuinely traded there; the drawdown is from that price.
+    hi_window = bars.high[-252:] if len(bars.high) >= 252 else bars.high
+    lo_window = bars.low[-252:] if len(bars.low) >= 252 else bars.low
+    hi52, lo52 = max(hi_window), min(lo_window)
 
     dollar_volume = [bars.close[i] * bars.volume[i] for i in range(len(c))][-63:]
     adv_usd = sum(dollar_volume) / len(dollar_volume) if dollar_volume else 0.0

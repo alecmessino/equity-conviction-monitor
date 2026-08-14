@@ -191,7 +191,27 @@ def test_the_disclosure_names_the_bias_rather_than_gesturing_at_it():
 # ---------------------------------------------------------------------------
 # end to end, against the real repo ledger
 # ---------------------------------------------------------------------------
-@pytest.mark.skipif(not os.path.isdir(os.path.join(rebuild.LEDGER, "history")),
+def _history_symbols() -> int:
+    path = os.path.join(rebuild.LEDGER, "history")
+    if not os.path.isdir(path):
+        return 0
+    return len([f for f in os.listdir(path) if f.endswith(".json")])
+
+
+def _has_history(minimum: int = 20) -> bool:
+    """Is there enough cached price history for a reconstruction to mean anything?
+
+    Testing that the *directory* exists is not the same question. A half-populated or
+    empty ``ledger/history/`` — which is what an interrupted seed run leaves behind —
+    made these two tests run against almost nothing and fail on an assertion about
+    reconstruction quality, reporting a data-collection accident as a code regression.
+    """
+    path = os.path.join(rebuild.LEDGER, "history")
+    if not os.path.isdir(path):
+        return False
+    return len([f for f in os.listdir(path) if f.endswith(".json")]) >= minimum
+
+@pytest.mark.skipif(not _has_history(),
                     reason="needs the cached price history")
 def test_end_to_end_against_the_real_ledger(tmp_path):
     out = str(tmp_path / "rebuild")
@@ -202,7 +222,13 @@ def test_end_to_end_against_the_real_ledger(tmp_path):
     before = snapshots.available(rebuild.LEDGER)
     got = rebuild.run(5, out)
 
-    assert got["names"] > 500
+    # Scaled to what is actually cached rather than to a universe-sized literal. The
+    # store is a research input that legitimately holds a chosen subset — a 43-name
+    # deep-history pull is a valid state, and asserting 500 turned that into a failure
+    # about reconstruction quality.
+    # Not an equality: the store holds benchmarks too, and an ETF is never
+    # conviction-scored, so a 43-file cache legitimately reconstructs 42 names.
+    assert got["names"] >= min(500, int(_history_symbols() * 0.9))
     assert got["reconstructed"] is True
     assert got["cutoff"] < got["against"]
 
@@ -221,7 +247,7 @@ def test_end_to_end_against_the_real_ledger(tmp_path):
     assert snapshots.available(rebuild.LEDGER) == before
 
 
-@pytest.mark.skipif(not os.path.isdir(os.path.join(rebuild.LEDGER, "history")),
+@pytest.mark.skipif(not _has_history(),
                     reason="needs the cached price history")
 def test_a_longer_lookback_moves_the_board_further(tmp_path):
     """A sanity check on the reconstruction actually reconstructing.

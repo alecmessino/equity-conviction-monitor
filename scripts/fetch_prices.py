@@ -1,0 +1,332 @@
+#!/usr/bin/env python3
+"""Deep price history into ledger/history/, from whichever source you have access to.
+
+The nightly build fetches ~2 years, which is the right window for scoring tonight's board
+and the wrong one for measuring whether the board predicts anything: a 252-bar burn-in
+eats the oldest episode, so a two-year file yields an event study over whatever selloff
+happens to fall in the back half. This script exists to seed a deeper store once, after
+which the nightly extends it.
+
+Sources, in the order you should reach for them:
+
+* ``yahoo``   — no key, 10 years, split- and dividend-adjusted. Rate-limits hard from
+                datacenter IPs: one request at a time with real spacing, and a 429
+                lockout lasts tens of minutes, so the pacing below is deliberately timid.
+* ``tiingo``  — key, 30+ years, the cleanest adjustments of the lot. The free tier's
+                binding limit is **500 unique symbols per month**, not per day, so it
+                cannot cover a 1000-name universe on its own. Use it for a core subset.
+* ``fmp``     — key, ~5 years of prices, and the only free source here that also exposes
+                *historical* fundamentals. That matters more than the price depth: it is
+                the one way to remove the quality look-ahead the research harness can
+                otherwise only bound.
+* ``parquet`` — no network. Point it at a file you dumped locally with yfinance. This is
+                the right answer when a cloud IP is blocked and your laptop is not.
+
+Adjusted bars, consistently. Yahoo returns raw OHLC alongside an adjusted close; using
+the raw high with an adjusted close silently breaks every measure anchored to a peak —
+the retracement leg, the 52-week band, ATR. Open, high and low are scaled by the same
+``adjclose / close`` factor so a bar stays internally consistent.
+
+    python scripts/fetch_prices.py --source yahoo --years 10
+    python scripts/fetch_prices.py --source parquet --path ~/prices.parquet
+
+**Yahoo cannot see delisted names, and that is the whole of survivorship bias.** Measured:
+six delisted tickers, six 404s — Altaba, AMR and Atlas Air, and clean acquisitions in
+Abiomed, Xilinx and Activision alike. Tiingo serves every one of them with full history to
+the final trading day. So the two are complements rather than alternatives: Yahoo for
+survivors, where it is free and fast, and Tiingo's scarce quota spent only where it is the
+only option. A study built on yfinance alone is not making a sampling choice about dead
+names; it is structurally unable to see them.
+
+**The registry says when a ticker stopped, not how large it was**, which makes a blind
+delisted sample mostly microcaps. Kaggle's 2017 bulk dump (free, no key) carries the
+missing field: cross-referencing 3,362 delisted names against 2016-17 dollar volume leaves
+1,479 with usable history, 180 above $30m/day and 53 above $100m/day. That cohort is
+Allergan, Celgene, Time Warner, Monsanto, Aetna, Express Scripts, Raytheon, Anadarko,
+Alexion, Shire, Twitter, Activision, Mylan, Valeant, Chesapeake, US Steel — former index
+members, several of them S&P 500, absent from every current-constituent panel.
+
+It contains both channels, which is what makes the *sign* of the bias answerable rather
+than assumed: premium takeouts (Celgene, Time Warner, Aetna) alongside long declines
+ending in bankruptcy or a take-private (Chesapeake at $4.14, Valeant, Walgreens). The
+usual claim that survivorship inflates dip-buying only covers the second kind.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import json
+import os
+import random
+import sys
+import time
+import urllib.error
+import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from equity_monitor import universe as uni
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+HISTORY = os.path.join(ROOT, "ledger", "history")
+
+# Deliberately terse. A full Chrome user-agent arriving *without* the rest of a browser's
+# headers is a worse disguise than no disguise: measured against Yahoo at the same second,
+# the long Chrome string with Accept/Accept-Encoding returned 429 on every call while a
+# plain "Mozilla/5.0" returned 2513 bars in 0.5s, repeatedly. Trying to look like a browser
+# is what got the requests classified as a scraper.
+UA = "Mozilla/5.0"
+YAHOO = "https://query1.finance.yahoo.com/v8/finance/chart/{sym}?range={r}&interval=1d"
+TIINGO = "https://api.tiingo.com/tiingo/daily/{sym}/prices?startDate={start}&format=json"
+FMP = "https://financialmodelingprep.com/api/v3/historical-price-full/{sym}?from={start}&apikey={key}"
+
+MIN_BARS = 260
+
+
+# Never request compression. Measured against Yahoo from a datacenter IP, at the same
+# second: a plain request returned 200 and the identical request carrying
+# ``Accept-Encoding: gzip, deflate`` returned 429, rejected in 0.3s — a fingerprint rule
+# rather than a rate counter. urllib sends no Accept-Encoding header at all unless told
+# to, so it happens to sit on the working side of that rule; ``identity`` is stated
+# explicitly because inheriting the behaviour from a library default is not the same as
+# choosing it, and a future switch to requests or httpx would silently enable gzip.
+# Nothing beyond the user-agent. Every header added here has been tested and each one
+# moved Yahoo from 200 to 429; Tiingo and FMP take their auth via the per-call headers
+# argument and do not care about the rest.
+BASE_HEADERS = {"User-Agent": UA}
+
+_cooldown = {"until": 0.0}
+
+
+def _get(url: str, headers: dict | None = None, tries: int = 3) -> dict | list | None:
+    """One request, with a *shared* cooldown rather than a per-symbol backoff.
+
+    The first version backed off 45s, then 90, then 135 inside each symbol. During a
+    lockout that spends eleven minutes per symbol discovering the same fact, so a run
+    that began at a bad moment made no progress for half an hour while looking alive.
+    A rate limit is a property of the host, not of the symbol: one process-wide cooldown
+    is both faster to recover from and honest about what is being waited on.
+    """
+    for attempt in range(tries):
+        wait = _cooldown["until"] - time.time()
+        if wait > 0:
+            time.sleep(wait)
+        try:
+            req = urllib.request.Request(url, headers={**BASE_HEADERS, **(headers or {})})
+            with urllib.request.urlopen(req, timeout=40) as r:
+                return json.load(r)
+        except urllib.error.HTTPError as e:
+            if e.code in (429, 502, 503):
+                # Tiingo's free cap is 50 requests per *hour*, so a 429 there means the
+                # window is spent and nothing shorter than the hour rolling over will
+                # help. A 30-second retry just burns symbols marking them failed.
+                _cooldown["until"] = time.time() + (600 if "tiingo" in url else 30) * (attempt + 1)
+                continue
+            return None
+        except Exception:
+            time.sleep(2 + attempt * 2)
+    return None
+
+
+def _write(sym: str, rows: dict) -> bool:
+    if len(rows.get("close") or []) < MIN_BARS:
+        return False
+    os.makedirs(HISTORY, exist_ok=True)
+    with open(os.path.join(HISTORY, f"{sym}.json"), "w") as fh:
+        json.dump(rows, fh, separators=(",", ":"))
+    return True
+
+
+def from_yahoo(sym: str, years: int) -> dict | None:
+    """Yahoo, with OHLC rescaled onto the adjusted close.
+
+    ``range=max`` silently switches to a monthly interval — 168 bars rather than 10,000 —
+    so the range is always an explicit number of years.
+    """
+    for variant in (sym.replace(".", "-"),
+                    *( [f"{sym[:-1]}-{sym[-1]}"] if len(sym) > 2 and sym[-1] in "ABCK"
+                       and "." not in sym and "-" not in sym else [] )):
+        payload = _get(YAHOO.format(sym=variant, r=f"{years}y"))
+        res = ((payload or {}).get("chart") or {}).get("result") or []
+        if not res:
+            continue
+        node = res[0]
+        q = ((node.get("indicators") or {}).get("quote") or [{}])[0]
+        adj = ((node.get("indicators") or {}).get("adjclose") or [{}])[0].get("adjclose") or []
+        ts = node.get("timestamp") or []
+        closes = q.get("close") or []
+        out = {"symbol": sym, "dates": [], "open": [], "high": [], "low": [],
+               "close": [], "volume": [], "source": "yahoo"}
+        for i, c in enumerate(closes):
+            if c is None or i >= len(ts) or not c:
+                continue
+            a = adj[i] if i < len(adj) and adj[i] is not None else c
+            k = a / c                       # cumulative split+dividend factor for this bar
+            o = (q.get("open") or [None] * len(closes))[i]
+            h = (q.get("high") or [None] * len(closes))[i]
+            l = (q.get("low") or [None] * len(closes))[i]
+            v = (q.get("volume") or [None] * len(closes))[i]
+            out["dates"].append(dt.datetime.utcfromtimestamp(ts[i]).date().isoformat())
+            out["close"].append(round(float(a), 6))
+            out["open"].append(round(float(o) * k if o is not None else a, 6))
+            out["high"].append(round(float(h) * k if h is not None else a, 6))
+            out["low"].append(round(float(l) * k if l is not None else a, 6))
+            out["volume"].append(float(v) if v is not None else 0.0)
+        if len(out["close"]) >= MIN_BARS:
+            return out
+    return None
+
+
+def from_tiingo(sym: str, years: int, key: str) -> dict | None:
+    start = (dt.date.today() - dt.timedelta(days=365 * years + 10)).isoformat()
+    data = _get(TIINGO.format(sym=sym.replace(".", "-"), start=start),
+                headers={"Authorization": f"Token {key}",
+                         "Content-Type": "application/json"})
+    if not isinstance(data, list) or not data:
+        return None
+    out = {"symbol": sym, "dates": [], "open": [], "high": [], "low": [],
+           "close": [], "volume": [], "source": "tiingo"}
+    for row in data:
+        # Tiingo publishes adjusted columns directly — no rescaling to do.
+        out["dates"].append((row.get("date") or "")[:10])
+        out["close"].append(float(row.get("adjClose") or row.get("close") or 0))
+        out["open"].append(float(row.get("adjOpen") or row.get("open") or 0))
+        out["high"].append(float(row.get("adjHigh") or row.get("high") or 0))
+        out["low"].append(float(row.get("adjLow") or row.get("low") or 0))
+        out["volume"].append(float(row.get("adjVolume") or row.get("volume") or 0))
+    return out
+
+
+def from_fmp(sym: str, years: int, key: str) -> dict | None:
+    start = (dt.date.today() - dt.timedelta(days=365 * years + 10)).isoformat()
+    data = _get(FMP.format(sym=sym, start=start, key=key))
+    hist = (data or {}).get("historical") or []
+    if not hist:
+        return None
+    hist = list(reversed(hist))            # FMP returns newest-first
+    out = {"symbol": sym, "dates": [], "open": [], "high": [], "low": [],
+           "close": [], "volume": [], "source": "fmp"}
+    for row in hist:
+        c, ac = row.get("close"), row.get("adjClose")
+        if c is None:
+            continue
+        k = (ac / c) if (ac and c) else 1.0
+        out["dates"].append(row.get("date", "")[:10])
+        out["close"].append(float(ac if ac else c))
+        out["open"].append(float(row.get("open", c)) * k)
+        out["high"].append(float(row.get("high", c)) * k)
+        out["low"].append(float(row.get("low", c)) * k)
+        out["volume"].append(float(row.get("volume") or 0))
+    return out
+
+
+def from_parquet(path: str) -> int:
+    """Ingest a local dump — the answer when this machine's IP is blocked and yours isn't.
+
+    Accepts either a long frame (columns: date, symbol, open/high/low/close/volume) or a
+    yfinance ``download(group_by='ticker')`` wide frame. Prices must already be adjusted.
+    """
+    import pandas as pd
+    df = pd.read_parquet(path) if path.endswith(".parquet") else pd.read_csv(path)
+    if isinstance(df.columns, pd.MultiIndex):
+        df = df.stack(level=0).rename_axis(["date", "symbol"]).reset_index()
+    df.columns = [str(c).lower().replace(" ", "_") for c in df.columns]
+    if "adj_close" in df.columns and "close" in df.columns:
+        for col in ("open", "high", "low"):
+            if col in df.columns:
+                df[col] = df[col] * (df["adj_close"] / df["close"])
+        df["close"] = df["adj_close"]
+    written = 0
+    for sym, g in df.groupby("symbol"):
+        g = g.sort_values("date")
+        rows = {"symbol": str(sym), "source": "local",
+                "dates": [str(d)[:10] for d in g["date"]],
+                "close": [float(x) for x in g["close"]],
+                "open": [float(x) for x in g.get("open", g["close"])],
+                "high": [float(x) for x in g.get("high", g["close"])],
+                "low": [float(x) for x in g.get("low", g["close"])],
+                "volume": [float(x) for x in g.get("volume", [0] * len(g))]}
+        written += _write(str(sym), rows)
+    return written
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    ap.add_argument("--source", choices=("yahoo", "tiingo", "fmp", "parquet"),
+                    default="yahoo")
+    ap.add_argument("--years", type=int, default=10)
+    ap.add_argument("--key", default=os.environ.get("PRICE_API_KEY", ""))
+    ap.add_argument("--path", default="", help="parquet/csv for --source parquet")
+    ap.add_argument("--limit", type=int, default=None)
+    ap.add_argument("--symbols", default="",
+                    help="comma-separated symbols, or a path to a JSON list. Spend the "
+                         "rate limit on the names the study needs before the tail of "
+                         "the universe.")
+    ap.add_argument("--pace", type=float, default=1.3,
+                    help="seconds between requests. Yahoo 429s aggressively from cloud "
+                         "IPs and the lockout lasts tens of minutes, so going faster "
+                         "than this usually finishes slower.")
+    ap.add_argument("--refresh", action="store_true",
+                    help="refetch symbols already on disk (default skips them, so an "
+                         "interrupted run resumes where it stopped)")
+    args = ap.parse_args()
+
+    if args.source == "parquet":
+        if not args.path:
+            sys.exit("--source parquet needs --path")
+        print(f"wrote {from_parquet(args.path)} symbols into {HISTORY}")
+        return 0
+    if args.source in ("tiingo", "fmp") and not args.key:
+        sys.exit(f"--source {args.source} needs --key or PRICE_API_KEY")
+
+    if args.symbols:
+        if os.path.exists(args.symbols):
+            with open(args.symbols) as fh:
+                syms = json.load(fh)
+        else:
+            syms = [s.strip().upper() for s in args.symbols.split(",") if s.strip()]
+    else:
+        members, _ = uni.load()
+        syms = [m.symbol for m in members]
+    if args.limit:
+        syms = syms[:args.limit]
+    os.makedirs(HISTORY, exist_ok=True)
+
+    ok = skipped = failed = 0
+    started = time.time()
+    for i, sym in enumerate(syms, 1):
+        path = os.path.join(HISTORY, f"{sym}.json")
+        if os.path.exists(path) and not args.refresh:
+            skipped += 1
+            continue
+        if args.source == "yahoo":
+            rows = from_yahoo(sym, args.years)
+        elif args.source == "tiingo":
+            rows = from_tiingo(sym, args.years, args.key)
+        else:
+            rows = from_fmp(sym, args.years, args.key)
+        if rows and _write(sym, rows):
+            ok += 1
+        else:
+            failed += 1
+        # One line per symbol. Reporting only every 25th made a run that stalled on its
+        # first request indistinguishable from one that was working, because the 25th
+        # symbol is never reached during a lockout — which is exactly how a stalled run
+        # went unnoticed for half an hour.
+        print(f"  [{i}/{len(syms)}] {sym}: "
+              f"{len(rows['close']) if rows else 0} bars"
+              f"{'' if rows else '  FAILED'}", flush=True)
+        if i % 25 == 0:
+            rate = (time.time() - started) / max(1, ok + failed)
+            left = (len(syms) - i) * rate / 60
+            print(f"{i}/{len(syms)}  ok={ok} failed={failed} skipped={skipped}  "
+                  f"~{left:.0f} min left", flush=True)
+        # Jittered: a metronome is easier to fingerprint than a person.
+        time.sleep(args.pace * (0.75 + random.random() * 0.5))
+
+    print(f"DONE ok={ok} failed={failed} skipped={skipped} -> {HISTORY}")
+    return 0 if ok or skipped else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

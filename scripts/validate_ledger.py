@@ -311,6 +311,39 @@ def check_performance(ledger_dir: str) -> list[str]:
     return problems
 
 
+def check_swing(payload: dict) -> list[str]:
+    """The swing board must not publish a trade whose own arithmetic rejects it.
+
+    Reward-to-risk is the gate the whole layer turns on, so a candidate below the floor is
+    not a marginal call — it is the layer having stopped working. The other two checks
+    catch a target that sits at or below the entry (a "target" already behind the price,
+    which is what anchoring a retracement to the wrong low produces) and a stop above it.
+    Each is a silent, plausible-looking number rather than a crash, which is the class of
+    defect this validator exists for.
+    """
+    sw = payload.get("swing")
+    if not isinstance(sw, dict):
+        return []
+    problems: list[str] = []
+    floor = 1.5
+    for c in sw.get("candidates") or []:
+        sym = c.get("symbol", "?")
+        rr = c.get("reward_risk")
+        if rr is None:
+            problems.append(f"swing candidate {sym} published with no reward:risk")
+        elif rr < floor:
+            problems.append(f"swing candidate {sym} published at reward:risk {rr:.2f}, "
+                            f"below the {floor} floor the layer gates on")
+        if (c.get("upside_1") or 0) <= 0:
+            problems.append(f"swing candidate {sym} has target 1 at or below the entry")
+    tiers = sw.get("tiers") or {}
+    named = sum(v for k, v in tiers.items() if k in {"PRIME", "SETUP"})
+    if named and named != len(sw.get("candidates") or []):
+        problems.append(f"swing tiers count {named} actionable names but "
+                        f"{len(sw.get('candidates') or [])} were published")
+    return problems
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -336,6 +369,7 @@ def main() -> int:
                 problems += check_regression(payload, json.load(fh))
         except Exception as exc:
             print(f"note: could not compare against {args.previous}: {exc}")
+    problems += check_swing(payload)
     ledger_dir = os.path.dirname(os.path.abspath(args.path))
     if not args.skip_snapshots:
         problems += check_snapshots(ledger_dir)

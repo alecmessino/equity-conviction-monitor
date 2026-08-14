@@ -22,7 +22,7 @@ from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from equity_monitor import (churn, edge, features, health, model, monitor, performance,
-                            snapshots, universe as uni, watchlist)
+                            snapshots, swing, universe as uni, watchlist)
 from equity_monitor.sources import edgar, macro, prices
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -66,6 +66,11 @@ _ROUND = {
     **{k: 6 for k in ("p_roic", "p_fcf_yield", "p_gross_margin", "p_leverage",
                       "p_earnings_stability", "p_rs", "p_trend", "p_liquidity",
                       "p_lowvol", "p_value")},
+    # swing layer
+    "rsi14": 2, "sd50": 4, "z50": 4, "stretch_atr": 4, "rel_drawdown_52w": 6,
+    "leg_high": 4, "leg_low": 4, "leg_depth": 6, "target_1": 4, "target_2": 4,
+    "upside_1": 6, "upside_2": 6, "rebound_progress": 6, "stop": 4, "stop_pct": 6,
+    "reward_risk": 3, "quality_pctile": 4,
 }
 
 
@@ -160,6 +165,9 @@ def build(limit: int | None = None, skip_macro: bool = False,
 
     rows = features.build(members, bars, fundamentals=facts)
     model.score_rows(rows)
+    # The swing layer reads the scored board (it gates on the quality rank) and the same
+    # bars the features came from, so it runs after scoring and before rounding.
+    swing.attach(rows, bars, benchmark=uni.BENCHMARK)
     scored = [r for r in rows if r.get("conviction") is not None]
     scored.sort(key=lambda r: r["conviction"], reverse=True)
     assign_weights(scored)
@@ -168,6 +176,10 @@ def build(limit: int | None = None, skip_macro: bool = False,
 
     cov = features.coverage(rows, COVERAGE_FIELDS)
     print("coverage: " + "  ".join(f"{k}={v:.0%}" for k, v in cov.items()))
+    sw = swing.summary(scored)
+    print("swing: " + "  ".join(f"{k}={v}" for k, v in sw["tiers"].items())
+          + "  | blocked by: "
+          + ", ".join(f"{k} {v}" for k, v in list(sw["blocks"].items())[:4]))
     print(f"conviction: n={len(scored)} dispersion={model.dispersion(scored):.1f} "
           f"range={min((r['conviction'] for r in scored), default=0)}–"
           f"{max((r['conviction'] for r in scored), default=0)}")
@@ -252,6 +264,7 @@ def build(limit: int | None = None, skip_macro: bool = False,
         "dispersion": round(model.dispersion(scored), 2),
         "price_failures": failures,
         "turnover": turnover(prev, scored),
+        "swing": swing.summary(scored),
         "all": scored,
         "benchmarks": benchmarks,
         "top": scored[:25],

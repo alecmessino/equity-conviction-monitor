@@ -56,8 +56,10 @@ def test_price_features_are_derived_from_the_series():
     assert f["price"] == pytest.approx(200.0)
     assert f["chg_1d"] == pytest.approx(1 / 199, rel=1e-6)
     assert f["ret_12m"] is not None and f["ret_12m"] > 0
-    assert f["hi_52w"] == pytest.approx(200.0)
-    assert f["drawdown_52w"] == pytest.approx(0.0)
+    assert f["hi_52w"] == pytest.approx(202.0)      # the 200.0 close printed a 202.0 high
+    # Rising series: the last close is the highest close, but the last *high* is 1% above
+    # it, so a monotone series sits one bar's high below its own peak rather than at 0.
+    assert f["drawdown_52w"] == pytest.approx(1.0 - 1.0 / 1.01)
     assert f["ma50"] is not None and f["ma200"] is not None
     assert f["px_vs_ma50"] > 0
     assert f["adv_usd"] > 0
@@ -71,11 +73,20 @@ def test_returns_are_none_when_the_window_is_too_short():
     assert f["ma200"] is None
 
 
-def test_drawdown_measures_from_the_52_week_peak():
+def test_drawdown_measures_from_the_52_week_intraday_peak():
+    """The 52-week band is taken from real highs and lows, not from closes.
+
+    ``synthetic_bars`` sets high = close x 1.01, so a 100.0 close prints a 101.0 high and
+    the drawdown is measured from there. This is not a cosmetic choice: the swing layer
+    anchors its retracement leg to ``bars.high`` (``swing.selloff_leg``), and while this
+    function read closes, ``drawdown_52w`` and ``leg_high`` were measured from different
+    peaks while both fed the same reward-to-risk gate.
+    """
     closes = [50.0] * 10 + [100.0] + [75.0] * 10
     f = prices.features(synthetic_bars(closes))
-    assert f["hi_52w"] == pytest.approx(100.0)
-    assert f["drawdown_52w"] == pytest.approx(0.25)
+    assert f["hi_52w"] == pytest.approx(101.0)          # the 100.0 close printed a 101.0 high
+    assert f["lo_52w"] == pytest.approx(49.5)           # and the 50.0 close a 49.5 low
+    assert f["drawdown_52w"] == pytest.approx(1.0 - 75.0 / 101.0)
 
 
 def test_atr_uses_real_highs_and_lows():
