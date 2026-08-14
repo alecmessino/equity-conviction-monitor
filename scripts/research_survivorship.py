@@ -295,14 +295,23 @@ def main() -> int:
     for cohort, rows in (("survivors", surv), ("delisted [diagnostic]", dele),
                          ("combined", events)):
         print(f"\n  {cohort}")
-        print(f"    {'drawdown':<14}{'weak trend':>16}{'strong trend':>16}{'difference':>14}")
+        print(f"    {'drawdown':<14}{'weak trend':>16}{'strong trend':>16}"
+              f"{'difference':>14}{'95% CI of the difference':>26}{'events':>9}")
         for lo, hi_ in ((0.15, 0.30), (0.30, 0.50), (0.50, 1.01)):
             lq = [r for r in rows if lo <= r["dd"] < hi_ and r["q"] < qcut]
             hq = [r for r in rows if lo <= r["dd"] < hi_ and r["q"] >= qcut]
             if len(lq) < 25 or len(hq) < 25:
                 continue
             a, b = st.mean([r["ex"] for r in lq]), st.mean([r["ex"] for r in hq])
-            print(f"    {lo:>5.0%}-{hi_:<8.0%}{a:>+15.2%}{b:>+16.2%}{b-a:>+14.2%}")
+            # The cell difference carries its own CI, resampled over calendar blocks on
+            # the paired quantity. Reading two separate confidence bands and declaring the
+            # gap between them real is the error that produced a "G beats H" finding in
+            # this project which a paired test later showed to be a coin flip.
+            ci = diff_ci(lq, hq)
+            band = f"[{ci[0]:+.2%}, {ci[1]:+.2%}]" if ci else "n/a"
+            star = "" if not ci or ci[0] * ci[1] < 0 else "  *"
+            print(f"    {lo:>5.0%}-{hi_:<8.0%}{a:>+15.2%}{b:>+16.2%}{b-a:>+14.2%}"
+                  f"{band:>26}{len(lq)+len(hq):>9,}{star}")
 
     if endings:
         print(f"\nDELISTED COHORT BY ENDING  [diagnostic — conditioned on the outcome]")
@@ -315,6 +324,41 @@ def main() -> int:
             d_ex = f"{st.mean([r['ex'] for r in deep]):+.2%}" if len(deep) >= 25 else "n/a"
             print(f"    {kind:<12}{len(rows):>8}{st.mean([r['ex'] for r in rows]):>+10.2%}{d_ex:>18}")
     return 0
+
+
+def diff_ci(lq, hq, block_days=36, draws=2000, seed=7):
+    """CI on mean(hq) - mean(lq), resampling whole calendar blocks jointly.
+
+    Both arms come from the *same* resampled block, so a period that was good for
+    everything cannot inflate one arm alone — the quantity being bootstrapped is the gap,
+    not two independent means. Blocks are calendar buckets rather than slices of the event
+    list: chunking by list position once collapsed 346 event dates into 13 apparent blocks
+    and produced bands far too tight to believe.
+    """
+    by = {}
+    for r in lq:
+        b = dt.date.fromisoformat(r["date"]).toordinal() // block_days
+        by.setdefault(b, ([], []))[0].append(r["ex"])
+    for r in hq:
+        b = dt.date.fromisoformat(r["date"]).toordinal() // block_days
+        by.setdefault(b, ([], []))[1].append(r["ex"])
+    blocks = [v for _, v in sorted(by.items())]
+    if len(blocks) < 15:
+        return None
+    rng = random.Random(seed)
+    out = []
+    for _ in range(draws):
+        lo_v, hi_v = [], []
+        for _ in blocks:
+            a, b = rng.choice(blocks)
+            lo_v.extend(a)
+            hi_v.extend(b)
+        if lo_v and hi_v:
+            out.append(sum(hi_v) / len(hi_v) - sum(lo_v) / len(lo_v))
+    if len(out) < draws // 2:
+        return None
+    out.sort()
+    return out[int(0.025 * len(out))], out[int(0.975 * len(out))]
 
 
 def block_ci(rows, key="ex", block_days=36, draws=3000, seed=7):
