@@ -71,3 +71,20 @@ def test_a_missing_ledger_file_is_not_swallowed_without_trace():
     # renderAlpha's empty state must key off the payload's own fields rather than
     # treating "no payload at all" as "too few days".
     assert re.search(r"renderAlpha\s*\(\s*\)\s*\{", html)
+
+
+# ---------------------------------------------------------------------------
+# name collisions in a single-file terminal
+# ---------------------------------------------------------------------------
+def test_no_top_level_function_is_defined_twice():
+    """The whole terminal is one script, so a duplicated name silently overrides the
+    earlier definition and the caller gets a different function with the same signature
+    shape. renderSizing() called sizeBook() and reached a pre-existing
+    sizeBook(rows,{min,max,rule}) defined 350 lines later — it returned an object with
+    no `rows`, and the panel rendered empty with a null-property error buried in a
+    handler."""
+    import collections
+    script = re.search(r"<script>(.*?)</script>", TERMINAL.read_text(encoding="utf-8"), re.S).group(1)
+    names = re.findall(r"^function\s+([A-Za-z_$][\w$]*)\s*\(", script, re.M)
+    dupes = {n: c for n, c in collections.Counter(names).items() if c > 1}
+    assert not dupes, f"defined more than once: {dupes}"
