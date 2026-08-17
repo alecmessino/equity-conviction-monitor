@@ -1407,6 +1407,7 @@ table.mig th.l,table.mig td.l,
 
   <!-- ================= EARNINGS CALENDAR ================= -->
   <div class="view" id="view-earnings" hidden>
+    <div class="banner" id="ern-stale" hidden></div>
     <div class="row strip" id="ern-kpis"></div>
     <div class="card">
       <div class="card-head" style="margin-bottom:8px">
@@ -5147,6 +5148,24 @@ function renderEarnings(){
     return;
   }
   const rows=ernRows();
+  // A build that failed leaves the previous calendar on disk, and plausible dates are
+  // indistinguishable from current ones — which is exactly how this project's original
+  // board of zeros survived for weeks. The nightly stamps the payload when it could not
+  // refresh; that stamp is the one thing the reader has to see before the dates.
+  const stale=$('#ern-stale');
+  if(stale){
+    if(cal.stale){
+      stale.hidden=false;
+      stale.innerHTML=`<b>This calendar did not refresh.</b> It was built
+        ${esc(cal.built_as_of||cal.as_of||'—')} and the run at
+        ${esc((cal.stale_since||'').replace('T',' ').replace('Z',' UTC'))} could not
+        rebuild it, so every date below is as of the earlier board and the confirmed
+        rows may already have been superseded.
+        <code>${esc(cal.stale_reason||'no reason recorded')}</code>`;
+    } else {
+      stale.hidden=true;
+    }
+  }
   $('#ern-kpis').innerHTML=
      tile('Confirmed', cal.confirmed, `filed in the last ${cal.horizon_days?6:6} days`)
    + tile('Estimated', cal.projected, `projected inside ${cal.horizon_days}d`)

@@ -225,15 +225,36 @@ def build(limit: int | None = None, skip_macro: bool = False,
     # request. It is written inside its own try because a calendar is a convenience and
     # a failed one must not cost the night its snapshot or its board.
     if not skip_earnings:
+        cal_path = os.path.join(LEDGER, "earnings.json")
         try:
-            cal = earnings.build(scored, on_progress=progress)
-            earnings.write(os.path.join(LEDGER, "earnings.json"), cal)
+            # Its own printer. `progress` above is the price-fetch callback — a
+            # different signature *and* different semantics, since it appends to the
+            # price failure list. Passing it here raised a TypeError that the except
+            # below swallowed, so the calendar quietly kept the previous run's file
+            # while everything else refreshed and the build reported success. That is
+            # the exact failure shape this project was rebuilt to stop having.
+            def earnings_progress(msg: str, i: int, n: int) -> None:
+                print(f"  earnings {min(i + 1, n)}/{n} · {msg}")
+
+            cal = earnings.build(scored, on_progress=earnings_progress)
+            earnings.write(cal_path, cal)
             print(f"earnings: {cal['confirmed']} confirmed, {cal['projected']} projected "
                   f"({cal['in_horizon']} inside {cal['horizon_days']}d, "
                   f"{cal['in_book']} held) · median lag {cal['median_lag_days']}d "
                   f"±{cal['band_days']} over {cal['lag_observations']} observations")
         except Exception as exc:
-            print(f"earnings: skipped ({exc})")
+            # A calendar is a convenience and must not cost the night its board, so the
+            # failure is caught — but a stale file that still looks current is how the
+            # original all-zero dashboard survived for weeks. The published payload is
+            # stamped so the terminal can say it is stale instead of serving yesterday's
+            # dates as though they were tonight's.
+            print(f"earnings: skipped ({type(exc).__name__}: {exc})")
+            try:
+                earnings.mark_stale(cal_path, reason=f"{type(exc).__name__}: {exc}",
+                                    as_of=_now())
+                print("earnings: previous calendar flagged stale for the terminal")
+            except Exception as inner:
+                print(f"earnings: could not flag the previous calendar ({inner})")
 
     try:
         with open(os.path.join(LEDGER, "trends.json"), "w") as fh:

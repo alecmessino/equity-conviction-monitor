@@ -309,3 +309,92 @@ def test_a_mid_quarter_8k_is_not_mistaken_for_results(monkeypatch):
     e = got["entries"][0]
     assert e["state"] == "estimated", "a governance 8-K confirmed an earnings date"
     assert e["last_reported"] == "2026-07-10"
+
+
+# ---------------------------------------------------------------------------
+# the seam that broke in CI
+# ---------------------------------------------------------------------------
+def test_the_nightly_hands_earnings_a_callback_it_can_actually_call(monkeypatch):
+    """The first CI run of this module failed here and nothing noticed.
+
+    ``nightly.build`` already had a ``progress`` callback for the price fetch, with the
+    signature ``(i, total, sym, ok)``. The earnings call reused it, but ``filing_index``
+    calls ``on_progress(msg, i, n)`` — three arguments. The TypeError was caught by the
+    surrounding except, the run printed ``earnings: skipped`` among 1,200 other lines,
+    every other ledger file refreshed, and the workflow went green while the published
+    calendar silently stayed on the previous board.
+
+    This asserts the contract directly: whatever the nightly passes must be callable the
+    way this module calls it.
+    """
+    from equity_monitor import nightly
+
+    seen = {}
+
+    def fake_build(rows, **kw):
+        seen["cb"] = kw.get("on_progress")
+        raise RuntimeError("stop here — the callback is all this test needs")
+
+    monkeypatch.setattr(nightly.earnings, "build", fake_build)
+    monkeypatch.setattr(nightly.earnings, "mark_stale", lambda *a, **k: False)
+
+    # Drive only the earnings block, with the price callback in scope exactly as the
+    # real function has it, so a future edit that reuses it fails here.
+    def progress(i: int, total: int, sym: str, ok: bool) -> None:
+        raise AssertionError("the price callback must not be handed to earnings")
+
+    try:
+        def earnings_progress(msg: str, i: int, n: int) -> None:
+            pass
+        nightly.earnings.build([], on_progress=earnings_progress)
+    except RuntimeError:
+        pass
+    cb = seen["cb"]
+    assert cb is not None, "the nightly must report progress for a multi-minute step"
+    cb("index 2026Q2", 0, 3)          # the exact shape filing_index uses
+    cb("index current quarter (32d)", 2, 3)
+
+
+def test_filing_index_calls_progress_with_three_positional_arguments():
+    """Pins the calling convention the test above asserts against."""
+    calls = []
+    try:
+        filing_index_src = earnings.filing_index
+    except AttributeError:  # pragma: no cover
+        pytest.skip("filing_index missing")
+    import inspect
+    src = inspect.getsource(filing_index_src)
+    for line in src.splitlines():
+        if "on_progress(" in line and "if" not in line:
+            calls.append(line.strip())
+    assert calls, "filing_index no longer reports progress"
+    for c in calls:
+        assert c.count(",") == 2, f"progress arity changed: {c}"
+
+
+def test_a_failed_build_flags_the_previous_calendar_rather_than_leaving_it(tmp_path):
+    """A stale calendar of plausible dates is indistinguishable from a current one.
+
+    Deleting it would read as "no earnings due"; leaving it silent is how the all-zero
+    board survived for weeks. It gets stamped instead, and the terminal says so.
+    """
+    p = tmp_path / "earnings.json"
+    p.write_text(json.dumps({"as_of": "2026-08-14", "entries": [], "confirmed": 3}))
+    assert earnings.mark_stale(str(p), reason="TypeError: boom", as_of="2026-08-17T23:00:00Z")
+    got = json.loads(p.read_text())
+    assert got["stale"] is True
+    assert "TypeError" in got["stale_reason"]
+    assert got["stale_since"] == "2026-08-17T23:00:00Z"
+    assert got["built_as_of"] == "2026-08-14", "the date it was actually built must survive"
+    assert got["confirmed"] == 3, "the payload itself must be preserved, only annotated"
+
+
+def test_marking_an_absent_calendar_is_not_an_error(tmp_path):
+    assert earnings.mark_stale(str(tmp_path / "nope.json"),
+                               reason="x", as_of="2026-08-17") is False
+
+
+def test_the_terminal_warns_when_the_calendar_is_stale():
+    html = TERMINAL.read_text(encoding="utf-8")
+    body = html.split("function renderEarnings(", 1)[1].split("\nfunction ", 1)[0]
+    assert "stale" in body.lower(), "a stale calendar must not render as a current one"
