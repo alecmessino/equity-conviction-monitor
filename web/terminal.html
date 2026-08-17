@@ -89,6 +89,13 @@ nav{
   border-bottom:1px solid var(--border);position:sticky;top:53px;z-index:39;
   overflow-x:auto;
 }
+.hm-row{display:grid;grid-template-columns:104px 1fr 92px;gap:8px;align-items:center;margin-bottom:3px}
+.hm-cells{display:flex;gap:2px}
+.hm-c{flex:1;height:13px;border-radius:2px;min-width:5px}
+.hm-c.gap{background:repeating-linear-gradient(45deg,var(--rule),var(--rule) 2px,transparent 2px,transparent 4px)}
+.hm-sym{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sz-row{display:grid;grid-template-columns:88px 1fr 96px 128px;gap:10px;align-items:center;
+  padding:3px 0;border-bottom:1px solid var(--rule);font-size:12px}
 .health-ribbon{display:flex;gap:8px;flex-wrap:wrap;align-items:center;
   padding:6px 20px;background:var(--bg-2,rgba(0,0,0,.03));border-left:2px solid var(--s1);
   border-bottom:1px solid var(--rule)}
@@ -828,6 +835,31 @@ table.mig th.l,table.mig td.l,
   <div class="view" id="view-portfolio" hidden>
     <div class="row strip" id="pf-kpis"></div>
 
+    <div class="card" id="sizing-card">
+      <div class="card-head">
+        <h2>Position sizing — liquidity-constrained</h2>
+        <span class="tag-new">New</span>
+      </div>
+      <div class="row" style="gap:12px;align-items:center;margin-bottom:10px">
+        <label style="font-size:12px;color:var(--ink-3)">Book $
+          <input type="number" id="sz-notional" min="0" step="10000" value="1000000"
+                 style="width:130px;margin-left:6px"></label>
+        <label style="font-size:12px;color:var(--ink-3)" title="Share of average daily dollar volume you are willing to be. Above a few percent your own order is the price.">Participation %
+          <input type="number" id="sz-participation" min="0.1" max="25" step="0.5" value="2"
+                 style="width:70px;margin-left:6px"></label>
+        <span id="sz-note" class="card-note" style="margin:0"></span>
+      </div>
+      <div id="sizing"></div>
+    </div>
+
+    <div class="card" id="persist-card">
+      <div class="card-head">
+        <h2>Conviction persistence — who holds the score, who spikes</h2>
+        <span class="tag-new" id="persist-tag">New</span>
+      </div>
+      <div id="persist"></div>
+    </div>
+
     <div class="card" id="alpha-card">
       <div class="card-head">
         <h2>Paper return — published book vs. <span id="alpha-bench">SPY</span></h2>
@@ -1284,7 +1316,7 @@ async function boot(){
   renderHeader(); renderMacro(); renderKPIs(); renderMap(); renderSale(); renderDist();
   renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
   buildSectorFilter(); renderGrid(); renderSectors(); renderPortfolio(); renderData();
-  renderAlpha(); renderEdge(); renderHealth();
+  renderAlpha(); renderEdge(); renderHealth(); renderSizing(); renderPersistence();
   renderWatchlist(); renderMonitor();
 }
 
@@ -1797,6 +1829,15 @@ $$('#grid thead th').forEach(th=>{
     S.flipSet=null; renderGrid();
   });
 });
+['#sz-notional','#sz-participation'].forEach(sel=>{
+  const n=$(sel); if(n) n.addEventListener('input',()=>{
+    try{ localStorage.setItem('eq'+sel, n.value); }catch(e){}
+    renderSizing();
+  });
+});
+try{ ['#sz-notional','#sz-participation'].forEach(sel=>{
+  const v=localStorage.getItem('eq'+sel), n=$(sel); if(v!=null&&n) n.value=v; }); }catch(e){}
+
 // Escape clears the pill selection, matching the crypto terminal.
 document.addEventListener('keydown',e=>{
   if(e.key==='Escape' && S.flipSet){ S.flipSet=null; renderGrid(); }
@@ -2599,6 +2640,92 @@ document.addEventListener('click',e=>{
   $$('.view').forEach(v=>{v.hidden = v.id!=='view-screener';});
   renderGrid();
 });
+
+/* ---------- position sizing ----------
+   Not an optimal allocation. Optimal sizing needs an expected return, and the edge
+   panel measures the information coefficient with an interval spanning zero — there is
+   nothing to optimise against yet, so a Kelly-style number would be an arbitrary
+   constant wearing a formula. Conviction sets the shape; ADV sets the ceiling. Both
+   hold whether or not the score predicts anything.
+
+   Refused size stays unallocated rather than being pushed into the next name, which
+   would concentrate the book into whatever happened to be liquid and present that as
+   the portfolio the model recommended. */
+const SZ_TOP = 25;
+// Named sizeLines, not sizeBook: a sizeBook(rows,{min,max,rule}) already exists
+// further down this file and, being defined later, silently overrode it.
+function sizeLines(rows, notional, participation){
+  const held=rows.filter(r=>(r.weight||0)>0)
+                 .sort((a,b)=>(b.conviction||0)-(a.conviction||0)).slice(0,SZ_TOP);
+  const tw=held.reduce((s,r)=>s+(r.weight||0),0)||1;
+  const out=held.map(r=>{
+    const target=notional*(r.weight||0)/tw;
+    const adv=r.adv_usd||0;
+    const cap=adv*participation;
+    const sized=adv>0?Math.min(target,cap):0;
+    return {sym:r.symbol, conv:r.conviction, target, adv, cap, sized,
+            binding: adv<=0?'no ADV data' : sized<target-0.01?'ADV cap':'conviction',
+            exitDays: adv>0&&sized>0 ? sized/(adv*participation) : null};
+  });
+  const allocated=out.reduce((s,r)=>s+r.sized,0);
+  return {rows:out, allocated, unallocated:Math.max(0,notional-allocated),
+          capped:out.filter(r=>r.binding==='ADV cap').length};
+}
+function renderSizing(){
+  const host=$('#sizing'); if(!host) return;
+  if(!S.rows.length){ host.innerHTML='<div class="pending">Awaiting the ledger.</div>'; return; }
+  const notional=parseFloat($('#sz-notional').value)||0;
+  const part=Math.min(parseFloat($('#sz-participation').value)||2,25)/100;
+  if(!notional){ host.innerHTML='<div class="pending">Enter a book size to see suggested lines.</div>'; return; }
+  const b=sizeLines(S.rows,notional,part);
+  const usd=v=>v>=1e6?'$'+(v/1e6).toFixed(2)+'M':v>=1e3?'$'+(v/1e3).toFixed(0)+'k':'$'+v.toFixed(0);
+  $('#sz-note').textContent=`${b.capped} of ${b.rows.length} lines capped by liquidity`;
+  host.innerHTML=b.rows.map(r=>`<div class="sz-row">
+      <b>${esc(r.sym)}</b>
+      <span style="color:var(--ink-3)">conviction ${r.conv}</span>
+      <span class="num">${r.sized>0?usd(r.sized):'—'}</span>
+      <span style="color:${r.sized<=0?'var(--neg)':r.binding==='ADV cap'?'var(--warn)':'var(--ink-3)'};font-size:11px">
+        ${esc(r.binding)}${r.exitDays!=null?` · ~${r.exitDays.toFixed(1)}d out`:''}</span>
+    </div>`).join('')
+    + `<p class="card-note">Allocated <b>${usd(b.allocated)}</b> · unallocated
+       <b style="color:${b.unallocated>notional*0.2?'var(--warn)':'inherit'}">${usd(b.unallocated)}</b>.
+       Conviction sets the shape, the ADV cap sets the ceiling, and refused size stays in
+       cash rather than being pushed into the next name.
+       <b>Not an optimal allocation</b> — the measured information coefficient is
+       indistinguishable from zero, so there is no expected return to size against.
+       These are bounds on damage, not a bet size.</p>`;
+}
+
+/* ---------- conviction persistence ----------
+   A cell is a session. Absent is hatched, never dark: a name off the board is a
+   different fact from one scoring badly, and colouring them alike invents a reading
+   that was never taken. */
+function renderPersistence(){
+  const host=$('#persist'); if(!host) return;
+  const p=(S.health&&S.health.persistence)||null;
+  const tag=$('#persist-tag');
+  if(!p||!p.rows.length){
+    host.innerHTML='<div class="pending"><b>No recorded sessions yet.</b> Persistence is measured from boards that were recorded and cannot be back-filled.</div>';
+    return;
+  }
+  if(tag) tag.textContent=`${p.window} session${p.window===1?'':'s'}`;
+  const rows=p.rows.slice(0,16).map(r=>{
+    const cells=r.cells.map((c,i)=>{
+      const col = c==null ? null : convColor(c);
+      return `<span class="hm-c${col?'':' gap'}"${col?` style="background:${col}"`:''} title="${esc(p.dates[i])} · ${c==null?'not on the board':c}"></span>`;
+    }).join('');
+    return `<div class="hm-row" title="${esc(r.symbol)}: backed on ${r.nights_above} of ${r.nights} recorded sessions · longest run ${r.best_streak} · mean ${r.mean} · peak ${r.peak}">
+      <span class="hm-sym">${esc(r.symbol)}${r.spike?' <span class="pill-warn">1-off</span>':''}</span>
+      <span class="hm-cells">${cells}</span>
+      <span class="num" style="font-size:11px;color:var(--ink-3);text-align:right">${r.nights_above}/${r.nights} · ${r.best_streak}</span>
+    </div>`;
+  }).join('');
+  host.innerHTML=`<p class="card-note" style="margin-top:0">${esc(p.dates[0])} → ${esc(p.dates[p.dates.length-1])} ·
+      a cell is one session, brighter is higher conviction, hatched means the name was not
+      on the board · right column is sessions at ${p.level}+ / recorded, then longest run</p>
+    ${rows}
+    <p class="card-note">${esc(p.basis)}</p>`;
+}
 
 /* ---------- data quality ---------- */
 function renderData(){
@@ -3593,7 +3720,7 @@ if($('#sandbox')){
 // itself, but a scaled viewBox scales the type with it.
 function redrawCharts(){
   if(!S.ledger) return;
-  renderMap(); renderDist(); renderSectors(); renderData(); renderMonitor(); renderAlpha(); renderEdge(); renderHealth();
+  renderMap(); renderDist(); renderSectors(); renderData(); renderMonitor(); renderAlpha(); renderEdge(); renderHealth(); renderSizing(); renderPersistence();
 }
 $$('nav button').forEach(b=>{
   b.onclick=()=>{
