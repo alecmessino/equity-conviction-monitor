@@ -212,11 +212,33 @@ overview, `E` exports, `T` theme. `Esc` is a hierarchy rather than one action �
 bar, then detail panel, then a pill or `TOP` selection, then the filters, then the cursor —
 because at any moment several things are open and dismissing the wrong one loses work.
 
-A **market & book overview** sits above all eight views: universe returns against the
-benchmark at six windows, breadth (a median says where the middle went, breadth says how
-many names went with it), the universe, the published book and the benchmark rebased to
-100 on an axis stepped from the data, and the fifteen model inputs ranked by how far the
-leading decile sits from the universe median on each.
+A **market & book overview** sits above all eight views — one block, not a row of cards,
+because everything below it is name-level and a desk that opens on a ticker has skipped
+the two questions that decide whether the ticker matters. It carries Morningstar-style
+return boxes where the cell *is* the swatch, tinted by magnitude and capped at 37% alpha
+so the figure stays `--ink` at every step: index and region across 1D/1M/3M/YTD/1Y, the
+book against the benchmark, and the style ETFs as excess in percentage points (excess
+rather than total — these are all US large-cap funds, so their totals agree to a point or
+two and a total-return column would read as five copies of the index). Under it, a
+normalised chart rebased to **0%** at the window start with up to six selectable legs and
+a hover that reads every line at one date, the FRED rates & credit column, and the eleven
+sector SPDRs ordered by the selected horizon. Universe breadth and the model's own factor
+tilt sit with the board on the Screener, since they describe the scored names rather than
+the tape.
+
+Growth is proxied by the Nasdaq-100 and labelled `†`: there is no growth ETF in the
+committed universe, and substituting one that is not there would be the kind of quiet
+invention this rebuild exists to remove. Tracking error and the systematic share of
+variance do not exist upstream either — there is no covariance matrix in the ledger — so
+they are computed in the browser from the published weights against the bundled series
+and say so wherever they appear.
+
+The palette is teal and coral over a warm neutral, light mode primary. Measured on the
+light surface: teal 6.06:1, coral 4.82:1. Teal/coral separates on the blue-yellow axis as
+well as red-green, so it survives protanopia and deuteranopia where the previous blue/red
+pair narrowed sharply — and the whole system moves, not only the diverging poles, because
+leaving the sequential ramp blue would put "high on this factor" and "above the median" in
+the same hue on the same screen.
 
 The ledger is **virtualised** — "Show all" is 1014 rows across 19 columns, and building
 all of them costs ~19,000 nodes on every keystroke in the search box. Only the visible

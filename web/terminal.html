@@ -18,16 +18,17 @@
   --surface:#fcfcfb; --plane:#f4f4f1; --raised:#ffffff;
   --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
   --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
-  --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
-  /* Diverging poles are teal/coral rather than blue/red. The sequential ramp is
-     already blue, so a blue positive pole made "high on this factor" and "above the
-     median" render in the same hue on the same screen; teal separates the diverging
-     scale from the sequential one without reaching for green/red. Measured on
-     --surface: teal 4.62:1, coral 4.03:1 — both used as fills and as text only above
-     the neutral band, where convInk() hands back --ink-2 instead. */
-  --pos-pole:#0e8c80; --neg-pole:#cf5638; --mid:#f0efec;
-  --good:#006300; --bad:#d03b3b; --warn:#fab219;
-  --seq-100:#cde2fb; --seq-250:#86b6ef; --seq-450:#2a78d6; --seq-650:#104281;
+  /* Conviction poles: deep teal <-> muted coral over a warm neutral. Measured on
+     --surface: teal 6.06:1, coral 4.82:1, both clearing AA for the text they carry.
+     Teal/coral separates on the blue-yellow axis as well as red-green, so it survives
+     protanopia and deuteranopia where the previous blue/red pair narrowed sharply.
+     The whole system moves, not only the poles: leaving --s1 and the sequential ramp
+     blue would put "high on this factor" and "above the median" in the same hue on
+     the same screen, which is the confusion the re-base exists to remove. */
+  --s1:#0f6d64; --s2:#b4543f; --s3:#8a7a2e;
+  --pos-pole:#0f6d64; --neg-pole:#b4543f; --mid:#efede7;
+  --good:#1a6b45; --bad:#b4543f; --warn:#b07d10;
+  --seq-100:#d3e5e2; --seq-250:#7fb5ad; --seq-450:#0f6d64; --seq-650:#07403b;
   --shadow:0 1px 2px rgba(11,11,11,.06),0 8px 24px rgba(11,11,11,.08);
   --radius:8px;
 }
@@ -37,10 +38,10 @@
     --surface:#1a1a19; --plane:#0d0d0d; --raised:#212120;
     --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
     --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
-    --s1:#3987e5; --s2:#d95926; --s3:#199e70;
-    --pos-pole:#2bb5a4; --neg-pole:#f0785a; --mid:#383835;
-    --good:#0ca30c; --bad:#d03b3b; --warn:#fab219;
-    --seq-100:#104281; --seq-250:#184f95; --seq-450:#3987e5; --seq-650:#9ec5f4;
+    --s1:#48ada1; --s2:#dd8468; --s3:#c9b45c;
+    --pos-pole:#48ada1; --neg-pole:#dd8468; --mid:#3a3a35;
+    --good:#3fa77a; --bad:#dd8468; --warn:#d9a63a;
+    --seq-100:#0d3b37; --seq-250:#17564f; --seq-450:#48ada1; --seq-650:#a5d8d1;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.5);
   }
 }
@@ -49,10 +50,10 @@
   --surface:#1a1a19; --plane:#0d0d0d; --raised:#212120;
   --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
   --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
-  --s1:#3987e5; --s2:#d95926; --s3:#199e70;
-  --pos-pole:#2bb5a4; --neg-pole:#f0785a; --mid:#383835;
-  --good:#0ca30c; --bad:#d03b3b; --warn:#fab219;
-  --seq-100:#104281; --seq-250:#184f95; --seq-450:#3987e5; --seq-650:#9ec5f4;
+  --s1:#48ada1; --s2:#dd8468; --s3:#c9b45c;
+  --pos-pole:#48ada1; --neg-pole:#dd8468; --mid:#3a3a35;
+  --good:#3fa77a; --bad:#dd8468; --warn:#d9a63a;
+  --seq-100:#0d3b37; --seq-250:#17564f; --seq-450:#48ada1; --seq-650:#a5d8d1;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.5);
 }
 
@@ -78,8 +79,7 @@ button{font:inherit;cursor:pointer}
    header's height — a wrapped chip on a narrow window is enough — either overlapped
    the nav or left a transparent band the page scrolled through. They are one box now,
    and the offsets are gone. */
-.topbar{position:sticky;top:0;z-index:40;background:var(--surface);
-  border-bottom:1px solid var(--border)}
+.topbar{position:sticky;top:0;z-index:40;background:var(--surface)}
 /* Anything scrolled to by id — the skip link, a card a function code jumped to — has to
    clear the sticky topbar, or it lands underneath it and reads as having scrolled to
    the wrong place. The height is measured and written back to --topbar-h, because the
@@ -87,33 +87,33 @@ button{font:inherit;cursor:pointer}
 :root{--topbar-h:140px}
 [id]{scroll-margin-top:calc(var(--topbar-h) + 8px)}
 header{
-  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
   padding:7px 14px;background:var(--surface);border-bottom:1px solid var(--border);
 }
-.brand{font-size:13px;font-weight:600;letter-spacing:-.01em}
-.brand span{color:var(--muted);font-weight:400}
+.brand{font-size:14px;font-weight:600;letter-spacing:-.01em}
+.brand span{color:var(--label);font-weight:400}
 .spacer{margin-left:auto}
 .chip{
-  display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;
+  display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;
   border:1px solid var(--border);background:var(--plane);
   font-size:11px;color:var(--ink-2);white-space:nowrap;
 }
 .chip b{font-weight:600;color:var(--ink)}
 .dot{width:7px;height:7px;border-radius:50%;flex:none}
 .btn{
-  padding:4px 10px;border-radius:var(--radius);border:1px solid var(--border);
+  padding:5px 11px;border-radius:7px;border:1px solid var(--border);
   background:var(--plane);color:var(--ink-2);font-size:12px;
 }
 .btn:hover{color:var(--ink);border-color:var(--axis)}
 .btn[aria-pressed="true"]{background:var(--s1);border-color:var(--s1);color:#fff}
 /* The keyboard is the primary interface here, so the shortcut is printed on the
    control rather than hidden in a help panel nobody opens. */
-kbd{font-family:var(--mono);font-size:9.5px;border:1px solid var(--border);
-  border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--label);
-  background:var(--plane);white-space:nowrap}
+.kbd,kbd{font-family:var(--mono);font-size:10px;padding:1px 5px;border-radius:4px;
+  border:1px solid var(--border);background:var(--plane);color:var(--label);
+  white-space:nowrap}
 
 nav{
-  display:flex;gap:2px;padding:0 14px;background:var(--surface);
+  display:flex;gap:1px;padding:0 14px;background:var(--surface);
   border-bottom:1px solid var(--border);
   overflow-x:auto;
 }
@@ -140,52 +140,70 @@ nav button[aria-selected="true"] .fn{color:var(--s1)}
 .hp.act:hover{border-color:var(--s1);background:var(--bg-2)}
 .hp .dotc{width:6px;height:6px;border-radius:50%}
 nav button{
-  padding:7px 11px;border:0;background:none;color:var(--muted);font-size:12px;
+  padding:6px 11px;border:0;background:none;color:var(--label);font-size:12px;
   border-bottom:2px solid transparent;white-space:nowrap;
 }
 nav button:hover{color:var(--ink-2)}
 nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--s1);font-weight:500}
 
-/* --- context strip: what the board below is currently filtered to ---------
-   The third row of the topbar. A screener showing 38 rows because a pill selection is
-   live looks identical to one showing 38 rows because that is the whole universe, and
-   the difference is the entire meaning of the screen. */
-.ctx{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 14px;
-  background:var(--plane);font-size:11px;color:var(--label);min-height:26px}
-.ctx b{color:var(--ink);font-variant-numeric:tabular-nums}
-.ctx-sep{color:var(--axis)}
-.ctx-clear{border:0;background:none;color:var(--s1);font-size:11px;padding:0}
+/* --- persistent portfolio context ribbon ----------------------------------
+   The third row of the topbar, and the reason it is sticky. These are properties of
+   the book rather than of whichever tab is open, so they have to survive the tab —
+   a screener read without knowing the book is 98% invested with a sector at its cap
+   is a list of names with no consequences attached. */
+.ctx{display:flex;align-items:stretch;gap:0;background:var(--surface);
+  border-bottom:1px solid var(--border);overflow-x:auto}
+.ctx-tag{display:flex;align-items:center;padding:5px 10px 5px 14px;font-size:9px;
+  font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--label);
+  border-right:1px solid var(--border);white-space:nowrap}
+.ctx-c{display:flex;flex-direction:column;justify-content:center;padding:4px 12px;
+  border-right:1px solid var(--border);min-width:0;white-space:nowrap;flex:none}
+.ctx-k{font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--label);
+  font-weight:600}
+.ctx-v{font-family:var(--mono);font-size:13.5px;font-weight:600;letter-spacing:-.02em;
+  line-height:1.2}
+.ctx-s{font-size:9.5px;color:var(--label);font-family:var(--mono)}
+.ctx-bar{height:3px;border-radius:2px;background:var(--grid);overflow:hidden;
+  margin-top:3px;width:74px}
+.ctx-bar i{display:block;height:100%;background:var(--s1)}
+/* The filter state rides on the end of the same ribbon: a screener showing 38 rows
+   because a pill selection is live looks identical to one showing 38 because that is
+   the universe, and the difference is the meaning of the screen. */
+.ctx-filt{display:flex;align-items:center;gap:7px;padding:4px 12px;font-size:10.5px;
+  color:var(--label);white-space:nowrap}
+.ctx-filt b{color:var(--ink);font-family:var(--mono)}
+.ctx-clear{border:0;background:none;color:var(--s1);font-size:10.5px;padding:0}
 .ctx-clear:hover{text-decoration:underline}
 
-main{padding:10px 14px 40px;max-width:1680px;margin:0 auto}
+main{padding:10px 14px 56px;max-width:1980px;margin:0 auto}
 .view[hidden]{display:none}
 
 /* --- cards --- */
 .card{
   background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
-  padding:11px 13px;min-width:0;
+  padding:10px 12px;min-width:0;
 }
 /* Both forms: several cards now put the heading inside .card-head beside a control,
    at which point the direct-child selector stops matching and the heading silently
    falls back to a 16px bold h2 — the one styling rule card titles have. */
 .card>h2,.card-head>h2{
-  font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
-  font-weight:600;margin-bottom:8px;
+  font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--label);
+  font-weight:600;margin-bottom:10px;
 }
-.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .card-head>h2{margin-bottom:0}
-.card-note{color:var(--muted);font-size:11px;margin-top:8px;line-height:1.5}
-.row{display:grid;gap:10px;margin-bottom:10px}
-.strip{grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
+.card-note{color:var(--label);font-size:11px;margin-top:10px;line-height:1.5}
+.row{display:grid;gap:9px;margin-bottom:9px}
+.strip{grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
 /* Cards stretch to the row height rather than sitting at their natural height. With
    align-items:start a short card leaves the page background showing beside a tall one,
    which reads as a panel that failed to render rather than as a panel with slack in it. */
 .split{grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);align-items:stretch}
 @media (max-width:1100px){.split{grid-template-columns:1fr}}
 
-.tile-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.tile-label{font-size:10.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--label)}
 .tile-value{font-size:23px;font-weight:600;letter-spacing:-.02em;margin-top:1px}
-.tile-sub{font-size:11px;color:var(--muted)}
+.tile-sub{font-size:11px;color:var(--label)}
 .tile-row{display:flex;align-items:flex-end;justify-content:space-between;gap:10px}
 .delta{font-size:11px;font-variant-numeric:tabular-nums}
 /* Before a second snapshot exists every Δ is a placeholder dot. A column of 1014
@@ -195,7 +213,7 @@ main{padding:10px 14px 40px;max-width:1680px;margin:0 auto}
 .up{color:var(--good)}.down{color:var(--bad)}
 
 /* --- tables --- */
-.tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:70vh;border-radius:var(--radius)}
+.tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:70vh;border-radius:var(--radius);position:relative}
 /* A scroll box whose height is not a multiple of the row height cuts its last row
    through the middle, and a half-drawn row reads as a broken panel rather than as more
    content below. A sticky pseudo-element stays pinned to the bottom of the scroll port
@@ -245,9 +263,9 @@ select,input[type=search],input[type=number]{
   font:inherit;font-size:12px;padding:4px 8px;border-radius:var(--radius);
   border:1px solid var(--border);background:var(--plane);color:var(--ink);
 }
-input[type=search]{min-width:150px}
-input[type=range]{width:110px;accent-color:var(--s1)}
-.count{color:var(--muted);font-size:11.5px;margin-left:auto}
+input[type=search]{min-width:170px}
+input[type=range]{width:100%;accent-color:var(--s1)}
+.count{color:var(--label);font-size:11.5px;margin-left:auto;font-family:var(--mono)}
 
 /* --- detail panel --- */
 .scrim{
@@ -256,7 +274,7 @@ input[type=range]{width:110px;accent-color:var(--s1)}
 }
 .scrim.open{opacity:1;visibility:visible}
 .panel{
-  position:fixed;top:0;right:0;height:100dvh;width:560px;max-width:96vw;z-index:61;
+  position:fixed;top:0;right:0;height:100dvh;width:760px;max-width:96vw;z-index:61;will-change:transform;
   background:var(--surface);border-left:1px solid var(--border);box-shadow:var(--shadow);
   transform:translateX(102%);transition:transform .2s cubic-bezier(.22,.7,.3,1);
   display:flex;flex-direction:column;
@@ -328,11 +346,11 @@ svg{display:block;max-width:100%;overflow:visible}
 .wf-cols{display:grid;grid-auto-flow:column;gap:3px 32px}
 @media (max-width:900px){.wf-cols{display:flex;flex-direction:column}}
 .wf-row{display:flex;align-items:center;gap:8px;font-size:11.5px}
-.wf-name{flex:none;width:150px;color:var(--ink-2)}
+.wf-name{flex:none;width:158px;color:var(--ink-2)}
 .wf-track{flex:1;height:14px;position:relative;background:var(--plane);border-radius:3px}
 .wf-zero{position:absolute;top:0;bottom:0;width:1px;background:var(--axis)}
 .wf-bar{position:absolute;top:2px;bottom:2px;border-radius:2px}
-.wf-val{flex:none;width:46px;text-align:right;font-variant-numeric:tabular-nums}
+.wf-val{flex:none;width:50px;text-align:right;font-family:var(--mono)}
 .pending{color:var(--muted);font-size:11.5px;line-height:1.6;
   border-left:2px solid var(--axis);padding-left:10px;margin:6px 0}
 /* An empty state inside a table cell contributes its whole sentence as max-content, so
@@ -449,7 +467,7 @@ table.mig th.l,table.mig td.l,
    terminal are untouched. */
 #grid thead th{
   background:var(--raised);
-  font-size:9.5px;letter-spacing:.07em;padding:7px 9px;
+  font-size:9.5px;letter-spacing:.07em;padding:5px 8px;
   border-bottom:1px solid var(--divider);
   z-index:4;                        /* above the sticky body pins (3) */
 }
@@ -533,7 +551,8 @@ table.mig th.l,table.mig td.l,
 .seg button:focus-visible{outline:2px solid var(--s1);outline-offset:1px}
 
 /* --- position sizing sandbox --------------------------------------------- */
-.sbx{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+.sbx{display:grid;gap:16px;grid-template-columns:300px minmax(0,1fr)}
+@media (max-width:1200px){.sbx{grid-template-columns:1fr}}
 .sbx-ctl{display:flex;flex-direction:column;gap:11px}
 .sbx-k{
   display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;
@@ -541,8 +560,8 @@ table.mig th.l,table.mig td.l,
 }
 .sbx-k b{font-family:var(--mono);font-size:12px;color:var(--ink);font-weight:600}
 .sbx-ctl input[type=range]{width:100%}
-.sbx-stats{display:grid;gap:6px;align-content:start;grid-template-columns:repeat(auto-fit,minmax(128px,1fr))}
-.sbx-stat{background:var(--plane);border:0;border-radius:var(--radius);padding:7px 10px}
+.sbx-stats{display:grid;gap:8px;align-content:start;grid-template-columns:repeat(auto-fit,minmax(128px,1fr))}
+.sbx-stat{background:var(--plane);border:1px solid var(--border);border-radius:var(--radius);padding:8px 11px}
 .sbx-stat .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--label);white-space:nowrap}
 .sbx-stat .v{font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-.02em}
 .sbx-stat .s{font-size:10.5px;color:var(--label)}
@@ -565,87 +584,116 @@ table.mig th.l,table.mig td.l,
    DES AAPL goes to a tear sheet from anywhere, in two keystrokes plus a ticker,
    without first finding the row it lives in.
    ========================================================================= */
-#cmdk{position:fixed;inset:0;z-index:90;display:none;background:rgba(0,0,0,.34)}
-#cmdk.open{display:block}
+#cmdk{position:fixed;inset:0;z-index:70;display:flex;align-items:flex-start;
+  justify-content:center;padding:9vh 20px 20px;background:rgba(0,0,0,.45);
+  opacity:0;visibility:hidden;transition:opacity .14s}
+#cmdk.open{opacity:1;visibility:visible}
 .cmdk-box{
-  width:min(680px,calc(100vw - 24px));margin:9vh auto 0;background:var(--raised);
-  border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);
-  overflow:hidden;
+  background:var(--surface);border:1px solid var(--border);border-radius:12px;
+  box-shadow:var(--shadow);width:100%;max-width:660px;overflow:hidden;
+  display:flex;flex-direction:column;max-height:76vh;
 }
-.cmdk-in{
-  display:flex;align-items:center;gap:9px;padding:9px 12px;
-  border-bottom:1px solid var(--border);
-}
-.cmdk-in span{font-family:var(--mono);font-size:11px;color:var(--s1);flex:none}
+.cmdk-in{display:flex;align-items:center;gap:9px;border-bottom:1px solid var(--border);
+  padding-left:16px}
+.cmdk-in>span{font-family:var(--mono);font-size:12px;color:var(--s1);flex:none}
 #cmdk-input{
-  flex:1;border:0;background:none;color:var(--ink);font-family:var(--mono);
-  font-size:15px;letter-spacing:.02em;padding:0;outline:none;text-transform:uppercase;
+  flex:1;border:0;background:none;color:var(--ink);font-size:15px;padding:14px 16px 14px 0;
+  outline:none;font-family:inherit;
 }
-#cmdk-input::placeholder{color:var(--muted);text-transform:none;letter-spacing:0}
-.cmdk-list{max-height:min(52vh,420px);overflow-y:auto}
-.cmdk-row{
-  display:grid;grid-template-columns:74px 1fr auto;gap:10px;align-items:baseline;
-  padding:6px 12px;cursor:pointer;border-bottom:1px solid var(--grid);
-}
-.cmdk-row:last-child{border-bottom:0}
-/* The selection needs to survive a glance across fourteen near-identical rows, and a
-   background tint alone measures about 3% against --raised. A solid accent on the
-   leading edge carries it without tinting the text. */
-.cmdk-row{border-left:3px solid transparent}
-.cmdk-row[aria-selected="true"]{background:var(--hover);border-left-color:var(--s1)}
-.cmdk-code{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--s1)}
-.cmdk-desc{font-size:12px;color:var(--ink-2);white-space:normal;line-height:1.35}
-.cmdk-arg{font-family:var(--mono);font-size:10px;color:var(--label);white-space:nowrap}
-.cmdk-foot{padding:6px 12px;background:var(--plane);font-size:10.5px;color:var(--label);
-  display:flex;gap:12px;flex-wrap:wrap}
+#cmdk-input::placeholder{color:var(--label)}
+.cmdk-list{overflow-y:auto;padding:6px}
+.cmdk-grp{font-size:9px;letter-spacing:.09em;text-transform:uppercase;color:var(--label);
+  padding:8px 10px 4px;font-weight:600}
+.cmdk-row{display:flex;align-items:center;gap:10px;padding:7px 10px;border-radius:7px;
+  cursor:pointer;font-size:12.5px}
+/* The selection needs to survive a glance down a list of near-identical rows. A tint
+   alone measures about 3% against --surface, so it carries an accent as well. */
+.cmdk-row[aria-selected="true"]{background:var(--hover);box-shadow:inset 3px 0 0 var(--s1)}
+.cmdk-code{font-family:var(--mono);font-weight:600;min-width:58px;flex:none;color:var(--s1)}
+.cmdk-desc{color:var(--label);font-size:11px;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap;flex:1;min-width:0}
+.cmdk-arg{font-family:var(--mono);font-size:10px;color:var(--label);white-space:nowrap;flex:none}
+.cmdk-foot{display:flex;flex-wrap:wrap;gap:3px;padding:7px 10px;
+  border-top:1px solid var(--border);background:var(--plane)}
+.cmdk-key{font-family:var(--mono);font-size:9.5px;font-weight:600;letter-spacing:.03em;
+  color:var(--label);border:1px solid var(--border);border-radius:3px;padding:1px 4px;
+  background:var(--surface)}
+.cmdk-key i{font-style:normal;opacity:.62;font-weight:400}
 .cmdk-empty{padding:14px 12px;font-size:12px;color:var(--label)}
 
 /* ===========================================================================
    MARKET & BOOK OVERVIEW — the layer above every view
    ---------------------------------------------------------------------------
+   One block, not a row of cards. Everything below it is name-level, and a desk
+   that opens on a ticker has skipped the two questions that decide whether the
+   ticker matters: what the tape is doing, and what the book already holds.
    Collapsible, because on a 13" screen it is the difference between the ledger
    starting above the fold and not. `M` toggles it; the state persists.
    ========================================================================= */
-.ovw{margin-bottom:10px}
-.ovw-head{
-  display:flex;align-items:center;gap:9px;padding:4px 0 6px;cursor:pointer;
-  font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--label);
-  font-weight:600;user-select:none;background:none;border:0;width:100%;text-align:left;
-}
-.ovw-head .caret{font-size:8px;color:var(--muted);transition:transform .12s}
-.ovw[data-open="false"] .caret{transform:rotate(-90deg)}
-.ovw[data-open="false"] .ovw-body{display:none}
-.ovw-head .sum{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none;
-  font-size:11px;color:var(--label);font-family:var(--mono)}
-/* Three columns, not two. Cards in a row stretch to the tallest of them, and the
-   factor ranking is roughly twice the height of the returns panel — side by side that
-   left half of the overview a card with 400px of nothing under its last bar, which
-   reads as a panel that failed to render rather than one with slack in it. Split three
-   ways the columns come out within a hundred pixels of each other. */
-.ovw-body{display:grid;gap:10px;
-  grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1fr)}
-@media (max-width:1340px){.ovw-body{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
-@media (max-width:860px){.ovw-body{grid-template-columns:1fr}}
+.mkt{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  margin-bottom:9px;overflow:hidden}
+.mkt-head{display:flex;align-items:center;gap:10px;padding:5px 12px;
+  border-bottom:1px solid var(--border);background:var(--raised);flex-wrap:wrap}
+.mkt-tag{font-size:9.5px;text-transform:uppercase;letter-spacing:.1em;color:var(--label);
+  font-weight:600;white-space:nowrap}
+.mkt-narr{font-size:11.5px;color:var(--ink-2);min-width:0;flex:1}
+.mkt-narr b{color:var(--ink);font-weight:600}
+.mkt-body{display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,.72fr) minmax(0,1fr);gap:0}
+@media (max-width:1180px){.mkt-body{grid-template-columns:1fr}}
+.mkt-col{padding:7px 12px 8px;border-right:1px solid var(--border);min-width:0}
+.mkt-col:last-child{border-right:0}
+.mkt-h{font-size:8.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--label);
+  font-weight:600;margin-bottom:5px;display:flex;justify-content:space-between;gap:8px;
+  align-items:baseline}
+.mkt[data-open="false"] .mkt-body,
+.mkt[data-open="false"] .mkt-chartrow,
+.mkt[data-open="false"] .mkt-sec{display:none}
+.mkt-toggle{margin-left:auto}
+.regime{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:5px;
+  font-size:9.5px;font-weight:700;letter-spacing:.08em;border:1px solid currentColor;
+  white-space:nowrap}
 
-/* return boxes: one period per box, universe median against the benchmark */
-.rets{display:grid;gap:4px;grid-template-columns:repeat(3,minmax(0,1fr))}
-.ret-box{background:var(--plane);border-radius:var(--radius);padding:6px 8px;min-width:0}
-.ret-k{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--label)}
-.ret-v{font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:-.02em;
-  line-height:1.25}
-.ret-b{font-family:var(--mono);font-size:10px;color:var(--label);white-space:nowrap}
-/* A 2px cap on the box, not a coloured background: the sign is already on the number,
-   and a tinted panel behind tabular figures costs more contrast than it buys. */
-.ret-box.up{box-shadow:inset 0 2px 0 var(--pos-pole)}
-.ret-box.down{box-shadow:inset 0 2px 0 var(--neg-pole)}
+/* Morningstar-style return box: the cell IS the swatch, tinted by magnitude, with the
+   figure inside it. Tint and sign are redundant encodings of the same fact. */
+.rbox{border-collapse:separate;border-spacing:1.5px;width:100%}
+.rbox th{position:static;background:none;border:0;padding:0 0 3px;font-size:8.5px;
+  letter-spacing:.07em;color:var(--label);text-align:right;cursor:default}
+.rbox th.l{text-align:left}
+.rbox td{padding:0;border:0;text-align:right}
+.rbox td.l{text-align:left;padding-right:6px;white-space:nowrap}
+.rbox .nm{font-family:var(--mono);font-size:11px;font-weight:600}
+.rbox .sub{font-size:9.5px;color:var(--label)}
+.rb{display:block;font-family:var(--mono);font-size:10.5px;line-height:1;padding:3px 5px;
+  border-radius:3px;min-width:48px;text-align:right;white-space:nowrap}
+
+.mkt-chartrow{display:grid;grid-template-columns:minmax(0,1fr) 268px;
+  border-top:1px solid var(--border)}
+@media (max-width:1180px){.mkt-chartrow{grid-template-columns:1fr}}
+.mkt-chart{padding:8px 12px 9px;border-right:1px solid var(--border);min-width:0}
+.mkt-yields{padding:8px 12px 9px;min-width:0}
+.yrow{display:flex;align-items:center;gap:8px;justify-content:space-between;
+  padding:4px 0;border-bottom:1px solid var(--grid)}
+.yv{font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:-.02em;line-height:1.15}
+.pill{padding:3px 8px;border-radius:999px;font-size:10.5px;font-family:var(--mono);
+  border:1px solid var(--border);background:var(--plane);color:var(--label);white-space:nowrap}
+.pill[aria-pressed="true"]{font-weight:700}
+
+/* Borderless sector boxes: the sector strip is a field of readings, and a rule around
+   each of eleven would read as a row of buttons. The tint carries the magnitude. */
+.mkt-sec{padding:6px 12px 7px;border-top:1px solid var(--border);display:flex;gap:3px;
+  flex-wrap:wrap;align-items:center}
+.secbox{border-radius:4px;padding:3px 6px;min-width:82px;border:1px solid transparent;
+  cursor:pointer;text-align:left;font:inherit;background:none}
+.secbox .k{font-size:9px;letter-spacing:.05em;color:var(--label);font-weight:600;white-space:nowrap}
+.secbox .v{font-family:var(--mono);font-size:12px;font-weight:600;line-height:1.2}
 
 /* breadth: advancers/decliners and trend participation */
-.breadth{display:flex;flex-direction:column;gap:6px;margin-top:8px}
-.br-row{display:grid;grid-template-columns:112px 1fr 74px;gap:8px;align-items:center;
-  font-size:11px}
-.br-track{height:9px;border-radius:5px;background:var(--grid);overflow:hidden;display:flex}
+.breadth{display:flex;flex-direction:column;gap:5px;margin-top:6px}
+.br-row{display:grid;grid-template-columns:104px 1fr 62px;gap:8px;align-items:center;
+  font-size:10.5px}
+.br-track{height:8px;border-radius:5px;background:var(--grid);overflow:hidden;display:flex}
 .br-track i{display:block;height:100%}
-.br-val{font-family:var(--mono);font-size:11px;text-align:right;color:var(--ink-2)}
+.br-val{font-family:var(--mono);font-size:10.5px;text-align:right;color:var(--ink-2)}
 
 /* factor ranking: which inputs the top of the board is actually leaning on */
 .frank{display:flex;flex-direction:column;gap:2px}
@@ -658,19 +706,29 @@ table.mig th.l,table.mig td.l,
 .frank-bar{position:absolute;top:2px;bottom:2px;border-radius:2px}
 .frank-v{font-family:var(--mono);font-size:11px;text-align:right}
 
-/* borderless sector boxes: the sector board as a field of tiles */
-.secgrid{display:grid;gap:4px;grid-template-columns:repeat(auto-fit,minmax(148px,1fr))}
-.secbox{
+/* --- data lineage micro-badges ---
+   A number carrying an imputed input and one carrying a filing look identical until
+   something says otherwise, and the whole rebuild exists because absent data once read
+   as a confident zero. */
+.lin{font-family:var(--mono);font-size:8.5px;font-weight:600;letter-spacing:.06em;
+  padding:1px 4px;border-radius:3px;border:1px solid currentColor;white-space:nowrap;cursor:help}
+.lin.obs{color:var(--label)}
+.lin.imp{color:var(--warn);border-style:dashed}
+.lin.low{color:var(--bad)}
+
+/* the Sectors view's own tile grid — a different component at a different density */
+.sec-tiles{display:grid;gap:4px;grid-template-columns:repeat(auto-fit,minmax(148px,1fr))}
+.sec-tile{
   border:0;border-radius:var(--radius);background:var(--plane);padding:7px 9px;
   min-width:0;cursor:pointer;text-align:left;font:inherit;display:block;
   border-left:3px solid transparent;
 }
-.secbox:hover{background:var(--hover)}
-.secbox[aria-pressed="true"]{background:var(--hover);border-left-color:var(--s1)}
-.secbox .k{font-size:10.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;
+.sec-tile:hover{background:var(--hover)}
+.sec-tile[aria-pressed="true"]{background:var(--hover);border-left-color:var(--s1)}
+.sec-tile .k{font-size:10.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;
   text-overflow:ellipsis;display:block}
-.secbox .v{font-family:var(--mono);font-size:17px;font-weight:600;letter-spacing:-.02em}
-.secbox .s{font-size:10px;color:var(--label);font-family:var(--mono)}
+.sec-tile .v{font-family:var(--mono);font-size:17px;font-weight:600;letter-spacing:-.02em}
+.sec-tile .s{font-size:10px;color:var(--label);font-family:var(--mono)}
 
 /* ===========================================================================
    VIRTUALISED LEDGER + ROW CURSOR
@@ -685,23 +743,26 @@ table.mig th.l,table.mig td.l,
 /* One source for the row pitch. The virtualiser reads it back off the custom property
    rather than carrying its own copy — a JS constant and a CSS rule that disagree by a
    pixel put the spacer height out by a row every forty rows, and the table drifts. */
-:root{--row-h:32px}
+/* 36px holds the ticker over the company name at the prototype's type sizes — 12px
+   sym over 10.5px company at 1.2 is 27px of ink plus 8px of padding. Tightening the
+   company line to 9.5px to save four pixels made the ledger's second identity column
+   the smallest text on the page, which is the wrong economy. */
+:root{--row-h:36px}
 #grid tbody tr{height:var(--row-h)}
-#grid tbody td{padding:3px 8px}
-#grid tbody td.conv{font-size:13px}
-#grid .pin-sym{line-height:1.15}
-#grid .pin-sym .sym{font-size:11.5px}
-#grid .co{display:block;font-size:9.5px;line-height:1.15;max-width:150px;color:var(--label)}
+#grid tbody td{padding:4px 8px}
+#grid tbody td.conv{font-size:14px}
+#grid .pin-sym{line-height:1.2}
+#grid .co{display:block;font-size:10.5px;line-height:1.2;max-width:170px;color:var(--label)}
 #grid tbody tr.vspace:hover > td{background:none}
 #grid tbody tr.vspace td{padding:0;border:0;background:none}
 /* The keyboard cursor. A background alone is indistinguishable from :hover, and the
    two are live at the same time whenever the pointer is resting anywhere over the
-   table — so the cursor carries a rule the hover state does not. */
-#grid tbody tr.cursor > td{background:var(--hover);border-bottom-color:var(--s1)}
-#grid tbody tr.cursor .pin{background:var(--hover)}
-#grid tbody tr.cursor .pin-rank{
-  box-shadow:inset 3px 0 0 var(--s1);color:var(--ink);font-weight:600;
-}
+   table — so the cursor carries a tint across the whole row and a rule in the gutter
+   that the hover state does not. The tint is an inset shadow rather than a background
+   so it composites over the banding instead of replacing it. */
+#grid tbody tr.cursor > td{background:var(--hover);
+  box-shadow:inset 0 0 0 9999px color-mix(in srgb, var(--s1) 7%, transparent)}
+#grid tbody tr.cursor .pin{background:var(--hover);box-shadow:inset 2px 0 0 var(--s1)}
 
 /* ===========================================================================
    SCENARIO DRAWER — a shock applied to the board, never to the ledger
@@ -753,10 +814,13 @@ table.mig th.l,table.mig td.l,
   <span class="chip" id="hdr-coverage" title="Share of scored names carrying a real, filing-derived value for each quality input"></span>
   <button class="chip" id="hdr-health" hidden></button>
   <div class="spacer"></div>
-  <button class="btn" id="cmd-open" title="Function codes — DES, SCR, RV, PORT, WL, MON, SHK, TOP, FKQ, CSV">
-    <span style="font-family:var(--mono)">⌘K</span> Command</button>
-  <button class="btn" id="csv" title="Export the scored board as CSV (E)">Export CSV</button>
-  <button class="btn" id="theme" title="Toggle light/dark (T)">Theme</button>
+  <button class="btn" id="cmd-open" style="display:flex;align-items:center;gap:7px"
+    title="Command bar — function codes, tickers, actions">
+    <span style="font-family:var(--mono);letter-spacing:.04em">DES · SCR · RV</span>
+    <span class="kbd">⌘K</span></button>
+  <button class="btn" id="csv" title="Export the scored board as CSV">Export <span class="kbd">E</span></button>
+  <button class="btn" id="theme" title="Toggle light/dark">Theme <span class="kbd">T</span></button>
+  <button class="btn" id="help-open" aria-label="Keyboard shortcuts and function codes">?</button>
 </header>
 
 <nav role="tablist">
@@ -778,49 +842,88 @@ table.mig th.l,table.mig td.l,
 
   <!-- ===== MARKET & BOOK OVERVIEW =====
        Above every view, not inside the screener: the question "what is the tape doing
-       and what is the book made of" is the one asked before any of the eight tabs. -->
-  <section class="ovw" id="ovw" data-open="true">
-    <button class="ovw-head" id="ovw-toggle" aria-expanded="true" aria-controls="ovw-body">
-      <span class="caret" aria-hidden="true">▼</span>
-      <span>Market &amp; book overview</span>
-      <span class="sum" id="ovw-sum"></span>
-    </button>
-    <div class="ovw-body" id="ovw-body">
-      <div class="card">
-        <div class="card-head">
-          <h2>Universe returns &amp; breadth</h2>
-          <span class="count" style="margin:0" id="ovw-bench-note"></span>
-        </div>
-        <div class="rets" id="ovw-rets"></div>
-        <div class="breadth" id="ovw-breadth"></div>
+       and what does the book already hold" is asked before any of the eight tabs. The
+       macro strip lives inside it as the rates & credit column rather than as a
+       separate rail — four numbers about the discount rate belong beside the returns
+       they are discounting, not in a band of their own. -->
+  <section class="mkt" id="mkt" data-open="true">
+    <div class="mkt-head">
+      <span class="mkt-tag">Market &amp; book overview</span>
+      <span class="regime" id="mkt-regime"></span>
+      <span class="mkt-narr" id="mkt-narr"></span>
+      <button class="btn mkt-toggle" id="mkt-toggle" aria-pressed="true"
+              aria-controls="mkt-body" title="Collapse or expand (M)">Collapse</button>
+    </div>
+
+    <div class="mkt-body" id="mkt-body">
+      <div class="mkt-col">
+        <div class="mkt-h"><span>Index &amp; region</span><span>total return, price only</span></div>
+        <div id="mkt-index"></div>
       </div>
-      <div class="card">
-        <div class="card-head">
-          <h2>Normalised — universe, book and benchmark</h2>
-          <div class="seg" id="ovw-span" role="group" aria-label="Window">
-            <button type="button" data-span="21"  aria-pressed="false">1M</button>
-            <button type="button" data-span="63"  aria-pressed="false">3M</button>
-            <button type="button" data-span="0"   aria-pressed="true">Max</button>
-          </div>
-        </div>
-        <div id="ovw-norm"></div>
+      <div class="mkt-col">
+        <div class="mkt-h"><span>Book vs benchmark</span><span id="mkt-book-scope"></span></div>
+        <div id="mkt-book"></div>
       </div>
-      <div class="card">
-        <h2>Factor ranking — what the top decile is leaning on</h2>
-        <div id="ovw-frank"></div>
+      <div class="mkt-col">
+        <div class="mkt-h"><span>Factor regime — style ETF vs <span id="mkt-bench">SPY</span></span>
+          <span>excess, pp</span></div>
+        <div id="mkt-factor"></div>
+        <div class="card-note" style="margin-top:6px" id="mkt-factor-note"></div>
       </div>
     </div>
-  </section>
 
-  <!-- macro regime -->
-  <!-- Global: shared by every view, not part of the screener. Four 90px cards
-       collapsed to one strip, which is ~110px above the fold — on a 13" screen the
-       difference between the factor map being visible on load and not. -->
-  <div class="rail" id="macro"></div>
+    <div class="mkt-chartrow">
+      <div class="mkt-chart">
+        <div class="mkt-h" style="margin-bottom:9px">
+          <span>Normalised total return — rebased to 0% at the window start</span>
+          <span id="mkt-chart-window"></span>
+        </div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px">
+          <div class="seg" id="mkt-windows" role="group" aria-label="Chart window"></div>
+          <div style="display:flex;gap:4px;flex-wrap:wrap" id="mkt-series"></div>
+        </div>
+        <div id="mkt-chart" style="position:relative"></div>
+        <div class="legend" style="margin-top:6px" id="mkt-legend"></div>
+        <div class="card-note" style="margin-top:4px" id="mkt-chart-note"></div>
+      </div>
+      <div class="mkt-yields">
+        <div class="mkt-h"><span>Rates &amp; credit</span><span>FRED</span></div>
+        <div id="mkt-yields"></div>
+        <div class="card-note" style="margin-top:2px" id="mkt-yield-note"></div>
+      </div>
+    </div>
+
+    <div class="mkt-sec">
+      <span class="mkt-tag" style="margin-right:4px">Sectors ·
+        <span id="mkt-sec-label">YTD</span></span>
+      <div id="mkt-sec-boxes" style="display:contents"></div>
+      <div class="seg" id="mkt-sec-horizons" style="margin-left:auto" role="group"
+           aria-label="Sector horizon"></div>
+    </div>
+  </section>
 
   <!-- ================= SCREENER ================= -->
   <div class="view" id="view-screener">
     <div class="row strip" id="kpis"></div>
+
+    <!-- Properties of the scored board rather than of the tape, so they sit with the
+         board rather than in the overview above it. -->
+    <div class="row split">
+      <div class="card">
+        <div class="card-head">
+          <h2>Universe breadth</h2>
+          <span class="count" style="margin:0" id="breadth-note"></span>
+        </div>
+        <div id="breadth"></div>
+        <p class="card-note">A median return says where the middle went; breadth says how
+          many names went with it. The two come apart exactly when it matters — a tape
+          carried by six names has the same median as one that rose on every ticker.</p>
+      </div>
+      <div class="card">
+        <h2>Factor ranking — what the top decile is leaning on</h2>
+        <div id="frank"></div>
+      </div>
+    </div>
 
     <div class="row split">
       <div class="card">
@@ -1033,7 +1136,7 @@ table.mig th.l,table.mig td.l,
         <h2>Sector board</h2>
         <span class="count" style="margin:0">Click a tile to filter the screener to it</span>
       </div>
-      <div class="secgrid" id="secgrid"></div>
+      <div class="sec-tiles" id="sec-tiles"></div>
       <p class="card-note">Median conviction per sector, with the deviation from the
         universe median on the left edge. Borderless: the tile's own surface already
         separates it from the card, and a rule around each of eleven would read as a
@@ -1418,13 +1521,28 @@ table.mig th.l,table.mig td.l,
              aria-label="Function code" aria-autocomplete="list" aria-controls="cmdk-list">
     </div>
     <div class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Matching functions"></div>
+    <!-- The codes and the shortcuts are printed under the input rather than behind a
+         help screen: this is the one moment the reader is already looking for them. -->
     <div class="cmdk-foot">
-      <span><kbd>↑</kbd><kbd>↓</kbd> select</span>
-      <span><kbd>⏎</kbd> run</span>
-      <span><kbd>esc</kbd> close</span>
-      <span><kbd>1</kbd>–<kbd>8</kbd> views · <kbd>J</kbd><kbd>K</kbd> rows ·
-        <kbd>R</kbd> peers · <kbd>S</kbd> scenario · <kbd>M</kbd> overview ·
-        <kbd>E</kbd> export · <kbd>T</kbd> theme</span>
+      <span class="cmdk-key">DES <i>ticker</i></span>
+      <span class="cmdk-key">SCR <i>filter</i></span>
+      <span class="cmdk-key">RV <i>ticker</i></span>
+      <span class="cmdk-key">PORT</span>
+      <span class="cmdk-key">WL</span>
+      <span class="cmdk-key">MON</span>
+      <span class="cmdk-key">SHK <i>pct</i></span>
+      <span class="cmdk-key">TOP <i>n</i></span>
+      <span class="cmdk-key">FKQ <i>factor</i></span>
+      <span class="cmdk-key">CSV</span>
+      <span class="cmdk-key">1–8 <i>views</i></span>
+      <span class="cmdk-key">J K <i>rows</i></span>
+      <span class="cmdk-key">g G <i>ends</i></span>
+      <span class="cmdk-key">R <i>peers</i></span>
+      <span class="cmdk-key">S <i>scenario</i></span>
+      <span class="cmdk-key">M <i>overview</i></span>
+      <span class="cmdk-key">E <i>export</i></span>
+      <span class="cmdk-key">T <i>theme</i></span>
+      <span class="cmdk-key">esc <i>back</i></span>
     </div>
   </div>
 </div>
@@ -1662,6 +1780,7 @@ async function boot(){
   buildSectorFilter(); renderGrid(); renderSectors(); renderPortfolio(); renderData();
   renderAlpha(); renderEdge(); renderHealth(); renderSizing(); renderPersistence();
   renderWatchlist(); renderMonitor(); renderOverview(); renderScenario();
+  renderBreadth(); renderFactorRank();
   // Last: the health ribbon un-hides itself during the pass above, so the topbar is
   // taller now than it was when the stylesheet's default was written.
   measureTopbar();
@@ -1687,30 +1806,12 @@ function renderHeader(){
     +`<b>${(mean*100).toFixed(0)}%</b>&nbsp;fundamentals`;
 }
 
-/* ---------- macro strip ---------- */
+/* ---------- macro ----------
+   The standalone rail is gone: four numbers about the discount rate belong beside the
+   returns they discount, not in a band of their own above them. They render as the
+   rates & credit column of the market overview — see mktYields(). */
 function renderMacro(){
-  const host=$('#macro');
-  if(!S.macro||!Object.keys(S.macro).length){
-    host.innerHTML=`<div class="rail-tag">Macro</div>
-      <div class="rail-note">FRED series unavailable in the last build.</div>`;
-    return;
-  }
-  const entries=Object.entries(S.macro);
-  const asOf=entries.map(([,m])=>m.as_of).filter(Boolean).sort().pop();
-  host.innerHTML='<div class="rail-tag">Macro</div>'
-    + entries.map(([id,m])=>{
-        const up=m.change_1m>=0, dec=id==='VIXCLS'?1:2;
-        return railCell({
-          label:m.label,
-          value:m.value.toFixed(dec)+(m.unit||''),
-          delta:(up?'+':'')+m.change_1m.toFixed(dec)+' 1m',
-          dir:up?'up':'down',
-          spark:sparkline(m.series,74,26,cssVar('--s1'),
-                          {label:m.label, unit:m.unit||'',
-                           fmt:v=>num(v,dec)}),
-        });
-      }).join('')
-    + (asOf?`<div class="rail-note">FRED · as of ${esc(asOf)}</div>`:'');
+  mktYields();
 }
 
 /* ---------- KPIs ---------- */
@@ -2030,37 +2131,79 @@ function filtered(){
   return out;
 }
 
-/* ---------- context strip ----------
-   A screener showing 38 rows because a pill selection is live looks exactly like one
-   showing 38 rows because that is the universe, and the difference is what the screen
-   means. Every narrowing in force is named here with the control that clears it. */
+/* ---------- persistent portfolio context ribbon ----------
+   The third row of the topbar, and the reason it is sticky. These are properties of the
+   book, not of whichever tab is open, so they have to survive the tab: a screener read
+   without knowing the book is 98% invested with a sector already at its ceiling is a
+   list of names with no consequences attached.
+
+   Tracking error and the systematic share are reconstructed in the browser — there is
+   no covariance matrix in the ledger — and every surface that prints them says so. */
 function renderContext(){
-  const host=$('#ctx'); if(!host) return;
-  const bits=[];
-  const shown=(S.shown||[]).length, scored=S.rows.length;
-  bits.push(`<span><b>${shown}</b> of <b>${scored}</b> scored</span>`);
-  if(S.flipSet && S.flipSet.size)
-    bits.push(`<span>pill selection · <b>${S.flipSet.size}</b> names</span>`
-            + `<button class="ctx-clear" data-clear="flip">clear</button>`);
+  const host=$('#ctx'); if(!host||!S.ledger) return;
+  const cfg=S.sbx;
+  const {held,cash,sectorsAtCap}=sizeBook(S.rows,cfg);
+  const secs={};
+  held.forEach(b=>{ secs[b.r.sector||'—']=(secs[b.r.sector||'—']||0)+b.wt; });
+  const topSec=Object.entries(secs).sort((a,b)=>b[1]-a[1])[0]||['—',0];
+  const buys=S.rows.filter(r=>r.conviction>=70).length;
+  const rk=mktBookRisk();
+  const p=S.perf;
+  const gap=(p&&p.legs&&nz(p.benchmark_total))?(p.book_total-p.benchmark_total)/100:null;
+  const cell=(k,v,s,style,title)=>`<div class="ctx-c"${title?` title="${esc(title)}"`:''}>
+    <span class="ctx-k">${esc(k)}</span>
+    <span class="ctx-v"${style?` style="${style}"`:''}>${v}</span>
+    <span class="ctx-s">${esc(s)}</span></div>`;
+  const cells=[
+    cell('Holdings',held.length,`of ${S.rows.length} scored`,'',
+      `Names clearing the ${cfg.min} conviction floor in the sandbox, sized under the ${cfg.max}% position and ${cfg.sector}% sector ceilings.`),
+    cell('Invested',pct(1-cash/100,1),`cash drag ${cash.toFixed(1)}%`,
+      cash>10?`color:${cssVar('--warn')}`:'',
+      'Share of the book the ceilings could actually place. The remainder is forced cash, not a view.'),
+    cell('Exposure heat',esc(SECTOR_SHORT[topSec[0]]||topSec[0]),
+      `${topSec[1].toFixed(1)}% · cap ${cfg.sector}%`,
+      topSec[1]>=cfg.sector-0.01?`color:${cssVar('--bad')}`:'',
+      `Largest sector weight in the sized book against the sector ceiling.`),
+    cell('Tracking error',nz(rk.te)?pct(rk.te,1):'—','reconstructed','',
+      'Standard deviation of the book’s return minus the benchmark’s, computed in the browser from the published weights against the bundled 130-point series. There is no covariance matrix in the ledger — this is a measurement of two series, not a risk model.'),
+    cell('Residual risk',nz(rk.sysShare)?pct(1-rk.sysShare,0):'—','stock-specific share','',
+      `The share of the book’s variance a benchmark hedge would not remove${nz(rk.beta)?`, at beta ${num(rk.beta,2)}`:''}.`),
+    cell('BUY or better',buys,`${(buys/(S.rows.length||1)*100).toFixed(0)}% of universe`,'',
+      'Names scoring 70 or above tonight.'),
+    cell('Book vs '+esc(S.ledger.benchmark||'SPY'),
+      gap==null?'—':spct(gap,2),
+      p&&p.legs?`${p.legs} session${p.legs===1?'':'s'} recorded`:'no recorded legs',
+      gap==null?'':`color:${gap>=0?cssVar('--good'):cssVar('--bad')}`,
+      'Paper return of the published weights against the benchmark over the recorded legs. Not a track record.'),
+    cell('Sectors at cap',sectorsAtCap.length,
+      sectorsAtCap.length?sectorsAtCap.map(s=>SECTOR_SHORT[s]||s).join(', '):'none binding',
+      sectorsAtCap.length?`color:${cssVar('--warn')}`:'',
+      'Sectors the water-fill pinned at the ceiling; weight refused here becomes cash rather than moving to another sector.'),
+  ];
+  // The filter state rides on the end of the same ribbon rather than in a strip of its
+  // own: a screener showing 38 rows because a pill selection is live looks identical to
+  // one showing 38 because that is the universe.
+  const filt=[];
+  const shown=(S.shown||[]).length;
+  filt.push(`<span><b>${shown}</b>/${S.rows.length} shown</span>`);
+  if(S.flipSet&&S.flipSet.size)
+    filt.push(`<span>pill <b>${S.flipSet.size}</b></span><button class="ctx-clear" data-clear="flip">clear</button>`);
   if(S.topN>0)
-    bits.push(`<span>TOP <b>${S.topN}</b> by conviction</span>`
-            + `<button class="ctx-clear" data-clear="top">clear</button>`);
+    filt.push(`<span>TOP <b>${S.topN}</b></span><button class="ctx-clear" data-clear="top">clear</button>`);
   const q=$('#f-q')&&$('#f-q').value.trim();
-  if(q) bits.push(`<span>search “<b>${esc(q)}</b>”</span>`
-                + `<button class="ctx-clear" data-clear="q">clear</button>`);
+  if(q) filt.push(`<span>“<b>${esc(q)}</b>”</span><button class="ctx-clear" data-clear="q">clear</button>`);
   const sec=$('#f-sector')&&$('#f-sector').value;
-  if(sec) bits.push(`<span>${esc(sec)}${S.rvSymbol?` · peers of <b>${esc(S.rvSymbol)}</b>`:''}</span>`
-                  + `<button class="ctx-clear" data-clear="sector">clear</button>`);
+  if(sec) filt.push(`<span><b>${esc(SECTOR_SHORT[sec]||sec)}</b>${
+    S.rvSymbol?` peers of ${esc(S.rvSymbol)}`:''}</span><button class="ctx-clear" data-clear="sector">clear</button>`);
   const sig=$('#f-signal')&&$('#f-signal').value;
-  if(sig) bits.push(`<span>signal <b>${esc(sig)}</b></span>`
-                  + `<button class="ctx-clear" data-clear="signal">clear</button>`);
+  if(sig) filt.push(`<span><b>${esc(sig)}</b></span><button class="ctx-clear" data-clear="signal">clear</button>`);
   const conf=$('#f-conf')&&parseFloat($('#f-conf').value)||0;
-  if(conf) bits.push(`<span>confidence ≥ <b>${(conf*100).toFixed(0)}%</b></span>`
-                   + `<button class="ctx-clear" data-clear="conf">clear</button>`);
+  if(conf) filt.push(`<span>conf ≥ <b>${(conf*100).toFixed(0)}%</b></span><button class="ctx-clear" data-clear="conf">clear</button>`);
   const cur=cursorRow();
-  if(cur) bits.push(`<span>cursor <b>${esc(cur.symbol)}</b> · ${cur.conviction}</span>`);
-  host.innerHTML=bits.join('<span class="ctx-sep">│</span>')
-    + `<span class="spacer"></span><span style="font-family:var(--mono)">⌘K</span>`;
+  if(cur) filt.push(`<span>cursor <b>${esc(cur.symbol)}</b></span>`);
+
+  host.innerHTML=`<div class="ctx-tag">Book</div>${cells.join('')}
+    <div class="ctx-filt">${filt.join('<span style="color:var(--axis)">│</span>')}</div>`;
 }
 document.addEventListener('click',e=>{
   const b=e.target.closest && e.target.closest('#ctx [data-clear]');
@@ -2699,6 +2842,23 @@ function factorBars(r){
       }).join('')}
     </div>`).join('');
 }
+/* Data lineage, in one badge. A percentile computed from a filing and one substituted
+   from the sector median render identically as numbers, and this whole rebuild exists
+   because absent data once read as a confident zero. The badge reads the ledger's own
+   confidence and imputation record — it invents no filing dates and asserts nothing the
+   pipeline did not record. */
+function lineageBadge(r){
+  const imp=(r.imputed||[]).length;
+  const conf=r.data_confidence;
+  const cls = imp===0 ? 'obs' : (nz(conf)&&conf<0.6) ? 'low' : 'imp';
+  const label = imp===0 ? 'OBS' : (cls==='low'?'LOW':'IMP '+imp);
+  const title = imp===0
+    ? `Every scored input for ${r.symbol} came from a filing — nothing is imputed.`
+    : `${imp} of this name's scoring inputs were not reported and take the sector median: ${
+        (r.imputed||[]).map(k=>FACTOR_LABELS[k]||k).join(', ')}. Data confidence ${
+        pct(conf,0)}.`;
+  return `<span class="lin ${cls}" title="${esc(title)}">${esc(label)}</span>`;
+}
 function openPanel(r){
   if(!r) return;
   // Held on S so an overlay toggle can redraw the chart without refetching, and so the
@@ -2760,7 +2920,7 @@ function openPanel(r){
     </section>
 
     <section>
-      <h3>Factor percentiles</h3>
+      <h3>Factor percentiles ${lineageBadge(r)}</h3>
       ${factorBars(r)}
       <div class="src">* imputed from the sector median — the filing did not report it.
         Data confidence ${pct(r.data_confidence,0)}.
@@ -2907,13 +3067,13 @@ function renderSectors(){
   // Borderless tiles. The deviation from the universe median rides the left edge as a
   // 3px rule, so the sign is legible before the number is read and no box needs an
   // outline to be a box.
-  const grid=$('#secgrid');
+  const grid=$('#sec-tiles');
   if(grid){
     const live=$('#f-sector')?$('#f-sector').value:'';
     grid.innerHTML=stats.map(d=>{
       const dev=d.conv-mid;
       const col=dev>=0?cssVar('--pos-pole'):cssVar('--neg-pole');
-      return `<button class="secbox" data-sec="${esc(d.sector)}"
+      return `<button class="sec-tile" data-sec="${esc(d.sector)}"
           aria-pressed="${live===d.sector}"
           style="border-left-color:${live===d.sector?cssVar('--s1'):col}"
           title="${esc(d.sector)} · median conviction ${d.conv.toFixed(0)}, ${
@@ -3740,6 +3900,7 @@ function renderSandbox(){
   $('#sbx-rule-note').textContent=SBX_RULES[cfg.rule];
 
   renderExposure(held, tot);
+  renderContext();
 }
 
 /* ---------- factor exposure ----------
@@ -3796,17 +3957,6 @@ function renderExposure(held, tot){
 }
 
 /* ---------- macro rail and KPI tiles ---------- */
-function railCell(m){
-  return `<div class="rail-cell">
-    <div style="min-width:0;flex:1">
-      <div class="rail-k">${esc(m.label)}</div>
-      <div style="display:flex;align-items:baseline;gap:8px">
-        <span class="rail-v">${esc(m.value)}</span>
-        <span class="rail-d ${m.dir}">${esc(m.delta)}</span>
-      </div>
-    </div>${m.spark||''}
-  </div>`;
-}
 function kpiTile(k){
   return `<div class="card kpi">
     <div class="kpi-head">
@@ -4406,64 +4556,454 @@ function niceTicks(lo,hi,target){
 /* =====================================================================
    MARKET & BOOK OVERVIEW
    ---------------------------------------------------------------------
-   The layer above the eight views. Everything here is a property of the
-   whole board rather than of one tab: what the tape did over each window,
-   how broad the move was, the universe and the book rebased against the
-   benchmark, and which of the fifteen model inputs the top of the board is
-   actually leaning on.
+   The global layer, above all eight views. Everything below it is
+   name-level, and a desk that opens on a ticker has skipped the two
+   questions that decide whether the ticker matters: what the tape is
+   doing, and what the book already holds.
+
+   Return figures come from the ledger's own per-benchmark fields, which
+   Python computed from the full daily series. The bundled history.json is
+   a 130-point downsample and is used only for the chart, where the shape
+   is the point and a four-session step is invisible.
    ===================================================================== */
-const RET_PERIODS=[['1D','chg_1d'],['1M','ret_1m'],['3M','ret_3m'],
-                   ['6M','ret_6m'],['12M','ret_12m'],['YTD','ret_ytd']];
+const MKT_CORE   = ['SPY','QQQ','IWM','IWB','IWD','EFA','EEM'];
+const MKT_FACTOR = ['QUAL','MTUM','VLUE','USMV','QQQ'];
+const MKT_SECTOR = {
+  XLK:'Information Technology', XLF:'Financials', XLV:'Health Care',
+  XLE:'Energy', XLP:'Consumer Staples', XLY:'Consumer Discretionary',
+  XLI:'Industrials', XLU:'Utilities', XLB:'Materials',
+  XLRE:'Real Estate', XLC:'Communication Services',
+};
+const SECTOR_SHORT = {
+  'Information Technology':'Tech','Financials':'Fins','Health Care':'Health',
+  'Energy':'Energy','Consumer Staples':'Staples','Consumer Discretionary':'Disc',
+  'Industrials':'Indust','Utilities':'Util','Materials':'Mats',
+  'Real Estate':'RE','Communication Services':'Comms',
+};
+/* Horizon key -> [label, ledger field, tint scale in %, relative tint scale in pp].
+   The scales are what the tint saturates at: a day and a year cannot share one, or
+   every daily cell renders at the palest step and the column stops encoding anything. */
+const MKT_HZ = [
+  ['d1',  '1D',  'chg_1d',  2,  1],
+  ['m1',  '1M',  'ret_1m',  8,  3],
+  ['m3',  '3M',  'ret_3m',  12, 5],
+  ['ytd', 'YTD', 'ret_ytd', 25, 8],
+  ['y1',  '1Y',  'ret_12m', 25, 8],
+];
+/* Chart windows in points of the bundled downsample. The nightly reduces ~523 daily
+   bars to 130 points, so one point is about four sessions and 62 points is a year —
+   the calibration the pipeline targets. Derived below from the ledger's own bar count
+   rather than assumed, so a change to the downsample moves these with it. */
+const MKT_WINDOWS = [['1M',21],['3M',63],['6M',126],['YTD',null],['1Y',252],['2Y',null]];
+
+function mktStep(){
+  // Sessions per downsampled point, from the benchmark's own recorded bar count.
+  const b=(S.bench||[]).find(x=>x.symbol===(S.ledger.benchmark||'SPY'));
+  const pts=(S.hist[(S.ledger.benchmark||'SPY')]||[]).length;
+  return (b&&b.bars&&pts>1) ? b.bars/pts : 4;
+}
+function mktWindowPoints(label){
+  const pts=(S.hist[(S.ledger.benchmark||'SPY')]||[]).length;
+  const step=mktStep();
+  if(label==='2Y') return pts-1;
+  if(label==='YTD'){
+    // Sessions elapsed this calendar year, from the ledger's own as-of date.
+    const d=new Date((S.ledger.as_of||'').slice(0,10)+'T00:00:00Z');
+    const jan=new Date(Date.UTC(d.getUTCFullYear(),0,1));
+    const days=Math.max(1,(d-jan)/864e5);
+    return Math.max(2,Math.min(pts-1,Math.round(days*(252/365.25)/step)));
+  }
+  const sessions=(MKT_WINDOWS.find(w=>w[0]===label)||[null,252])[1];
+  return Math.max(2,Math.min(pts-1,Math.round(sessions/step)));
+}
+
+/* Morningstar-style return box: the cell IS the swatch, tinted by magnitude, with the
+   figure inside it. Tint and sign are redundant encodings of the same fact.
+   Ink stays --ink at every tint level — the tint caps at 37% alpha, so a white figure
+   on the strongest box composites to about 1.7:1, and in light mode that is the
+   default rendering. Magnitude is carried by the tint alone. */
+function rbCell(v, scale, pp){
+  if(!nz(v)) return `<span class="rb" style="color:var(--label);background:var(--plane)"
+    title="not available">—</span>`;
+  const x=v*100, t=Math.max(-1,Math.min(1,x/scale));
+  const c=t>=0?cssVar('--pos-pole'):cssVar('--neg-pole');
+  const a=Math.round((0.07+0.30*Math.abs(t))*100);
+  return `<span class="rb" style="background:color-mix(in srgb, ${c} ${a}%, transparent);
+    color:var(--ink)" title="${(x>=0?'+':'')+x.toFixed(2)}${pp?' pp':'%'} — tint saturates at ±${scale}${pp?'pp':'%'}"
+    >${(x>=0?'+':'')+x.toFixed(1)}${pp?'':'%'}</span>`;
+}
+
+function mktBench(sym){ return (S.bench||[]).find(b=>b.symbol===sym); }
+
+/* Book risk from the bundled series. Tracking error and the systematic share of
+   variance do not exist upstream — there is no covariance matrix in the ledger — so
+   they are computed here from the published weights against the 130-point series and
+   labelled as reconstructions everywhere they surface. A diagonal proxy would have
+   been cheaper and would have reported every book as fully idiosyncratic. */
+function mktBookRisk(){
+  if(S._risk) return S._risk;
+  const bench=S.ledger.benchmark||'SPY';
+  const bh=S.hist[bench]||[];
+  const out={te:null, sysShare:null, n:0, points:bh.length};
+  if(bh.length>=8){
+    const L=bh.length;
+    const held=S.rows.filter(r=>r.weight>0 && (S.hist[r.symbol]||[]).length>=L);
+    const tw=held.reduce((a,r)=>a+r.weight,0);
+    if(tw>0){
+      const rp=[], rb=[];
+      for(let i=1;i<L;i++){
+        let acc=0;
+        for(const r of held){
+          const h=S.hist[r.symbol], a=h[h.length-L+i-1], b=h[h.length-L+i];
+          if(a>0&&b>0) acc+=r.weight/tw*(b/a-1);
+        }
+        rp.push(acc);
+        rb.push(bh[i]/bh[i-1]-1);
+      }
+      const mean=a=>a.reduce((x,y)=>x+y,0)/a.length;
+      const mp=mean(rp), mb=mean(rb);
+      let vp=0, vb=0, cov=0, vd=0;
+      const md=mean(rp.map((v,i)=>v-rb[i]));
+      rp.forEach((v,i)=>{
+        vp+=(v-mp)**2; vb+=(rb[i]-mb)**2; cov+=(v-mp)*(rb[i]-mb);
+        vd+=((v-rb[i])-md)**2;
+      });
+      const n=rp.length-1;
+      vp/=n; vb/=n; cov/=n; vd/=n;
+      // Periods per year for the downsample: 252 sessions divided by the step.
+      const per=252/mktStep();
+      out.te=Math.sqrt(vd*per);
+      const beta=vb>0?cov/vb:0;
+      out.sysShare=vp>0?Math.max(0,Math.min(1,beta*beta*vb/vp)):null;
+      out.beta=beta;
+      out.n=held.length;
+    }
+  }
+  S._risk=out;
+  return out;
+}
 
 function renderOverview(){
-  if(!$('#ovw')||!S.ledger) return;
-  overviewReturns();
-  overviewBreadth();
-  overviewNormalised();
-  overviewFactorRank();
-  const med=median(S.rows.map(r=>r.conviction));
-  const held=S.rows.filter(r=>r.weight>0).length;
-  const adv=S.rows.filter(r=>(r.chg_1d??0)>0).length;
-  $('#ovw-sum').textContent=
-    `median ${med==null?'—':med.toFixed(0)} · ${held} held · ${adv}/${S.rows.length} up`;
+  if(!$('#mkt')||!S.ledger) return;
+  const bench=S.ledger.benchmark||'SPY';
+  $('#mkt-bench').textContent=bench;
+  mktIndexTable();
+  mktBookTable();
+  mktFactorTable();
+  mktSectorStrip();
+  mktChart();
+  mktYields();
+  mktNarrative();
 }
 
-/* Return boxes. Median rather than mean across the universe, so one 60% mover cannot
-   carry a window, sitting beside the benchmark's own figure for the same window —
-   which is the only thing that makes "+3.1%" mean anything. */
-function overviewReturns(){
-  const host=$('#ovw-rets'); if(!host) return;
-  const bench=S.bench.find(b=>b.symbol===(S.ledger.benchmark||'SPY'));
-  host.innerHTML=RET_PERIODS.map(([label,key])=>{
-    const vals=S.rows.map(r=>r[key]).filter(nz);
-    const m=median(vals);
-    const b=bench?bench[key]:null;
-    const dir=!nz(m)?'':m>=0?'up':'down';
-    return `<div class="ret-box ${dir}">
-      <div class="ret-k">${label}</div>
-      <div class="ret-v ${dir}">${nz(m)?spct(m,key==='chg_1d'?2:1):'—'}</div>
-      <div class="ret-b">${nz(b)?`${esc(bench.symbol)} ${spct(b,key==='chg_1d'?2:1)}`:'—'}</div>
-    </div>`;
+/* Index & region. Rows are the committed benchmark ETFs, columns the horizons the
+   ledger already carries — no horizon is derived from the downsample here. */
+function mktIndexTable(){
+  const host=$('#mkt-index'); if(!host) return;
+  const rows=MKT_CORE.map(mktBench).filter(Boolean);
+  host.innerHTML=`<table class="rbox"><thead><tr><th class="l">Benchmark</th>
+    ${MKT_HZ.map(([,label])=>`<th>${label}</th>`).join('')}</tr></thead><tbody>
+    ${rows.map(r=>`<tr><td class="l"><span class="nm">${esc(r.symbol)}</span>
+      <span class="sub">${esc((r.name||'').replace(/ ETF$/,''))}</span></td>
+      ${MKT_HZ.map(([,,field,scale])=>`<td>${rbCell(r[field],scale,false)}</td>`).join('')}
+    </tr>`).join('')}</tbody></table>`;
+}
+
+/* Book vs benchmark. Every figure is a recorded one — the paper-return legs from
+   performance.json — except tracking error, which is reconstructed and says so. */
+function mktBookTable(){
+  const host=$('#mkt-book'); if(!host) return;
+  const p=S.perf, bench=S.ledger.benchmark||'SPY';
+  const scope=$('#mkt-book-scope');
+  if(!p||!p.legs){
+    if(scope) scope.textContent='no recorded legs';
+    host.innerHTML=`<div class="pending">No measured sessions yet. The book line is
+      chained across nightly snapshots and starts when recording started.</div>`;
+    return;
+  }
+  if(scope) scope.textContent=`${p.from} → ${p.to}`;
+  const rk=mktBookRisk();
+  const excess=(p.book_total-p.benchmark_total)/100;
+  const rows=[
+    ['Book', `${p.legs} recorded session${p.legs===1?'':'s'}`, rbCell(p.book_total/100,4,false)],
+    [bench, 'same legs, same dates',
+      p.benchmark_available?rbCell(p.benchmark_total/100,4,false):rbCell(null,4,false)],
+    ['Excess', 'book minus benchmark', rbCell(excess,4,true)],
+    ['Equal weight', 'the honest baseline', rbCell(p.equal_weight_total/100,4,false)],
+    ['Tracking error', 'reconstructed, not upstream',
+      `<span class="rb" style="background:var(--plane);color:var(--ink)"
+        title="Standard deviation of the book's return minus the benchmark's, computed in the browser from the published weights against the bundled 130-point series and annualised on that step. There is no covariance matrix in the ledger — this is a measurement of the two series, not a risk model.">${
+        nz(rk.te)?pct(rk.te,2):'—'}</span>`],
+    ['Systematic share', 'variance explained by beta',
+      `<span class="rb" style="background:var(--plane);color:var(--ink)"
+        title="Beta${nz(rk.beta)?' '+num(rk.beta,2):''} against ${esc(bench)} on the same series. The remainder is stock-specific — the part a benchmark hedge would not remove.">${
+        nz(rk.sysShare)?pct(rk.sysShare,0):'—'}</span>`],
+  ];
+  host.innerHTML=`<table class="rbox"><tbody>${rows.map(([k,s,cell])=>
+    `<tr><td class="l"><span class="nm">${esc(k)}</span><br><span class="sub">${esc(s)}</span></td>
+     <td>${cell}</td></tr>`).join('')}</tbody></table>`;
+}
+
+/* Factor regime — style ETFs as excess over the benchmark, in percentage points.
+   Excess rather than total: every one of these is a US large-cap fund, so their total
+   returns agree to within a point or two and the column would read as five copies of
+   the index. The difference is the entire content. */
+function mktFactorTable(){
+  const host=$('#mkt-factor'); if(!host) return;
+  const bench=S.ledger.benchmark||'SPY';
+  const b=mktBench(bench);
+  if(!b){ host.innerHTML='<div class="pending">No benchmark recorded.</div>'; return; }
+  const NAMES={QUAL:'Quality',MTUM:'Momentum',VLUE:'Value',USMV:'Min vol',QQQ:'Growth †'};
+  const rows=MKT_FACTOR.map(mktBench).filter(Boolean);
+  host.innerHTML=`<table class="rbox"><thead><tr><th class="l">Factor</th>
+    ${MKT_HZ.map(([,label])=>`<th>${label}</th>`).join('')}</tr></thead><tbody>
+    ${rows.map(r=>`<tr><td class="l"><span class="nm">${esc(NAMES[r.symbol]||r.symbol)}</span>
+      <span class="sub">${esc(r.symbol)}</span></td>
+      ${MKT_HZ.map(([,,field,,relScale])=>{
+        const v=(nz(r[field])&&nz(b[field])) ? r[field]-b[field] : null;
+        return `<td>${rbCell(v,relScale,true)}</td>`;
+      }).join('')}
+    </tr>`).join('')}</tbody></table>`;
+  const note=$('#mkt-factor-note');
+  if(note) note.innerHTML=`Style ETFs against ${esc(bench)} on the ledger's own horizons.
+    <b>†</b> Growth is proxied by the Nasdaq-100, which is not a style index — there is no
+    growth ETF in the committed universe, and substituting one that is not there would be
+    the kind of quiet invention this rebuild exists to remove.`;
+}
+
+/* Sector strip. Ordered by the selected horizon rather than alphabetically, because the
+   ordering is the reading — which end of the market is working. */
+S.mktSecHz='ytd';
+function mktSectorStrip(){
+  const host=$('#mkt-sec-boxes'); if(!host) return;
+  const hz=MKT_HZ.find(h=>h[0]===S.mktSecHz)||MKT_HZ[3];
+  const [,label,field,scale]=hz;
+  const bench=mktBench(S.ledger.benchmark||'SPY');
+  const rows=Object.entries(MKT_SECTOR)
+    .map(([sym,name])=>({sym,name,b:mktBench(sym)}))
+    .filter(x=>x.b)
+    .sort((a,b)=>(b.b[field]??-9)-(a.b[field]??-9));
+  host.innerHTML=rows.map(({sym,name,b})=>{
+    const v=b[field];
+    const rel=(nz(v)&&bench&&nz(bench[field]))?v-bench[field]:null;
+    const t=nz(v)?Math.max(-1,Math.min(1,v*100/scale)):0;
+    const c=t>=0?cssVar('--pos-pole'):cssVar('--neg-pole');
+    const a=Math.round((0.07+0.30*Math.abs(t))*100);
+    return `<button class="secbox" data-sec="${esc(name)}"
+      style="background:color-mix(in srgb, ${c} ${a}%, transparent)"
+      title="${esc(name)} (${esc(sym)}) — ${nz(v)?spct(v,2):'—'} over ${label}${
+        nz(rel)?`, ${(rel>=0?'+':'')+(rel*100).toFixed(2)}pp against ${esc((S.ledger.benchmark||'SPY'))}`:''}. Click to filter the screener to this sector.">
+      <span class="k">${esc(sym)} · ${esc(SECTOR_SHORT[name]||name)}</span>
+      <span class="v" style="color:${nz(v)&&v>=0?cssVar('--pos-pole'):cssVar('--neg-pole')}">${
+        nz(v)?spct(v,1):'—'}</span></button>`;
   }).join('');
-  const note=$('#ovw-bench-note');
-  if(note) note.textContent=bench
-    ? `universe median vs ${bench.symbol} · ${S.rows.length} scored`
-    : `universe median · ${S.rows.length} scored`;
+  const lbl=$('#mkt-sec-label'); if(lbl) lbl.textContent=label;
+  const seg=$('#mkt-sec-horizons');
+  if(seg) seg.innerHTML=MKT_HZ.map(([k,l])=>
+    `<button type="button" data-hz="${k}" aria-pressed="${k===S.mktSecHz}">${l}</button>`).join('');
 }
 
-/* Breadth. A median return says where the middle went; breadth says how many names
-   went with it, and the two come apart exactly when it matters — a tape carried by
-   six names has the same median as one that rose on every ticker. */
-function overviewBreadth(){
-  const host=$('#ovw-breadth'); if(!host) return;
-  const n=S.rows.length||1;
-  const bar=(a,b,aCol,bCol)=>{
-    const t=a+b||1;
-    return `<span class="br-track">
-      <i style="width:${(a/t*100).toFixed(1)}%;background:${aCol}"></i>
-      <i style="width:${(b/t*100).toFixed(1)}%;background:${bCol}"></i></span>`;
-  };
+/* The normalised chart. Rebased to 0% at the window start, and the y-axis is taken
+   from the data with a small pad — a forced zero baseline flattens every line the
+   moment one series has a wide range, so the zero level is drawn as a dashed reference
+   instead of being made the floor. */
+S.mktWindow='1Y';
+S.mktSeries=['SPY','QQQ','IWM'];
+S.mktHover=null;
+const MKT_PAL=()=>[cssVar('--s1'),cssVar('--s2'),cssVar('--s3'),cssVar('--seq-650'),
+                   cssVar('--label'),cssVar('--seq-250')];
+function mktAllSeries(){
+  return [...MKT_CORE, ...MKT_FACTOR.filter(s=>!MKT_CORE.includes(s)),
+          ...Object.keys(MKT_SECTOR)].filter(s=>(S.hist[s]||[]).length>2);
+}
+function mktChart(){
+  const host=$('#mkt-chart'); if(!host) return;
+  const span=mktWindowPoints(S.mktWindow);
+  const picked=S.mktSeries.filter(s=>(S.hist[s]||[]).length>span);
+  const pal=MKT_PAL();
+  const series=picked.map((s,i)=>{
+    const h=S.hist[s], a=h.slice(h.length-(span+1));
+    const base=a[0];
+    return {sym:s, v:base>0?a.map(x=>x/base-1):a.map(()=>0), col:pal[i%pal.length]};
+  });
+  // Window and series pickers first — they must render even when nothing is selected.
+  const wins=$('#mkt-windows');
+  if(wins) wins.innerHTML=MKT_WINDOWS.map(([l])=>
+    `<button type="button" data-win="${l}" aria-pressed="${l===S.mktWindow}">${l}</button>`).join('');
+  const pills=$('#mkt-series');
+  if(pills) pills.innerHTML=mktAllSeries().map(s=>{
+    const on=S.mktSeries.includes(s);
+    const col=on?pal[S.mktSeries.indexOf(s)%pal.length]:'';
+    const b=mktBench(s);
+    return `<button class="pill" data-ser="${esc(s)}" aria-pressed="${on}"
+      style="${on?`border-color:${col};color:${col}`:''}"
+      title="${esc((b&&b.name)||s)}">${esc(s)}</button>`;
+  }).join('');
+
+  if(!series.length){
+    host.innerHTML='<div class="pending">No series selected. Click a pill to plot one.</div>';
+    $('#mkt-legend').innerHTML='';
+    return;
+  }
+  const W=980,H=260,m={t:14,r:14,b:38,l:54};
+  const flat=series.flatMap(s=>s.v);
+  let lo=Math.min(...flat), hi=Math.max(...flat);
+  const pad=Math.max((hi-lo)*0.10,0.004);
+  lo-=pad; hi+=pad;
+  const rng=(hi-lo)||1;
+  const X=i=>m.l+(span?i/span:0)*(W-m.l-m.r);
+  const Y=v=>H-m.b-(v-lo)/rng*(H-m.t-m.b);
+  const hoverJ=S.mktHover==null?null:Math.max(0,Math.min(span,S.mktHover));
+
+  let g='';
+  for(let i=0;i<=4;i++){
+    const v=lo+rng*i/4;
+    g+=`<line x1="${m.l}" y1="${Y(v).toFixed(1)}" x2="${W-m.r}" y2="${Y(v).toFixed(1)}" class="gridline"/>`
+     + `<text x="${m.l-8}" y="${(Y(v)+3).toFixed(1)}" class="tick" text-anchor="end">${spct(v,1)}</text>`;
+  }
+  // Zero is break-even for every line on the chart, so it is a dashed reference rather
+  // than one more gridline the eye has to pick out of five.
+  if(0>=lo&&0<=hi) g+=`<line x1="${m.l}" y1="${Y(0).toFixed(1)}" x2="${W-m.r}" y2="${Y(0).toFixed(1)}"
+    stroke="${cssVar('--axis')}" stroke-width="1" stroke-dasharray="3 3"/>`;
+  // The bundled series carries no dates. Ticks are derived from the calibrated step
+  // anchored on the session the closes came from; the note says so rather than
+  // implying a dated axis.
+  const step=mktStep();
+  const end=new Date((S.ledger.as_of||'').slice(0,10)+'T00:00:00Z');
+  for(let i=0;i<=5;i++){
+    const j=Math.round(span*i/5);
+    const back=(span-j)*step*(7/5);
+    const d=new Date(end.getTime()-back*864e5);
+    g+=`<text x="${X(j).toFixed(1)}" y="${H-18}" class="tick" text-anchor="middle">${
+      d.toISOString().slice(0,7)}</text>`;
+  }
+  const paths=series.map(s=>`<path d="${
+    s.v.map((v,j)=>`${j?'L':'M'}${X(j).toFixed(1)},${Y(v).toFixed(1)}`).join(' ')}"
+    fill="none" stroke="${s.col}" stroke-width="${s.sym===(S.ledger.benchmark||'SPY')?2.4:1.8}"
+    stroke-linejoin="round"/>`).join('');
+  const cursor=hoverJ==null?'':`<line x1="${X(hoverJ).toFixed(1)}" y1="${m.t}"
+    x2="${X(hoverJ).toFixed(1)}" y2="${H-m.b}" stroke="${cssVar('--ink-2')}"
+    stroke-width="1" opacity="0.7"/>`
+    + series.map(s=>`<circle cx="${X(hoverJ).toFixed(1)}" cy="${Y(s.v[hoverJ]).toFixed(1)}"
+        r="3" fill="${s.col}"/>`).join('');
+
+  host.innerHTML=`<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
+      aria-label="Selected series rebased to zero at the window start">
+    ${g}${paths}${cursor}
+    <line x1="${m.l}" y1="${H-m.b}" x2="${W-m.r}" y2="${H-m.b}" class="axisline"/>
+    <line x1="${m.l}" y1="${m.t}" x2="${m.l}" y2="${H-m.b}" class="axisline"/>
+  </svg>`;
+
+  $('#mkt-legend').innerHTML=series.map(s=>{
+    const v=hoverJ==null?s.v[s.v.length-1]:s.v[hoverJ];
+    const b=mktBench(s.sym);
+    return `<span><i style="background:${s.col}"></i>${esc(s.sym)}
+      ${esc(((b&&b.name)||'').replace(/ ETF$/,''))}
+      <b style="color:${v>=0?cssVar('--pos-pole'):cssVar('--neg-pole')};font-family:var(--mono)">${
+        spct(v,1)}</b></span>`;
+  }).join('');
+  const wn=$('#mkt-chart-window');
+  if(wn) wn.textContent=`${span+1} points ≈ ${(span*step/21).toFixed(1)} months`;
+  const cn=$('#mkt-chart-note');
+  if(cn) cn.innerHTML=`Rebased to 0% at the window start; the y-axis is the data's own
+    range, not a forced zero. Drawn from the bundled 130-point downsample, about
+    ${step.toFixed(1)} sessions a point, so the axis labels are approximate months
+    anchored on ${esc((S.ledger.as_of||'').slice(0,10))} rather than dated ticks. Up to
+    six series — click a pill to add or drop one, hover the chart to read every line at
+    one date.`;
+}
+
+function mktYields(){
+  const host=$('#mkt-yields'); if(!host) return;
+  if(!S.macro||!Object.keys(S.macro).length){
+    host.innerHTML='<div class="pending">FRED series unavailable in the last build.</div>';
+    return;
+  }
+  const entries=Object.entries(S.macro);
+  host.innerHTML=entries.map(([id,m])=>{
+    const dec=id==='VIXCLS'?1:2;
+    const up=m.change_1m>=0;
+    return `<div class="yrow">
+      <div style="min-width:0">
+        <div class="rail-k">${esc(m.label)}</div>
+        <div class="yv">${m.value.toFixed(dec)}${esc(m.unit||'')}</div>
+        <div class="rail-d ${up?'up':'down'}">${(up?'+':'')+m.change_1m.toFixed(dec)} 1m</div>
+      </div>
+      ${sparkline(m.series,70,28,cssVar('--s1'),
+                  {label:m.label, unit:m.unit||'', fmt:v=>num(v,dec)})}
+    </div>`;
+  }).join('')
+  + `<div class="yrow" style="border-bottom:0">
+      <div style="min-width:0">
+        <div class="rail-k">Scenario</div>
+        <div class="yv" style="${S.shock.px||S.shock.beta?`color:${cssVar('--s2')}`:''}">${
+          S.shock.px||S.shock.beta?`${S.shock.px.toFixed(0)}%`:'Base case'}</div>
+        <div class="rail-d" style="color:var(--label)">${
+          S.shock.px||S.shock.beta?`dispersion ${(S.shock.beta/10).toFixed(1)}×`:'no shock applied'}</div>
+      </div>
+      <button class="btn" id="mkt-stress" title="Scenario — shock the board (S)">Stress</button>
+    </div>`;
+  const asOf=entries.map(([,m])=>m.as_of).filter(Boolean).sort().pop();
+  const yn=$('#mkt-yield-note');
+  if(yn) yn.textContent=asOf?`FRED, as of ${asOf}. Levels and the one-month change, not a forecast.`:'';
+}
+
+/* The regime reading and the sentence under the title. Four independent measurements
+   rather than a cycle label: "late-cycle" is an interpretation, and once printed it
+   reads as a forecast. */
+function mktRegime(){
+  const m=S.macro||{};
+  const vix=m.VIXCLS?m.VIXCLS.value:null;
+  const hy=m.BAMLH0A0HYM2?m.BAMLH0A0HYM2.value:null;
+  if(!nz(vix)&&!nz(hy)) return {t:'Regime unrecorded', tone:'--label'};
+  const calm = (nz(vix)&&vix<16) && (nz(hy)&&hy<3.2);
+  const stress = (nz(vix)&&vix>26) || (nz(hy)&&hy>4.5);
+  return stress ? {t:'Stress', tone:'--bad'}
+       : calm   ? {t:'Volatility compression', tone:'--good'}
+                : {t:'Mixed', tone:'--warn'};
+}
+function mktNarrative(){
+  const reg=mktRegime();
+  const pill=$('#mkt-regime');
+  if(pill){ pill.textContent=reg.t.toUpperCase(); pill.style.color=cssVar(reg.tone); }
+  const host=$('#mkt-narr'); if(!host) return;
+  const bench=S.ledger.benchmark||'SPY';
+  const b=mktBench(bench);
+  const NAMES={QUAL:'Quality',MTUM:'Momentum',VLUE:'Value',USMV:'Min vol',QQQ:'Growth'};
+  const legs=MKT_FACTOR.map(mktBench).filter(x=>x&&b&&nz(x.ret_3m)&&nz(b.ret_3m))
+    .map(x=>({n:NAMES[x.symbol]||x.symbol, v:x.ret_3m-b.ret_3m}))
+    .sort((a,c)=>c.v-a.v);
+  const m=S.macro||{};
+  const rk=mktBookRisk();
+  const p=S.perf;
+  const held=S.rows.filter(r=>r.weight>0).length;
+  const bits=[];
+  bits.push(`Regime reads <b>${esc(reg.t.toLowerCase())}</b> on VIX ${
+    m.VIXCLS?m.VIXCLS.value.toFixed(1):'—'} and HY ${
+    m.BAMLH0A0HYM2?m.BAMLH0A0HYM2.value.toFixed(2)+'%':'—'}.`);
+  if(legs.length>1) bits.push(`Over three months <b>${esc(legs[0].n)}</b> leads at
+    ${(legs[0].v*100>=0?'+':'')+(legs[0].v*100).toFixed(1)}pp against ${esc(bench)} and
+    <b>${esc(legs[legs.length-1].n)}</b> lags at
+    ${(legs[legs.length-1].v*100>=0?'+':'')+(legs[legs.length-1].v*100).toFixed(1)}pp.`);
+  if(p&&p.legs) bits.push(`The book runs ${nz(rk.te)?pct(rk.te,1)+' tracking error and ':''}${held}
+    names, ${spct((p.book_total-p.benchmark_total)/100,2)} against ${esc(bench)} across
+    ${p.legs} recorded session${p.legs===1?'':'s'} — a shape, not a track record.`);
+  host.innerHTML=bits.join(' ');
+}
+
+/* Universe breadth and the model's own factor tilt. Not part of the prototype's
+   overview block — these are properties of the scored board rather than of the tape,
+   so they sit with the board. A median return says where the middle went; breadth says
+   how many names went with it, and the two come apart exactly when it matters. */
+function renderBreadth(){
+  const host=$('#breadth'); if(!host||!S.rows.length) return;
+  const n=S.rows.length;
   const pos=cssVar('--pos-pole'), neg=cssVar('--neg-pole'), grid=cssVar('--grid');
+  const bar=(a,b,ac,bc)=>{
+    const t=a+b||1;
+    return `<span class="br-track"><i style="width:${(a/t*100).toFixed(1)}%;background:${ac}"></i>
+      <i style="width:${(b/t*100).toFixed(1)}%;background:${bc}"></i></span>`;
+  };
   const up=S.rows.filter(r=>(r.chg_1d??0)>0).length;
   const dn=S.rows.filter(r=>(r.chg_1d??0)<0).length;
   const a50=S.rows.filter(r=>(r.px_vs_ma50??0)>0).length;
@@ -4482,101 +5022,16 @@ function overviewBreadth(){
     ['Down 20%+ from high', bar(deep,n-deep,neg,grid), `${deep}`,
      'At least 20% below the 52-week high — the pool the mean-reversion uplift draws from'],
   ];
-  host.innerHTML=rows.map(([k,b,v,t])=>`<div class="br-row" title="${esc(t)}">
-    <span style="color:var(--label)">${esc(k)}</span>${b}
-    <span class="br-val">${esc(v)}</span></div>`).join('');
+  host.innerHTML=`<div class="breadth">${rows.map(([k,b,v,t])=>
+    `<div class="br-row" title="${esc(t)}"><span style="color:var(--label)">${esc(k)}</span>
+     ${b}<span class="br-val">${esc(v)}</span></div>`).join('')}</div>`;
 }
 
-/* The rebased series. Computed once — the ledger does not change under the page — and
-   aligned to the benchmark's own window from the right, so every line covers the same
-   sessions rather than the same index positions. */
-function overviewSeries(){
-  if(S._norm) return S._norm;
-  const benchSym=S.ledger.benchmark||'SPY';
-  const bh=S.hist[benchSym]||[];
-  const L=bh.length;
-  const out={len:L, bench:bh.slice(), benchSym, universe:null, book:null, names:0};
-  if(L>=2){
-    const acc=new Array(L).fill(0), bacc=new Array(L).fill(0);
-    let n=0, bw=0;
-    for(const r of S.rows){
-      const h=S.hist[r.symbol];
-      if(!h||h.length<L) continue;
-      const seg=h.slice(h.length-L);
-      if(!nz(seg[0])||seg[0]<=0) continue;
-      n++;
-      for(let i=0;i<L;i++) acc[i]+=seg[i]/seg[0];
-      const w=r.weight||0;
-      if(w>0){ bw+=w; for(let i=0;i<L;i++) bacc[i]+=w*seg[i]/seg[0]; }
-    }
-    if(n>0){ out.universe=acc.map(v=>v/n*100); out.names=n; }
-    if(bw>0) out.book=bacc.map(v=>v/bw*100);
-  }
-  S._norm=out;
-  return out;
-}
-
-function overviewNormalised(){
-  const host=$('#ovw-norm'); if(!host) return;
-  const d=overviewSeries();
-  if(!d.universe||d.len<2){
-    host.innerHTML=`<div class="pending">The bundled price history has fewer than two
-      aligned sessions, so there is nothing to rebase. This chart draws only what the
-      pipeline published.</div>`;
-    return;
-  }
-  const span=S.ovwSpan>0 ? Math.min(S.ovwSpan,d.len) : d.len;
-  const cut=a=>{ if(!a) return null; const s=a.slice(a.length-span);
-                 return s[0]>0 ? s.map(v=>v/s[0]*100) : null; };
-  const series=[
-    ['Universe (equal weight)', cut(d.universe), cssVar('--s1'), false],
-    ['Published book',          cut(d.book),     cssVar('--pos-pole'), false],
-    [d.benchSym,                cut(d.bench),    cssVar('--label'), true],
-  ].filter(s=>s[1]&&s[1].length>1);
-  const W=fitW(host,520,1000), H=210, m={t:12,r:14,b:26,l:46};
-  const flat=series.flatMap(s=>s[1]);
-  const lo=Math.min(...flat), hi=Math.max(...flat);
-  const ticks=niceTicks(lo,hi,4);
-  const yLo=Math.min(lo,ticks[0]), yHi=Math.max(hi,ticks[ticks.length-1]);
-  const rng=(yHi-yLo)||1;
-  const g=svgIn(host,W,H);
-  g.setAttribute('aria-label','Universe, book and benchmark rebased to 100');
-  const X=i=>m.l+(span===1?0.5:i/(span-1))*(W-m.l-m.r);
-  const Y=v=>H-m.b-(v-yLo)/rng*(H-m.t-m.b);
-  ticks.forEach(v=>{
-    el('line',{x1:m.l,y1:Y(v),x2:W-m.r,y2:Y(v),class:'gridline'},g);
-    const t=el('text',{x:m.l-6,y:Y(v)+3,class:'tick','text-anchor':'end'},g);
-    t.textContent=v.toFixed(Math.abs(ticks[1]-ticks[0])<1?1:0);
-  });
-  // 100 is the baseline the whole chart is about, so it is an axis line and not one
-  // more gridline the eye has to find among five.
-  if(100>=yLo&&100<=yHi) el('line',{x1:m.l,y1:Y(100),x2:W-m.r,y2:Y(100),class:'axisline'},g);
-  series.forEach(([,vals,col,dash])=>{
-    el('polyline',{points:vals.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' '),
-      fill:'none',stroke:col,'stroke-width':1.9,'stroke-linejoin':'round',
-      ...(dash?{'stroke-dasharray':'4 3'}:{})},g);
-  });
-  const xt=el('text',{x:m.l,y:H-7,class:'tick'},g);
-  xt.textContent=`${span} sessions`;
-  const xr=el('text',{x:W-m.r,y:H-7,class:'tick','text-anchor':'end'},g);
-  xr.textContent='latest';
-  host.insertAdjacentHTML('beforeend',
-    `<div class="legend">${series.map(([label,vals,col,dash])=>
-        `<span><i style="background:${col};${dash?'height:2px;border-radius:0':''}"></i>${
-          esc(label)} — ${spct(vals[vals.length-1]/100-1,1)}</span>`).join('')}
-     </div>
-     <p class="card-note">Rebased to 100 at the left edge, ${d.names} names with an
-       aligned series. The axis is stepped from the data rather than fixed, so the
-       labels stay round whatever the window spans. The book line is the weights the
-       ledger published, applied to prices — it is not the paper-return curve, which is
-       chained across snapshots and lives on the Portfolio tab.</p>`);
-}
-
-/* Which inputs the top of the board is leaning on. Not the same question as "which
-   factor is largest" — every one of these is a percentile, so the only meaningful
-   statement is how far the leading decile sits from the universe median on it. */
-function overviewFactorRank(){
-  const host=$('#ovw-frank'); if(!host) return;
+/* Which of the fifteen model inputs the top of the board is leaning on. Not the same
+   question as "which factor is largest" — every one of these is a percentile, so the
+   only meaningful statement is how far the leading decile sits from the median. */
+function renderFactorRank(){
+  const host=$('#frank'); if(!host||!S.rows.length) return;
   const sorted=[...S.rows].sort((a,b)=>b.conviction-a.conviction);
   const n=Math.max(20,Math.round(sorted.length*0.1));
   const top=sorted.slice(0,n);
@@ -4591,7 +5046,10 @@ function overviewFactorRank(){
     }
     if(cnt>=8) out.push({k, dev:sum/cnt-50, cov:cnt/top.length});
   }
-  if(!out.length){ host.innerHTML='<div class="pending">No input is measured on enough of the leading decile to rank.</div>'; return; }
+  if(!out.length){
+    host.innerHTML='<div class="pending">No input is measured on enough of the leading decile to rank.</div>';
+    return;
+  }
   out.sort((a,b)=>Math.abs(b.dev)-Math.abs(a.dev));
   host.innerHTML=`<div class="frank">`+out.map((d,i)=>{
     const mag=Math.min(Math.abs(d.dev),50)/50*50;
@@ -4606,10 +5064,10 @@ function overviewFactorRank(){
       <span class="frank-v" style="color:${col}">${d.dev>=0?'+':'−'}${Math.abs(d.dev).toFixed(1)}</span>
     </div>`;
   }).join('')+`</div>
-  <p class="card-note">Top ${n} names by conviction, each input averaged over the
-    names whose own sector profile reads it — a percentage beside a label is the share
-    of the decile that input covers. Percentile points against the universe median, on
-    the same fixed ±50 yardstick as the exposure panel.</p>`;
+  <p class="card-note">Top ${n} names by conviction, each input averaged over the names
+    whose own sector profile reads it — a percentage beside a label is the share of the
+    decile that input covers. Percentile points against the universe median, on the same
+    fixed ±50 yardstick as the exposure panel.</p>`;
   host.onclick=e=>{
     const row=e.target.closest('[data-fk]');
     if(row) runFunction('FKQ',row.dataset.fk);
@@ -4813,11 +5271,21 @@ function renderCmdList(){
     return;
   }
   S.cmd.sel=Math.max(0,Math.min(items.length-1,S.cmd.sel));
-  host.innerHTML=items.map((it,i)=>`<div class="cmdk-row" role="option" data-i="${i}"
-      aria-selected="${i===S.cmd.sel}">
-    <span class="cmdk-code">${esc(it.label)}</span>
-    <span class="cmdk-desc">${esc(it.desc)}</span>
-    <span class="cmdk-arg">${esc(it.hint||'')}</span></div>`).join('');
+  // Grouped only when both kinds are present. A single "Functions" heading over a list
+  // that is entirely functions is a row of chrome that tells the reader nothing.
+  const mixed=items.some(i=>i.kind==='fn') && items.some(i=>i.kind==='name');
+  let last=null, html='';
+  items.forEach((it,i)=>{
+    if(mixed && it.kind!==last){
+      last=it.kind;
+      html+=`<div class="cmdk-grp">${it.kind==='fn'?'Functions':'Names'}</div>`;
+    }
+    html+=`<div class="cmdk-row" role="option" data-i="${i}" aria-selected="${i===S.cmd.sel}">
+      <span class="cmdk-code">${esc(it.label)}</span>
+      <span class="cmdk-desc">${esc(it.desc)}</span>
+      <span class="cmdk-arg">${esc(it.hint||'')}</span></div>`;
+  });
+  host.innerHTML=html;
   const sel=host.querySelector('[aria-selected="true"]');
   if(sel) sel.scrollIntoView({block:'nearest'});
 }
@@ -4954,6 +5422,7 @@ if($('#cmdk')){
   });
   $('#cmdk').addEventListener('mousedown',e=>{ if(e.target.id==='cmdk') closeCmd(); });
   $('#cmd-open').onclick=()=>openCmd('');
+  if($('#help-open')) $('#help-open').onclick=()=>openCmd('');
 }
 
 /* =====================================================================
@@ -5029,25 +5498,52 @@ addEventListener('keydown',e=>{
 });
 
 function toggleOverview(force){
-  const box=$('#ovw'); if(!box) return;
+  const box=$('#mkt'); if(!box) return;
   const open = force!=null ? !!force : box.dataset.open!=='true';
   box.dataset.open=String(open);
-  $('#ovw-toggle').setAttribute('aria-expanded',String(open));
-  try{ localStorage.setItem('ecm-ovw',open?'1':'0'); }catch{}
+  const btn=$('#mkt-toggle');
+  if(btn){ btn.setAttribute('aria-pressed',String(open)); btn.textContent=open?'Collapse':'Expand'; }
+  try{ localStorage.setItem('ecm-mkt',open?'1':'0'); }catch{}
   if(open) renderOverview();
+  measureTopbar();
 }
-if($('#ovw-toggle')){
-  $('#ovw-toggle').onclick=()=>toggleOverview();
+if($('#mkt')){
+  $('#mkt-toggle').onclick=()=>toggleOverview();
   try{
-    const v=localStorage.getItem('ecm-ovw');
+    const v=localStorage.getItem('ecm-mkt');
     if(v==='0') toggleOverview(false);
   }catch{}
-  $$('#ovw-span button').forEach(b=>{
-    b.onclick=()=>{
-      S.ovwSpan=+b.dataset.span;
-      $$('#ovw-span button').forEach(o=>o.setAttribute('aria-pressed',String(o===b)));
-      overviewNormalised();
-    };
+  // Delegated: every control inside the overview is rebuilt on each render, so binding
+  // per element would have to be re-run after every one of them.
+  $('#mkt').addEventListener('click',e=>{
+    const win=e.target.closest('[data-win]');
+    if(win){ S.mktWindow=win.dataset.win; S.mktHover=null; mktChart(); return; }
+    const ser=e.target.closest('[data-ser]');
+    if(ser){
+      const s=ser.dataset.ser, cur=new Set(S.mktSeries);
+      // Six lines is where a legend stops being readable and the palette starts
+      // repeating itself; past that the pill refuses rather than silently dropping one.
+      if(cur.has(s)) cur.delete(s); else { if(cur.size>=6) return; cur.add(s); }
+      S.mktSeries=[...cur]; mktChart(); return;
+    }
+    const hz=e.target.closest('[data-hz]');
+    if(hz){ S.mktSecHz=hz.dataset.hz; mktSectorStrip(); return; }
+    const sec=e.target.closest('[data-sec]');
+    if(sec){ runFunction('SCR',sec.dataset.sec); return; }
+    if(e.target.closest('#mkt-stress')){ runFunction('SHK',''); return; }
+  });
+  // Hover reads every plotted line at one date, which is the whole reason several are
+  // on the same axes.
+  $('#mkt-chart').addEventListener('mousemove',e=>{
+    const svg=$('#mkt-chart svg'); if(!svg) return;
+    const b=svg.getBoundingClientRect();
+    const x=(e.clientX-b.left)/b.width*980;
+    const span=mktWindowPoints(S.mktWindow);
+    const j=Math.round((x-54)/((980-54-14)||1)*span);
+    if(j>=0&&j<=span&&j!==S.mktHover){ S.mktHover=j; mktChart(); }
+  });
+  $('#mkt-chart').addEventListener('mouseleave',()=>{
+    if(S.mktHover!=null){ S.mktHover=null; mktChart(); }
   });
 }
 
@@ -5302,7 +5798,7 @@ if($('#shk-px')){
 function redrawCharts(){
   if(!S.ledger) return;
   renderMap(); renderDist(); renderSectors(); renderData(); renderMonitor(); renderAlpha(); renderEdge(); renderHealth(); renderSizing(); renderPersistence();
-  renderOverview();
+  renderOverview(); renderBreadth(); renderFactorRank();
   // The ledger's own scroll port only has a height once its tab is on screen, so the
   // virtual window is recomputed here as well as on scroll.
   paintGrid(false);
@@ -5324,7 +5820,7 @@ $('#theme').onclick=()=>{
                 renderPortfolio(); renderData(); renderSale(); renderDist(); renderAlpha();
                 renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
                 renderWatchlist(); renderMonitor(); renderOverview(); renderScenario();
-                renderSizing(); }
+                renderSizing(); renderBreadth(); renderFactorRank(); }
 };
 try{
   const saved=localStorage.getItem('ecm-theme');
