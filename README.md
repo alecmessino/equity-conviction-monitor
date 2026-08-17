@@ -274,6 +274,44 @@ and the band a constant percentage. Drift is annualised only when the bars carry
 the bundled `history.json` is a downsample, and multiplying its per-bar drift by 252
 reported a 2%-per-week trend as +265%/yr.
 
+### The earnings calendar
+
+There is no keyless forward earnings calendar. Vendors sell one; SEC does not publish
+one, because no company is obliged to file its reporting date in a structured form. So
+`equity_monitor/earnings.py` does not pretend to have one — it measures what SEC *does*
+publish, which is when every filer actually reported, and projects the next date from
+that filer's own cadence.
+
+Every row is one of two things, and the distinction is the whole panel:
+
+- **confirmed** — a filing has landed, with the form that reported it beside the date.
+- **estimated** — no filing yet. The date is the filer's last period end plus the lag it
+  has historically taken to report: 32 days at the universe median over 899 observations,
+  ±4 at the median absolute deviation. These are wrong by a few days routinely.
+
+A calendar that renders those alike is worse than no calendar, because a desk will
+schedule around the projection exactly as if it were the fact.
+
+The history comes from EDGAR's own index files — one request covers every filer at once,
+the same property that makes the `frames` API affordable for fundamentals. Completed
+quarters are immutable and cached indefinitely; the current quarter is assembled from
+daily index files, each immutable once the day is over. **There is no per-ticker loop**,
+and on a warm cache a run fetches exactly one file: today's. Names that cannot be matched
+to a CIK carry no date rather than a guessed one.
+
+Two defects worth recording, because both were silent and both produced plausible
+numbers. The daily index writes `20260814` where the quarterly writes `2026-05-07`, so a
+reader looking for an ISO date found none and matched inside the accession number
+instead — yielding four-digit CIKs and dates like `1371-26-00`, with the only symptom
+being a calendar containing no filing newer than the last completed quarter. And
+`max(end)` over a name's facts picks the dei cover-page date, not the period end: NetApp
+files sixteen facts dated 2026-04-24 and one dated 2026-05-28, so pairing the maximum
+with the filing measured cover-date-to-filing and reported an 8-day median lag for a form
+that takes a month. Every observed lag came out at exactly 8 — a distribution with no
+spread is the signature of measuring the wrong quantity, not of a punctual universe. The
+period end is now the mode across the name's facts, and the index parser reads columns
+positionally rather than hunting for a date.
+
 ### Reading the terminal
 
 The screener ledger pins rank and ticker, rules every fifth row rather than every row, and
