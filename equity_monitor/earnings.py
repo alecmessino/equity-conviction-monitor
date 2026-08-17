@@ -456,3 +456,29 @@ def write(path: str, payload: dict) -> str:
     with open(path, "w") as fh:
         json.dump(payload, fh, separators=(",", ":"))
     return path
+
+
+def mark_stale(path: str, *, reason: str, as_of: str) -> bool:
+    """Flag an already-published calendar as stale, in place.
+
+    A build that fails leaves the previous file on disk, and a calendar of plausible
+    dates is indistinguishable from a current one — which is how a board of zeros once
+    survived for weeks. Rather than delete the file (leaving the tab empty, which reads
+    as "no earnings due") or leave it silent, the payload records that it did not
+    refresh and why, and the terminal says so above the table.
+
+    Returns False when there is nothing to flag; never raises for an absent file.
+    """
+    if not os.path.exists(path):
+        return False
+    with open(path) as fh:
+        payload = json.load(fh)
+    payload["stale"] = True
+    payload["stale_reason"] = reason
+    payload["stale_since"] = as_of
+    payload["built_as_of"] = payload.get("as_of")
+    tmp = path + ".tmp"
+    with open(tmp, "w") as fh:
+        json.dump(payload, fh, separators=(",", ":"))
+    os.replace(tmp, path)
+    return True
