@@ -193,6 +193,65 @@ snapshot is structurally identical to a recorded one, so a mixed series cannot b
 and an Information Coefficient computed over it would be measuring the leak rather than the
 model. The refusal is a `realpath` check with its own exit code, not a convention.
 
+### Driving the terminal
+
+The terminal is addressed by **function code**, not only by clicking. `⌘K` / `Ctrl+K`
+opens the command bar; every code takes its argument inline, and anything that matches no
+code at all falls through to a fuzzy search over tickers and company names — including
+transpositions, so a mistyped code lands on the function you meant rather than on an error.
+
+| | | | |
+|---|---|---|---|
+| `DES <ticker>` tear sheet | `SCR [sector\|signal\|text]` screener | `RV <ticker>` sector peers | `PORT` book and sizing |
+| `WL` overnight diff | `MON` pipeline health | `SHK [pct]` price scenario | `TOP [n]` top N |
+| `FKQ [factor]` factor leaders | `CSV` export | `SEC` · `DQ` · `MTH` views | `HELP` list them all |
+
+Keyboard: `1`–`8` jump views, `J`/`K` walk the ledger, `g`/`G` and `PgUp`/`PgDn` move in
+bulk, `Enter` opens the row under the cursor, `R` peers, `S` scenario, `M` collapses the
+overview, `E` exports, `T` theme. `Esc` is a hierarchy rather than one action — command
+bar, then detail panel, then a pill or `TOP` selection, then the filters, then the cursor —
+because at any moment several things are open and dismissing the wrong one loses work.
+
+A **market & book overview** sits above all eight views: universe returns against the
+benchmark at six windows, breadth (a median says where the middle went, breadth says how
+many names went with it), the universe, the published book and the benchmark rebased to
+100 on an axis stepped from the data, and the fifteen model inputs ranked by how far the
+leading decile sits from the universe median on each.
+
+The ledger is **virtualised** — "Show all" is 1014 rows across 19 columns, and building
+all of them costs ~19,000 nodes on every keystroke in the search box. Only the visible
+window plus an overscan margin reaches the DOM; two spacer rows carry the rest of the
+height so the scrollbar still describes the real list. The row pitch lives in one CSS
+custom property that the virtualiser reads back, because a JS constant and a CSS rule that
+disagree by a pixel put the spacers out by a row every forty rows.
+
+Position sizing solves its three ceilings **together**. A per-position cap, a per-sector
+cap and a per-name liquidity cap set by ADV and participation cannot be applied in
+sequence: capping positions, redistributing, then capping sectors pushes weight back over
+the position ceiling, and only the last pass applied is actually satisfied. A convergent
+water-fill fills the free names in proportion to conviction, advances only as far as the
+first ceiling it would cross, freezes it and refills the remainder — bounded at
+names + sectors rounds. Whatever cannot be placed is **cash, reported as cash**; pushing
+refused size into the next name concentrates the book into whatever happened to be liquid
+and then presents that as the portfolio the model recommended.
+
+The scenario panel shocks every price and re-scores under the frozen specification. What
+moves: drawdown from the 52-week high, position against the 50- and 200-day averages, the
+vol-adjusted excess return, and the earnings and EBITDA yields. What does not: ROIC, gross
+margin, leverage, earnings stability — a one-day tape does not change what a business
+earns. A *uniform* shock therefore barely moves the board, and the panel says so rather
+than looking broken: every input is a percentile, and a monotone transform of an input
+cannot reorder a rank, so the entire effect runs through the drawdown gate. The dispersion
+slider scales each move by the name's own realised volatility, and that is what re-ranks.
+Nothing is written anywhere.
+
+The tear sheet fits an OLS channel to the **log** of the close. A line fitted to the level
+implies a constant dollar drift, so the same channel is proportionally four times as wide
+at $20 as at $80 and the name looks calmer the higher it goes; in logs the drift is a rate
+and the band a constant percentage. Drift is annualised only when the bars carry dates —
+the bundled `history.json` is a downsample, and multiplying its per-bar drift by 252
+reported a 2%-per-week trend as +265%/yr.
+
 ### Reading the terminal
 
 The screener ledger pins rank and ticker, rules every fifth row rather than every row, and

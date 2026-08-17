@@ -19,10 +19,17 @@
   --ink:#0b0b0b; --ink-2:#52514e; --muted:#898781;
   --grid:#e1e0d9; --axis:#c3c2b7; --border:rgba(11,11,11,.10);
   --s1:#2a78d6; --s2:#eb6834; --s3:#1baf7a;
-  --pos-pole:#2a78d6; --neg-pole:#e34948; --mid:#f0efec;
+  /* Diverging poles are teal/coral rather than blue/red. The sequential ramp is
+     already blue, so a blue positive pole made "high on this factor" and "above the
+     median" render in the same hue on the same screen; teal separates the diverging
+     scale from the sequential one without reaching for green/red. Measured on
+     --surface: teal 4.62:1, coral 4.03:1 — both used as fills and as text only above
+     the neutral band, where convInk() hands back --ink-2 instead. */
+  --pos-pole:#0e8c80; --neg-pole:#cf5638; --mid:#f0efec;
   --good:#006300; --bad:#d03b3b; --warn:#fab219;
   --seq-100:#cde2fb; --seq-250:#86b6ef; --seq-450:#2a78d6; --seq-650:#104281;
   --shadow:0 1px 2px rgba(11,11,11,.06),0 8px 24px rgba(11,11,11,.08);
+  --radius:8px;
 }
 @media (prefers-color-scheme: dark){
   :root:where(:not([data-theme="light"])){
@@ -31,7 +38,7 @@
     --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
     --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
     --s1:#3987e5; --s2:#d95926; --s3:#199e70;
-    --pos-pole:#3987e5; --neg-pole:#e66767; --mid:#383835;
+    --pos-pole:#2bb5a4; --neg-pole:#f0785a; --mid:#383835;
     --good:#0ca30c; --bad:#d03b3b; --warn:#fab219;
     --seq-100:#104281; --seq-250:#184f95; --seq-450:#3987e5; --seq-650:#9ec5f4;
     --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.5);
@@ -43,14 +50,18 @@
   --ink:#ffffff; --ink-2:#c3c2b7; --muted:#898781;
   --grid:#2c2c2a; --axis:#383835; --border:rgba(255,255,255,.10);
   --s1:#3987e5; --s2:#d95926; --s3:#199e70;
-  --pos-pole:#3987e5; --neg-pole:#e66767; --mid:#383835;
+  --pos-pole:#2bb5a4; --neg-pole:#f0785a; --mid:#383835;
   --good:#0ca30c; --bad:#d03b3b; --warn:#fab219;
   --seq-100:#104281; --seq-250:#184f95; --seq-450:#3987e5; --seq-650:#9ec5f4;
   --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 28px rgba(0,0,0,.5);
 }
 
 *{box-sizing:border-box}
-html,body{overflow-x:hidden}
+/* clip, not hidden. `overflow:hidden` on an ancestor makes it a scroll container, and
+   position:sticky then resolves against *that* box rather than the viewport — which is
+   why the topbar used to unstick the moment the ledger grew wide enough to matter.
+   `clip` cuts the overflow without creating a scroll port, so the sticky chain holds. */
+html,body{overflow-x:clip}
 body{
   margin:0;background:var(--plane);color:var(--ink);
   font-family:system-ui,-apple-system,"Segoe UI",sans-serif;
@@ -61,34 +72,56 @@ h1,h2,h3{margin:0;font-weight:600}
 a{color:var(--s1)}
 button{font:inherit;cursor:pointer}
 
-/* --- shell --- */
+/* --- shell ---
+   One sticky element, not three. Header, nav and the context strip used to stick
+   independently at hard-coded offsets (top:0 and top:53px), so any change to the
+   header's height — a wrapped chip on a narrow window is enough — either overlapped
+   the nav or left a transparent band the page scrolled through. They are one box now,
+   and the offsets are gone. */
+.topbar{position:sticky;top:0;z-index:40;background:var(--surface);
+  border-bottom:1px solid var(--border)}
+/* Anything scrolled to by id — the skip link, a card a function code jumped to — has to
+   clear the sticky topbar, or it lands underneath it and reads as having scrolled to
+   the wrong place. The height is measured and written back to --topbar-h, because the
+   header wraps at narrow widths and a hard-coded offset would be wrong exactly there. */
+:root{--topbar-h:140px}
+[id]{scroll-margin-top:calc(var(--topbar-h) + 8px)}
 header{
-  display:flex;align-items:center;gap:16px;flex-wrap:wrap;
-  padding:12px 20px;background:var(--surface);border-bottom:1px solid var(--border);
-  position:sticky;top:0;z-index:40;
+  display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  padding:7px 14px;background:var(--surface);border-bottom:1px solid var(--border);
 }
-.brand{font-size:14px;font-weight:600;letter-spacing:-.01em}
+.brand{font-size:13px;font-weight:600;letter-spacing:-.01em}
 .brand span{color:var(--muted);font-weight:400}
 .spacer{margin-left:auto}
 .chip{
-  display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;
+  display:inline-flex;align-items:center;gap:6px;padding:2px 8px;border-radius:999px;
   border:1px solid var(--border);background:var(--plane);
   font-size:11px;color:var(--ink-2);white-space:nowrap;
 }
 .chip b{font-weight:600;color:var(--ink)}
 .dot{width:7px;height:7px;border-radius:50%;flex:none}
 .btn{
-  padding:5px 11px;border-radius:7px;border:1px solid var(--border);
+  padding:4px 10px;border-radius:var(--radius);border:1px solid var(--border);
   background:var(--plane);color:var(--ink-2);font-size:12px;
 }
 .btn:hover{color:var(--ink);border-color:var(--axis)}
 .btn[aria-pressed="true"]{background:var(--s1);border-color:var(--s1);color:#fff}
+/* The keyboard is the primary interface here, so the shortcut is printed on the
+   control rather than hidden in a help panel nobody opens. */
+kbd{font-family:var(--mono);font-size:9.5px;border:1px solid var(--border);
+  border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--label);
+  background:var(--plane);white-space:nowrap}
 
 nav{
-  display:flex;gap:2px;padding:0 20px;background:var(--surface);
-  border-bottom:1px solid var(--border);position:sticky;top:53px;z-index:39;
+  display:flex;gap:2px;padding:0 14px;background:var(--surface);
+  border-bottom:1px solid var(--border);
   overflow-x:auto;
 }
+/* The function code is the address of the view — the command bar accepts it, the nav
+   prints it, so the two never have to be learned separately. */
+nav button .fn{font-family:var(--mono);font-size:9px;color:var(--label);
+  letter-spacing:.06em;margin-right:5px}
+nav button[aria-selected="true"] .fn{color:var(--s1)}
 .hm-row{display:grid;grid-template-columns:104px 1fr 92px;gap:8px;align-items:center;margin-bottom:3px}
 .hm-cells{display:flex;gap:2px}
 .hm-c{flex:1;height:13px;border-radius:2px;min-width:5px}
@@ -96,8 +129,8 @@ nav{
 .hm-sym{font-size:12px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sz-row{display:grid;grid-template-columns:88px 1fr 96px 128px;gap:10px;align-items:center;
   padding:3px 0;border-bottom:1px solid var(--rule);font-size:12px}
-.health-ribbon{display:flex;gap:8px;flex-wrap:wrap;align-items:center;
-  padding:6px 20px;background:var(--bg-2,rgba(0,0,0,.03));border-left:2px solid var(--s1);
+.health-ribbon{display:flex;gap:6px;flex-wrap:wrap;align-items:center;
+  padding:4px 14px;background:var(--bg-2,rgba(0,0,0,.03));border-left:2px solid var(--s1);
   border-bottom:1px solid var(--rule)}
 .hp{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:2px 9px;
   border-radius:11px;border:1px solid var(--rule);background:var(--bg);white-space:nowrap}
@@ -107,32 +140,43 @@ nav{
 .hp.act:hover{border-color:var(--s1);background:var(--bg-2)}
 .hp .dotc{width:6px;height:6px;border-radius:50%}
 nav button{
-  padding:9px 14px;border:0;background:none;color:var(--muted);font-size:12.5px;
+  padding:7px 11px;border:0;background:none;color:var(--muted);font-size:12px;
   border-bottom:2px solid transparent;white-space:nowrap;
 }
 nav button:hover{color:var(--ink-2)}
 nav button[aria-selected="true"]{color:var(--ink);border-bottom-color:var(--s1);font-weight:500}
 
-main{padding:16px 20px 48px;max-width:1680px;margin:0 auto}
+/* --- context strip: what the board below is currently filtered to ---------
+   The third row of the topbar. A screener showing 38 rows because a pill selection is
+   live looks identical to one showing 38 rows because that is the whole universe, and
+   the difference is the entire meaning of the screen. */
+.ctx{display:flex;align-items:center;gap:8px;flex-wrap:wrap;padding:4px 14px;
+  background:var(--plane);font-size:11px;color:var(--label);min-height:26px}
+.ctx b{color:var(--ink);font-variant-numeric:tabular-nums}
+.ctx-sep{color:var(--axis)}
+.ctx-clear{border:0;background:none;color:var(--s1);font-size:11px;padding:0}
+.ctx-clear:hover{text-decoration:underline}
+
+main{padding:10px 14px 40px;max-width:1680px;margin:0 auto}
 .view[hidden]{display:none}
 
 /* --- cards --- */
 .card{
-  background:var(--surface);border:1px solid var(--border);border-radius:10px;
-  padding:14px 16px;min-width:0;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
+  padding:11px 13px;min-width:0;
 }
 /* Both forms: several cards now put the heading inside .card-head beside a control,
    at which point the direct-child selector stops matching and the heading silently
    falls back to a 16px bold h2 — the one styling rule card titles have. */
 .card>h2,.card-head>h2{
-  font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
-  font-weight:600;margin-bottom:10px;
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
+  font-weight:600;margin-bottom:8px;
 }
-.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.card-head{display:flex;align-items:baseline;justify-content:space-between;gap:10px;flex-wrap:wrap}
 .card-head>h2{margin-bottom:0}
-.card-note{color:var(--muted);font-size:11px;margin-top:10px;line-height:1.5}
-.row{display:grid;gap:12px;margin-bottom:12px}
-.strip{grid-template-columns:repeat(auto-fit,minmax(178px,1fr))}
+.card-note{color:var(--muted);font-size:11px;margin-top:8px;line-height:1.5}
+.row{display:grid;gap:10px;margin-bottom:10px}
+.strip{grid-template-columns:repeat(auto-fit,minmax(168px,1fr))}
 /* Cards stretch to the row height rather than sitting at their natural height. With
    align-items:start a short card leaves the page background showing beside a tall one,
    which reads as a panel that failed to render rather than as a panel with slack in it. */
@@ -151,7 +195,7 @@ main{padding:16px 20px 48px;max-width:1680px;margin:0 auto}
 .up{color:var(--good)}.down{color:var(--bad)}
 
 /* --- tables --- */
-.tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:70vh;border-radius:8px}
+.tbl-wrap{overflow-x:auto;overflow-y:auto;max-height:70vh;border-radius:var(--radius)}
 /* A scroll box whose height is not a multiple of the row height cuts its last row
    through the middle, and a half-drawn row reads as a broken panel rather than as more
    content below. A sticky pseudo-element stays pinned to the bottom of the scroll port
@@ -161,7 +205,7 @@ main{padding:16px 20px 48px;max-width:1680px;margin:0 auto}
   margin-top:-26px;pointer-events:none;
   background:linear-gradient(transparent,var(--surface))}
 table{width:100%;border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums}
-th,td{padding:6px 9px;text-align:right;font-size:12px;white-space:nowrap}
+th,td{padding:4px 8px;text-align:right;font-size:12px;white-space:nowrap}
 th{
   position:sticky;top:0;z-index:2;background:var(--surface);
   color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em;
@@ -196,9 +240,9 @@ tbody tr:hover td{background:var(--plane)}
 .imputed{color:var(--muted);font-style:italic}
 
 /* --- filters --- */
-.filters{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
-select,input[type=search]{
-  font:inherit;font-size:12px;padding:5px 9px;border-radius:7px;
+.filters{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+select,input[type=search],input[type=number]{
+  font:inherit;font-size:12px;padding:4px 8px;border-radius:var(--radius);
   border:1px solid var(--border);background:var(--plane);color:var(--ink);
 }
 input[type=search]{min-width:150px}
@@ -243,7 +287,7 @@ svg{display:block;max-width:100%;overflow:visible}
 /* tooltip */
 #tip{
   position:fixed;z-index:80;pointer-events:none;opacity:0;transition:opacity .1s;
-  background:var(--raised);border:1px solid var(--border);border-radius:8px;
+  background:var(--raised);border:1px solid var(--border);border-radius:var(--radius);
   box-shadow:var(--shadow);padding:8px 10px;font-size:11.5px;max-width:250px;
 }
 #tip.on{opacity:1}
@@ -307,7 +351,7 @@ td .pending{max-width:520px;white-space:normal}
 .prose li{margin-bottom:4px}
 .banner{
   border:1px solid var(--border);border-left:3px solid var(--warn);
-  background:var(--surface);border-radius:8px;padding:10px 14px;margin-bottom:12px;
+  background:var(--surface);border-radius:var(--radius);padding:9px 12px;margin-bottom:10px;
   font-size:12px;color:var(--ink-2);
 }
 /* --- monitor --- */
@@ -325,9 +369,12 @@ td .pending{max-width:520px;white-space:normal}
 }
 .sub-h{font-size:10.5px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);
   font-weight:600;margin-bottom:8px}
-.states{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+.states{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}
+/* Borderless. A 1px rule around a tile whose background already separates it from the
+   card is a second separator doing the first one's job, and at this density eleven of
+   them read as a grid of buttons rather than as readings. */
 .state{
-  border:1px solid var(--border);border-radius:8px;background:var(--plane);
+  border:0;border-radius:var(--radius);background:var(--plane);
   padding:6px 10px;min-width:96px;
 }
 .state-k{font-size:9.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
@@ -443,15 +490,15 @@ table.mig th.l,table.mig td.l,
 
 /* --- macro rail: four 90px cards collapsed to one strip ------------------- */
 .rail{
-  display:flex;flex-wrap:wrap;padding:0;overflow:hidden;margin-bottom:12px;
-  background:var(--surface);border:1px solid var(--border);border-radius:10px;
+  display:flex;flex-wrap:wrap;padding:0;overflow:hidden;margin-bottom:10px;
+  background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);
 }
 .rail-tag{
-  display:flex;align-items:center;padding:10px 16px;border-right:1px solid var(--border);
+  display:flex;align-items:center;padding:8px 13px;border-right:1px solid var(--border);
   font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--label);font-weight:600;
 }
 .rail-cell{
-  display:flex;align-items:center;gap:12px;padding:8px 18px;flex:1 1 210px;min-width:0;
+  display:flex;align-items:center;gap:10px;padding:6px 14px;flex:1 1 200px;min-width:0;
   border-right:1px solid var(--border);
 }
 .rail-cell:last-child{border-right:0}
@@ -475,8 +522,8 @@ table.mig th.l,table.mig td.l,
    The pressed state is white on --seq-650, not on --s1: white on --s1 measures
    4.42:1 light and 3.64:1 dark, both under AA for 11px text. --seq-650 is
    9.91:1 in light mode; in dark it is a pale blue, so the ink flips. */
-.seg{display:flex;gap:2px;padding:2px;border:1px solid var(--border);border-radius:7px;background:var(--plane)}
-.seg button{padding:3px 10px;border:0;border-radius:5px;font-size:11px;background:none;color:var(--ink-2)}
+.seg{display:flex;gap:2px;padding:2px;border:1px solid var(--border);border-radius:var(--radius);background:var(--plane)}
+.seg button{padding:3px 9px;border:0;border-radius:5px;font-size:11px;background:none;color:var(--ink-2)}
 .seg button:hover{color:var(--ink)}
 .seg button[aria-pressed="true"]{background:var(--seq-650);color:#fff}
 @media (prefers-color-scheme: dark){
@@ -486,16 +533,16 @@ table.mig th.l,table.mig td.l,
 .seg button:focus-visible{outline:2px solid var(--s1);outline-offset:1px}
 
 /* --- position sizing sandbox --------------------------------------------- */
-.sbx{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
-.sbx-ctl{display:flex;flex-direction:column;gap:14px}
+.sbx{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(290px,1fr))}
+.sbx-ctl{display:flex;flex-direction:column;gap:11px}
 .sbx-k{
   display:flex;justify-content:space-between;align-items:baseline;margin-bottom:2px;
   font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--label);font-weight:600;
 }
 .sbx-k b{font-family:var(--mono);font-size:12px;color:var(--ink);font-weight:600}
 .sbx-ctl input[type=range]{width:100%}
-.sbx-stats{display:grid;gap:8px;align-content:start;grid-template-columns:repeat(auto-fit,minmax(132px,1fr))}
-.sbx-stat{background:var(--plane);border:1px solid var(--border);border-radius:8px;padding:9px 11px}
+.sbx-stats{display:grid;gap:6px;align-content:start;grid-template-columns:repeat(auto-fit,minmax(128px,1fr))}
+.sbx-stat{background:var(--plane);border:0;border-radius:var(--radius);padding:7px 10px}
 .sbx-stat .k{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--label);white-space:nowrap}
 .sbx-stat .v{font-family:var(--mono);font-size:18px;font-weight:600;letter-spacing:-.02em}
 .sbx-stat .s{font-size:10.5px;color:var(--label)}
@@ -511,6 +558,179 @@ table.mig th.l,table.mig td.l,
 }
 
 /* ===========================================================================
+   COMMAND BAR — function codes, the way a desk terminal is actually driven
+   ---------------------------------------------------------------------------
+   A screener with eight tabs, six filters and a detail panel has more reachable
+   states than a mouse can address in one gesture. The codes are the address bar:
+   DES AAPL goes to a tear sheet from anywhere, in two keystrokes plus a ticker,
+   without first finding the row it lives in.
+   ========================================================================= */
+#cmdk{position:fixed;inset:0;z-index:90;display:none;background:rgba(0,0,0,.34)}
+#cmdk.open{display:block}
+.cmdk-box{
+  width:min(680px,calc(100vw - 24px));margin:9vh auto 0;background:var(--raised);
+  border:1px solid var(--border);border-radius:var(--radius);box-shadow:var(--shadow);
+  overflow:hidden;
+}
+.cmdk-in{
+  display:flex;align-items:center;gap:9px;padding:9px 12px;
+  border-bottom:1px solid var(--border);
+}
+.cmdk-in span{font-family:var(--mono);font-size:11px;color:var(--s1);flex:none}
+#cmdk-input{
+  flex:1;border:0;background:none;color:var(--ink);font-family:var(--mono);
+  font-size:15px;letter-spacing:.02em;padding:0;outline:none;text-transform:uppercase;
+}
+#cmdk-input::placeholder{color:var(--muted);text-transform:none;letter-spacing:0}
+.cmdk-list{max-height:min(52vh,420px);overflow-y:auto}
+.cmdk-row{
+  display:grid;grid-template-columns:74px 1fr auto;gap:10px;align-items:baseline;
+  padding:6px 12px;cursor:pointer;border-bottom:1px solid var(--grid);
+}
+.cmdk-row:last-child{border-bottom:0}
+/* The selection needs to survive a glance across fourteen near-identical rows, and a
+   background tint alone measures about 3% against --raised. A solid accent on the
+   leading edge carries it without tinting the text. */
+.cmdk-row{border-left:3px solid transparent}
+.cmdk-row[aria-selected="true"]{background:var(--hover);border-left-color:var(--s1)}
+.cmdk-code{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--s1)}
+.cmdk-desc{font-size:12px;color:var(--ink-2);white-space:normal;line-height:1.35}
+.cmdk-arg{font-family:var(--mono);font-size:10px;color:var(--label);white-space:nowrap}
+.cmdk-foot{padding:6px 12px;background:var(--plane);font-size:10.5px;color:var(--label);
+  display:flex;gap:12px;flex-wrap:wrap}
+.cmdk-empty{padding:14px 12px;font-size:12px;color:var(--label)}
+
+/* ===========================================================================
+   MARKET & BOOK OVERVIEW — the layer above every view
+   ---------------------------------------------------------------------------
+   Collapsible, because on a 13" screen it is the difference between the ledger
+   starting above the fold and not. `M` toggles it; the state persists.
+   ========================================================================= */
+.ovw{margin-bottom:10px}
+.ovw-head{
+  display:flex;align-items:center;gap:9px;padding:4px 0 6px;cursor:pointer;
+  font-size:9.5px;text-transform:uppercase;letter-spacing:.09em;color:var(--label);
+  font-weight:600;user-select:none;background:none;border:0;width:100%;text-align:left;
+}
+.ovw-head .caret{font-size:8px;color:var(--muted);transition:transform .12s}
+.ovw[data-open="false"] .caret{transform:rotate(-90deg)}
+.ovw[data-open="false"] .ovw-body{display:none}
+.ovw-head .sum{margin-left:auto;font-weight:400;letter-spacing:0;text-transform:none;
+  font-size:11px;color:var(--label);font-family:var(--mono)}
+/* Three columns, not two. Cards in a row stretch to the tallest of them, and the
+   factor ranking is roughly twice the height of the returns panel — side by side that
+   left half of the overview a card with 400px of nothing under its last bar, which
+   reads as a panel that failed to render rather than one with slack in it. Split three
+   ways the columns come out within a hundred pixels of each other. */
+.ovw-body{display:grid;gap:10px;
+  grid-template-columns:minmax(0,1fr) minmax(0,1.2fr) minmax(0,1fr)}
+@media (max-width:1340px){.ovw-body{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}}
+@media (max-width:860px){.ovw-body{grid-template-columns:1fr}}
+
+/* return boxes: one period per box, universe median against the benchmark */
+.rets{display:grid;gap:4px;grid-template-columns:repeat(3,minmax(0,1fr))}
+.ret-box{background:var(--plane);border-radius:var(--radius);padding:6px 8px;min-width:0}
+.ret-k{font-size:9px;text-transform:uppercase;letter-spacing:.08em;color:var(--label)}
+.ret-v{font-family:var(--mono);font-size:15px;font-weight:600;letter-spacing:-.02em;
+  line-height:1.25}
+.ret-b{font-family:var(--mono);font-size:10px;color:var(--label);white-space:nowrap}
+/* A 2px cap on the box, not a coloured background: the sign is already on the number,
+   and a tinted panel behind tabular figures costs more contrast than it buys. */
+.ret-box.up{box-shadow:inset 0 2px 0 var(--pos-pole)}
+.ret-box.down{box-shadow:inset 0 2px 0 var(--neg-pole)}
+
+/* breadth: advancers/decliners and trend participation */
+.breadth{display:flex;flex-direction:column;gap:6px;margin-top:8px}
+.br-row{display:grid;grid-template-columns:112px 1fr 74px;gap:8px;align-items:center;
+  font-size:11px}
+.br-track{height:9px;border-radius:5px;background:var(--grid);overflow:hidden;display:flex}
+.br-track i{display:block;height:100%}
+.br-val{font-family:var(--mono);font-size:11px;text-align:right;color:var(--ink-2)}
+
+/* factor ranking: which inputs the top of the board is actually leaning on */
+.frank{display:flex;flex-direction:column;gap:2px}
+.frank-row{display:grid;grid-template-columns:18px 132px 1fr 52px;gap:8px;
+  align-items:center;font-size:11px;padding:1px 0;cursor:pointer;border-radius:4px}
+.frank-row:hover{background:var(--hover)}
+.frank-n{font-family:var(--mono);font-size:10px;color:var(--muted);text-align:right}
+.frank-track{height:11px;position:relative;background:var(--plane);border-radius:3px}
+.frank-zero{position:absolute;top:0;bottom:0;width:1px;background:var(--axis);left:50%}
+.frank-bar{position:absolute;top:2px;bottom:2px;border-radius:2px}
+.frank-v{font-family:var(--mono);font-size:11px;text-align:right}
+
+/* borderless sector boxes: the sector board as a field of tiles */
+.secgrid{display:grid;gap:4px;grid-template-columns:repeat(auto-fit,minmax(148px,1fr))}
+.secbox{
+  border:0;border-radius:var(--radius);background:var(--plane);padding:7px 9px;
+  min-width:0;cursor:pointer;text-align:left;font:inherit;display:block;
+  border-left:3px solid transparent;
+}
+.secbox:hover{background:var(--hover)}
+.secbox[aria-pressed="true"]{background:var(--hover);border-left-color:var(--s1)}
+.secbox .k{font-size:10.5px;color:var(--ink-2);white-space:nowrap;overflow:hidden;
+  text-overflow:ellipsis;display:block}
+.secbox .v{font-family:var(--mono);font-size:17px;font-weight:600;letter-spacing:-.02em}
+.secbox .s{font-size:10px;color:var(--label);font-family:var(--mono)}
+
+/* ===========================================================================
+   VIRTUALISED LEDGER + ROW CURSOR
+   ---------------------------------------------------------------------------
+   "Show all" is 1014 rows × 19 cells. Rendering them costs ~19k nodes on every
+   keystroke in the search box, and the browser spends it laying out rows nobody
+   can see. Only the visible window plus an overscan margin reaches the DOM; two
+   spacer rows hold the scroll height so the scrollbar still tells the truth.
+   Fixed row height is what makes the arithmetic exact — it is set here rather
+   than measured, because a measured height read from a hidden view is zero.
+   ========================================================================= */
+/* One source for the row pitch. The virtualiser reads it back off the custom property
+   rather than carrying its own copy — a JS constant and a CSS rule that disagree by a
+   pixel put the spacer height out by a row every forty rows, and the table drifts. */
+:root{--row-h:32px}
+#grid tbody tr{height:var(--row-h)}
+#grid tbody td{padding:3px 8px}
+#grid tbody td.conv{font-size:13px}
+#grid .pin-sym{line-height:1.15}
+#grid .pin-sym .sym{font-size:11.5px}
+#grid .co{display:block;font-size:9.5px;line-height:1.15;max-width:150px;color:var(--label)}
+#grid tbody tr.vspace:hover > td{background:none}
+#grid tbody tr.vspace td{padding:0;border:0;background:none}
+/* The keyboard cursor. A background alone is indistinguishable from :hover, and the
+   two are live at the same time whenever the pointer is resting anywhere over the
+   table — so the cursor carries a rule the hover state does not. */
+#grid tbody tr.cursor > td{background:var(--hover);border-bottom-color:var(--s1)}
+#grid tbody tr.cursor .pin{background:var(--hover)}
+#grid tbody tr.cursor .pin-rank{
+  box-shadow:inset 3px 0 0 var(--s1);color:var(--ink);font-weight:600;
+}
+
+/* ===========================================================================
+   SCENARIO DRAWER — a shock applied to the board, never to the ledger
+   ========================================================================= */
+.shk{display:grid;gap:10px 20px;grid-template-columns:repeat(auto-fit,minmax(280px,1fr))}
+/* The readout below the sliders: a row of stat tiles, then the reading under them.
+   The tiles are capped rather than stretched — four tiles across a 1500px card would
+   otherwise be 370px each to hold a three-digit number. */
+#shk-out{display:flex;flex-direction:column;gap:8px}
+#shk-out .sbx-stats{grid-template-columns:repeat(auto-fit,minmax(140px,190px));
+  justify-content:start}
+#shk-out .card-note{max-width:96ch;margin-top:0}
+.shk-k{display:flex;justify-content:space-between;align-items:baseline;
+  font-size:10.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--label);
+  font-weight:600;margin-bottom:2px}
+.shk-k b{font-family:var(--mono);font-size:12px;color:var(--ink)}
+.shk input[type=range]{width:100%}
+
+/* ===========================================================================
+   TEAR SHEET — OLS channel overlays
+   ========================================================================= */
+.ovl{display:flex;gap:4px;flex-wrap:wrap;margin:6px 0 4px}
+.ovl button{
+  font-size:10px;padding:2px 7px;border-radius:5px;border:1px solid var(--border);
+  background:var(--plane);color:var(--label);font-family:var(--mono);
+}
+.ovl button[aria-pressed="true"]{color:var(--ink);border-color:var(--axis);background:var(--hover)}
+
+/* ===========================================================================
    CLIENT REVIEW MODE — reserved, not switched on. Set data-audience="client"
    on <html> and every block tagged data-desk-only disappears. One attribute,
    one rule; there is no second template to keep in sync.
@@ -523,6 +743,9 @@ table.mig th.l,table.mig td.l,
 <body>
 <a class="skip" href="#screener">Skip to screener</a>
 
+<!-- One sticky box: header, nav, health ribbon and the context strip travel together.
+     See the .topbar rule for why this is not three independently sticky elements. -->
+<div class="topbar">
 <header>
   <div class="brand">Equity Conviction Monitor <span id="hdr-model">·</span></div>
   <span class="chip" id="hdr-status"><span class="dot"></span><span>loading</span></span>
@@ -530,24 +753,64 @@ table.mig th.l,table.mig td.l,
   <span class="chip" id="hdr-coverage" title="Share of scored names carrying a real, filing-derived value for each quality input"></span>
   <button class="chip" id="hdr-health" hidden></button>
   <div class="spacer"></div>
-  <button class="btn" id="csv">Export CSV</button>
-  <button class="btn" id="theme" title="Toggle light/dark">Theme</button>
+  <button class="btn" id="cmd-open" title="Function codes — DES, SCR, RV, PORT, WL, MON, SHK, TOP, FKQ, CSV">
+    <span style="font-family:var(--mono)">⌘K</span> Command</button>
+  <button class="btn" id="csv" title="Export the scored board as CSV (E)">Export CSV</button>
+  <button class="btn" id="theme" title="Toggle light/dark (T)">Theme</button>
 </header>
 
 <nav role="tablist">
-  <button role="tab" aria-selected="true" data-view="screener">Screener</button>
-  <button role="tab" aria-selected="false" data-view="watchlist">Watchlist diff</button>
-  <button role="tab" aria-selected="false" data-view="sectors">Sectors</button>
-  <button role="tab" aria-selected="false" data-view="research">Research</button>
-  <button role="tab" aria-selected="false" data-view="portfolio">Portfolio</button>
-  <button role="tab" aria-selected="false" data-view="data">Data quality</button>
-  <button role="tab" aria-selected="false" data-view="monitor">Monitor</button>
-  <button role="tab" aria-selected="false" data-view="method">Method</button>
+  <button role="tab" aria-selected="true"  data-view="screener"  data-fn="SCR"  title="1 · SCR"><span class="fn">SCR</span>Screener</button>
+  <button role="tab" aria-selected="false" data-view="watchlist" data-fn="WL"   title="2 · WL"><span class="fn">WL</span>Watchlist diff</button>
+  <button role="tab" aria-selected="false" data-view="sectors"   data-fn="SEC"  title="3 · SEC"><span class="fn">SEC</span>Sectors</button>
+  <button role="tab" aria-selected="false" data-view="research"  data-fn="FKQ"  title="4 · FKQ"><span class="fn">FKQ</span>Research</button>
+  <button role="tab" aria-selected="false" data-view="portfolio" data-fn="PORT" title="5 · PORT"><span class="fn">PORT</span>Portfolio</button>
+  <button role="tab" aria-selected="false" data-view="data"      data-fn="DQ"   title="6 · DQ"><span class="fn">DQ</span>Data quality</button>
+  <button role="tab" aria-selected="false" data-view="monitor"   data-fn="MON"  title="7 · MON"><span class="fn">MON</span>Monitor</button>
+  <button role="tab" aria-selected="false" data-view="method"    data-fn="MTH"  title="8 · MTH"><span class="fn">MTH</span>Method</button>
 </nav>
 <div class="health-ribbon" id="health" hidden></div>
+<div class="ctx" id="ctx"></div>
+</div>
 
 <main>
   <div id="alert"></div>
+
+  <!-- ===== MARKET & BOOK OVERVIEW =====
+       Above every view, not inside the screener: the question "what is the tape doing
+       and what is the book made of" is the one asked before any of the eight tabs. -->
+  <section class="ovw" id="ovw" data-open="true">
+    <button class="ovw-head" id="ovw-toggle" aria-expanded="true" aria-controls="ovw-body">
+      <span class="caret" aria-hidden="true">▼</span>
+      <span>Market &amp; book overview</span>
+      <span class="sum" id="ovw-sum"></span>
+    </button>
+    <div class="ovw-body" id="ovw-body">
+      <div class="card">
+        <div class="card-head">
+          <h2>Universe returns &amp; breadth</h2>
+          <span class="count" style="margin:0" id="ovw-bench-note"></span>
+        </div>
+        <div class="rets" id="ovw-rets"></div>
+        <div class="breadth" id="ovw-breadth"></div>
+      </div>
+      <div class="card">
+        <div class="card-head">
+          <h2>Normalised — universe, book and benchmark</h2>
+          <div class="seg" id="ovw-span" role="group" aria-label="Window">
+            <button type="button" data-span="21"  aria-pressed="false">1M</button>
+            <button type="button" data-span="63"  aria-pressed="false">3M</button>
+            <button type="button" data-span="0"   aria-pressed="true">Max</button>
+          </div>
+        </div>
+        <div id="ovw-norm"></div>
+      </div>
+      <div class="card">
+        <h2>Factor ranking — what the top decile is leaning on</h2>
+        <div id="ovw-frank"></div>
+      </div>
+    </div>
+  </section>
 
   <!-- macro regime -->
   <!-- Global: shared by every view, not part of the screener. Four 90px cards
@@ -708,6 +971,10 @@ table.mig th.l,table.mig td.l,
             <input type="range" id="sbx-max" min="2" max="15" step="0.5" value="6" aria-valuetext="6.0%">
           </div>
           <div>
+            <label class="sbx-k" for="sbx-sector"><span>Max single sector</span><b id="sbx-sector-v">30%</b></label>
+            <input type="range" id="sbx-sector" min="10" max="100" step="5" value="30" aria-valuetext="30%">
+          </div>
+          <div>
             <div class="sbx-k"><span>Sizing rule</span></div>
             <div class="seg" id="sbx-rule" role="group" aria-label="Sizing rule">
               <button type="button" data-rule="equal" aria-pressed="false">Equal</button>
@@ -761,6 +1028,17 @@ table.mig th.l,table.mig td.l,
 
   <!-- ================= SECTORS ================= -->
   <div class="view" id="view-sectors" hidden>
+    <div class="card" style="margin-bottom:10px">
+      <div class="card-head">
+        <h2>Sector board</h2>
+        <span class="count" style="margin:0">Click a tile to filter the screener to it</span>
+      </div>
+      <div class="secgrid" id="secgrid"></div>
+      <p class="card-note">Median conviction per sector, with the deviation from the
+        universe median on the left edge. Borderless: the tile's own surface already
+        separates it from the card, and a rule around each of eleven would read as a
+        row of buttons rather than as readings.</p>
+    </div>
     <div class="row split">
       <div class="card">
         <h2>Sector conviction vs. the universe median</h2>
@@ -835,19 +1113,56 @@ table.mig th.l,table.mig td.l,
   <div class="view" id="view-portfolio" hidden>
     <div class="row strip" id="pf-kpis"></div>
 
+    <!-- ===== SCENARIO ===== reachable with S, or SHK from the command bar -->
+    <div class="card" id="scenario-card" style="margin-bottom:10px">
+      <div class="card-head">
+        <h2>Scenario — shock the board</h2>
+        <span class="count" style="margin:0">SHK · applied in the browser, never to the ledger</span>
+      </div>
+      <div class="shk">
+        <div>
+          <label class="shk-k" for="shk-px"><span>Price shock</span><b id="shk-px-v">0.0%</b></label>
+          <input type="range" id="shk-px" min="-40" max="20" step="1" value="0"
+                 aria-valuetext="0.0%">
+          <p class="card-note" style="margin-top:4px">Moves every price by the same
+            amount, then re-ranks momentum, valuation and drawdown and re-scores the
+            board under the frozen specification.</p>
+        </div>
+        <div>
+          <label class="shk-k" for="shk-beta"><span>Dispersion (β spread)</span><b id="shk-beta-v">0.0×</b></label>
+          <input type="range" id="shk-beta" min="0" max="20" step="1" value="0"
+                 aria-valuetext="0.0×">
+          <p class="card-note" style="margin-top:4px">Scales each name's move by its own
+            realised volatility relative to the universe median, so a high-beta name
+            falls further than a utility in the same tape.</p>
+        </div>
+      </div>
+      <!-- Outside the control grid, not a third column in it. The readout is twice the
+           height of a slider, and as a grid sibling it stretched the row and left the
+           two controls floating at the top of 300px of nothing. -->
+      <div id="shk-out" style="margin-top:10px"></div>
+      <div id="shk-table" style="margin-top:10px"></div>
+    </div>
+
     <div class="card" id="sizing-card">
       <div class="card-head">
-        <h2>Position sizing — liquidity-constrained</h2>
+        <h2>Position sizing — position, sector and liquidity constraints together</h2>
         <span class="tag-new">New</span>
       </div>
-      <div class="row" style="gap:12px;align-items:center;margin-bottom:10px">
-        <label style="font-size:12px;color:var(--ink-3)">Book $
+      <div class="filters" style="align-items:center">
+        <label style="font-size:12px;color:var(--ink-2)">Book $
           <input type="number" id="sz-notional" min="0" step="10000" value="1000000"
-                 style="width:130px;margin-left:6px"></label>
-        <label style="font-size:12px;color:var(--ink-3)" title="Share of average daily dollar volume you are willing to be. Above a few percent your own order is the price.">Participation %
+                 style="width:126px;margin-left:6px"></label>
+        <label style="font-size:12px;color:var(--ink-2)" title="Share of average daily dollar volume you are willing to be. Above a few percent your own order is the price.">Participation %
           <input type="number" id="sz-participation" min="0.1" max="25" step="0.5" value="2"
-                 style="width:70px;margin-left:6px"></label>
-        <span id="sz-note" class="card-note" style="margin:0"></span>
+                 style="width:66px;margin-left:6px"></label>
+        <label style="font-size:12px;color:var(--ink-2)" title="Ceiling on any single line, as a share of the book">Max position %
+          <input type="number" id="sz-maxpos" min="0.5" max="25" step="0.5" value="6"
+                 style="width:66px;margin-left:6px"></label>
+        <label style="font-size:12px;color:var(--ink-2)" title="Ceiling on the total weight of any one GICS sector">Max sector %
+          <input type="number" id="sz-maxsec" min="5" max="100" step="1" value="30"
+                 style="width:66px;margin-left:6px"></label>
+        <span id="sz-note" class="count" style="margin:0"></span>
       </div>
       <div id="sizing"></div>
     </div>
@@ -1093,6 +1408,27 @@ table.mig th.l,table.mig td.l,
   <div class="panel-body" id="p-body"></div>
 </aside>
 
+<!-- ===== COMMAND BAR ===== -->
+<div id="cmdk" role="dialog" aria-modal="true" aria-label="Function code">
+  <div class="cmdk-box">
+    <div class="cmdk-in">
+      <span aria-hidden="true">&gt;</span>
+      <input id="cmdk-input" autocomplete="off" spellcheck="false"
+             placeholder="Function code, or a ticker — DES AAPL, TOP 25, FKQ roic, SHK -10"
+             aria-label="Function code" aria-autocomplete="list" aria-controls="cmdk-list">
+    </div>
+    <div class="cmdk-list" id="cmdk-list" role="listbox" aria-label="Matching functions"></div>
+    <div class="cmdk-foot">
+      <span><kbd>↑</kbd><kbd>↓</kbd> select</span>
+      <span><kbd>⏎</kbd> run</span>
+      <span><kbd>esc</kbd> close</span>
+      <span><kbd>1</kbd>–<kbd>8</kbd> views · <kbd>J</kbd><kbd>K</kbd> rows ·
+        <kbd>R</kbd> peers · <kbd>S</kbd> scenario · <kbd>M</kbd> overview ·
+        <kbd>E</kbd> export · <kbd>T</kbd> theme</span>
+    </div>
+  </div>
+</div>
+
 <div id="tip" role="tooltip"></div>
 
 <script>
@@ -1282,7 +1618,15 @@ function sparkline(values,w,h,stroke,opts){
 /* ---------- state ---------- */
 const S={ledger:null, rows:[], hist:{}, macro:null, mon:null, wl:null, edge:null,
          health:null, flipSet:null,
-         sort:{k:'conviction',dir:-1}};
+         sort:{k:'conviction',dir:-1},
+         // command-bar and keyboard state
+         cursor:-1,           // row index into S.shown, -1 = no cursor
+         topN:0,              // TOP n, 0 = off
+         rvSymbol:null,       // the name an RV peer view is centred on
+         view:'screener',
+         ovwSpan:0,           // normalised-chart window in sessions, 0 = max
+         shock:{px:0,beta:0},
+         ovl:{ols:true, band:true, ma50:true, ma200:false, range:true}};
 
 async function boot(){
   const p=location.pathname;
@@ -1317,7 +1661,10 @@ async function boot(){
   renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
   buildSectorFilter(); renderGrid(); renderSectors(); renderPortfolio(); renderData();
   renderAlpha(); renderEdge(); renderHealth(); renderSizing(); renderPersistence();
-  renderWatchlist(); renderMonitor();
+  renderWatchlist(); renderMonitor(); renderOverview(); renderScenario();
+  // Last: the health ribbon un-hides itself during the pass above, so the topbar is
+  // taller now than it was when the stylesheet's default was written.
+  measureTopbar();
 }
 
 /* ---------- header ---------- */
@@ -1671,12 +2018,62 @@ function filtered(){
   const q=$('#f-q').value.trim().toLowerCase();
   const sec=$('#f-sector').value, sig=$('#f-signal').value;
   const conf=parseFloat($('#f-conf').value)||0;
-  return S.rows.filter(r=>
+  let out=S.rows.filter(r=>
        (!q || r.symbol.toLowerCase().includes(q) || (r.name||'').toLowerCase().includes(q))
     && (!sec || r.sector===sec)
     && (!sig || r.signal===sig)
     && ((r.data_confidence??1)>=conf));
+  // TOP n from the command bar. Applied after the ordinary filters and always by
+  // conviction, so `SCR Financials` then `TOP 20` reads as "the twenty best financials"
+  // rather than the twenty that happened to sort first under whatever column is live.
+  if(S.topN>0) out=[...out].sort((a,b)=>b.conviction-a.conviction).slice(0,S.topN);
+  return out;
 }
+
+/* ---------- context strip ----------
+   A screener showing 38 rows because a pill selection is live looks exactly like one
+   showing 38 rows because that is the universe, and the difference is what the screen
+   means. Every narrowing in force is named here with the control that clears it. */
+function renderContext(){
+  const host=$('#ctx'); if(!host) return;
+  const bits=[];
+  const shown=(S.shown||[]).length, scored=S.rows.length;
+  bits.push(`<span><b>${shown}</b> of <b>${scored}</b> scored</span>`);
+  if(S.flipSet && S.flipSet.size)
+    bits.push(`<span>pill selection · <b>${S.flipSet.size}</b> names</span>`
+            + `<button class="ctx-clear" data-clear="flip">clear</button>`);
+  if(S.topN>0)
+    bits.push(`<span>TOP <b>${S.topN}</b> by conviction</span>`
+            + `<button class="ctx-clear" data-clear="top">clear</button>`);
+  const q=$('#f-q')&&$('#f-q').value.trim();
+  if(q) bits.push(`<span>search “<b>${esc(q)}</b>”</span>`
+                + `<button class="ctx-clear" data-clear="q">clear</button>`);
+  const sec=$('#f-sector')&&$('#f-sector').value;
+  if(sec) bits.push(`<span>${esc(sec)}${S.rvSymbol?` · peers of <b>${esc(S.rvSymbol)}</b>`:''}</span>`
+                  + `<button class="ctx-clear" data-clear="sector">clear</button>`);
+  const sig=$('#f-signal')&&$('#f-signal').value;
+  if(sig) bits.push(`<span>signal <b>${esc(sig)}</b></span>`
+                  + `<button class="ctx-clear" data-clear="signal">clear</button>`);
+  const conf=$('#f-conf')&&parseFloat($('#f-conf').value)||0;
+  if(conf) bits.push(`<span>confidence ≥ <b>${(conf*100).toFixed(0)}%</b></span>`
+                   + `<button class="ctx-clear" data-clear="conf">clear</button>`);
+  const cur=cursorRow();
+  if(cur) bits.push(`<span>cursor <b>${esc(cur.symbol)}</b> · ${cur.conviction}</span>`);
+  host.innerHTML=bits.join('<span class="ctx-sep">│</span>')
+    + `<span class="spacer"></span><span style="font-family:var(--mono)">⌘K</span>`;
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest && e.target.closest('#ctx [data-clear]');
+  if(!b) return;
+  const what=b.dataset.clear;
+  if(what==='flip') S.flipSet=null;
+  if(what==='top') S.topN=0;
+  if(what==='q') $('#f-q').value='';
+  if(what==='sector'){ $('#f-sector').value=''; S.rvSymbol=null; }
+  if(what==='signal') $('#f-signal').value='';
+  if(what==='conf') $('#f-conf').value='0';
+  renderGrid();
+});
 /* Symbols whose tier changed overnight on a move at or under the marginal threshold,
    from the diff that already computed them. Built once per render rather than per row. */
 function marginalTiers(){
@@ -1800,9 +2197,72 @@ function renderGrid(){
   $('#count').textContent = shown.length<rows.length
     ? `${shown.length} shown · ${rows.length} match · ${S.rows.length} scored`
     : `${rows.length} of ${S.rows.length} names`;
-  $('#grid tbody').innerHTML=gridRows(shown);
   S.shown=shown;
+  S.cursor=-1;
+  paintGrid(true);
+  renderContext();
   renderSandbox();
+}
+
+/* ---------- virtualised ledger ----------
+   "Show all" is 1014 rows across 19 columns. Building all of them costs about 19,000
+   nodes on every keystroke in the search box, and the browser spends the time laying
+   out rows that are three screens below the fold. Only the visible window plus an
+   overscan margin reaches the DOM; two spacer rows carry the rest of the height, so
+   the scrollbar still describes the real list and Cmd-F still finds nothing that is
+   off-screen — which is the honest trade, and the reason the row cap above it stays.
+
+   The row pitch is read back from --row-h rather than duplicated here. */
+const OVERSCAN=10, GRID_COLS=19;
+function rowHeight(){
+  const v=parseFloat(cssVar('--row-h'));
+  return v>0 ? v : 32;
+}
+function paintGrid(toTop){
+  const tb=$('#grid tbody'); if(!tb) return;
+  const wrap=$('#screener .tbl-wrap');
+  const rows=S.shown||[];
+  const H=rowHeight();
+  if(toTop && wrap) wrap.scrollTop=0;
+  // A view that is hidden measures zero, and a zero-height port would render one row.
+  // The fallback is a generous screenful; the scroll handler corrects it the moment
+  // the tab is actually shown.
+  const port=wrap?wrap.clientHeight:0;
+  const visible=Math.max(24,Math.ceil((port||720)/H));
+  const first=Math.max(0,Math.floor((wrap?wrap.scrollTop:0)/H)-OVERSCAN);
+  const last=Math.min(rows.length,first+visible+OVERSCAN*2);
+  const top=first*H, bottom=Math.max(0,(rows.length-last)*H);
+  tb.innerHTML=
+      (top?`<tr class="vspace" style="height:${top}px" aria-hidden="true"><td colspan="${GRID_COLS}"></td></tr>`:'')
+    + gridRows(rows.slice(first,last),first)
+    + (bottom?`<tr class="vspace" style="height:${bottom}px" aria-hidden="true"><td colspan="${GRID_COLS}"></td></tr>`:'');
+}
+
+/* ---------- row cursor ----------
+   J/K move it, Enter opens it. The cursor is a different thing from :hover — both are
+   live whenever the pointer is resting over the table — so it carries a rule and a
+   gutter mark that the hover state does not. */
+function cursorRow(){
+  const rows=S.shown||[];
+  return (S.cursor>=0 && S.cursor<rows.length) ? rows[S.cursor] : null;
+}
+function moveCursor(delta, absolute){
+  const rows=S.shown||[];
+  if(!rows.length) return;
+  let i = absolute!=null ? absolute : (S.cursor<0 ? 0 : S.cursor+delta);
+  S.cursor=Math.max(0,Math.min(rows.length-1,i));
+  const wrap=$('#screener .tbl-wrap'), H=rowHeight();
+  if(wrap){
+    // The sticky header sits over the top of the scroll port, so the first genuinely
+    // readable pixel is scrollTop + the header's height, not scrollTop.
+    const head=wrap.querySelector('thead');
+    const hh=head?head.getBoundingClientRect().height:26;
+    const top=S.cursor*H, bot=top+H;
+    if(top < wrap.scrollTop+hh) wrap.scrollTop=Math.max(0,top-hh);
+    else if(bot > wrap.scrollTop+wrap.clientHeight) wrap.scrollTop=bot-wrap.clientHeight;
+  }
+  paintGrid(false);
+  renderContext();
 }
 $$('#grid thead th').forEach(th=>{
   // A <th> is not focusable and has no default activation, so before this the only way
@@ -1825,26 +2285,40 @@ $$('#grid thead th').forEach(th=>{
   const n=$(sel);
   n.addEventListener(n.tagName==='INPUT'?'input':'change',()=>{
     // Touching any ordinary control supersedes a pill selection, so the screener never
-    // shows a filter the visible controls do not explain.
-    S.flipSet=null; renderGrid();
+    // shows a filter the visible controls do not explain. A hand-driven sector change
+    // also ends an RV peer view, which is a sector filter with a name attached to it.
+    S.flipSet=null;
+    if(sel==='#f-sector') S.rvSymbol=null;
+    renderGrid();
   });
 });
-['#sz-notional','#sz-participation'].forEach(sel=>{
+// Repaint the window on scroll, one frame at a time. Without the rAF gate a fast
+// wheel emits scroll events faster than the rebuild can finish and the table stutters
+// against its own repaints.
+if($('#screener .tbl-wrap')){
+  const wrap=$('#screener .tbl-wrap');
+  let raf=0;
+  wrap.addEventListener('scroll',()=>{
+    if(raf) return;
+    raf=requestAnimationFrame(()=>{ raf=0; paintGrid(false); });
+  },{passive:true});
+}
+['#sz-notional','#sz-participation','#sz-maxpos','#sz-maxsec'].forEach(sel=>{
   const n=$(sel); if(n) n.addEventListener('input',()=>{
     try{ localStorage.setItem('eq'+sel, n.value); }catch(e){}
     renderSizing();
   });
 });
-try{ ['#sz-notional','#sz-participation'].forEach(sel=>{
+try{ ['#sz-notional','#sz-participation','#sz-maxpos','#sz-maxsec'].forEach(sel=>{
   const v=localStorage.getItem('eq'+sel), n=$(sel); if(v!=null&&n) n.value=v; }); }catch(e){}
 
-// Escape clears the pill selection, matching the crypto terminal.
-document.addEventListener('keydown',e=>{
-  if(e.key==='Escape' && S.flipSet){ S.flipSet=null; renderGrid(); }
-});
 $('#grid tbody').addEventListener('click',e=>{
   const tr=e.target.closest('tr[data-sym]');
-  if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+  if(!tr) return;
+  // Clicking a row also lands the cursor on it, so the keyboard picks up where the
+  // pointer left off rather than jumping back to wherever it was.
+  if(tr.dataset.i!=null){ S.cursor=+tr.dataset.i; paintGrid(false); renderContext(); }
+  openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
 });
 
 
@@ -1917,43 +2391,149 @@ function convictionHistory(hist){
     starts when recording started.</div>`;
 }
 
-/* ---------- detail panel ---------- */
+/* ---------- detail panel ----------
+   Ordinary least squares on the log of the close against time, which is the only form
+   of a "trend channel" that means anything for a price: a straight line fitted to the
+   level implies a constant dollar drift, so the same channel is proportionally four
+   times as wide at $20 as at $80 and the name looks calmer the higher it goes. Fitted
+   in logs the drift is a constant rate and the band is a constant percentage. The
+   residual sigma is the dispersion around that fit — it is a description of where the
+   price has been, not a forecast of where it goes, and the panel says so. */
+function olsFit(y){
+  const n=y.length;
+  if(n<3) return null;
+  let sx=0, sy=0, sxx=0, sxy=0;
+  for(let i=0;i<n;i++){ sx+=i; sy+=y[i]; sxx+=i*i; sxy+=i*y[i]; }
+  const den=n*sxx-sx*sx;
+  if(!den) return null;
+  const b=(n*sxy-sx*sy)/den, a=(sy-b*sx)/n, my=sy/n;
+  let ss=0, tot=0;
+  for(let i=0;i<n;i++){ const e=y[i]-(a+b*i); ss+=e*e; tot+=(y[i]-my)**2; }
+  return {a, b, sigma:Math.sqrt(ss/Math.max(1,n-2)), r2: tot>0 ? 1-ss/tot : 0, n};
+}
 function priceChart(bars,r){
-  const W=520,H=190,m={t:10,r:12,b:22,l:46};
-  const c=bars.close||[], d=bars.dates||[];
+  const W=520,H=220,m={t:10,r:12,b:22,l:48};
+  const c=(bars.close||[]).filter(v=>nz(v)&&v>0), d=bars.dates||[];
   if(c.length<2) return '<div class="tile-sub">No price history available.</div>';
+  const o=S.ovl;
   const ma=(win,i)=>{ if(i<win-1) return null;
     let s=0; for(let k=i-win+1;k<=i;k++) s+=c[k]; return s/win; };
-  const ma50=c.map((_,i)=>ma(50,i));
-  const lo=Math.min(...c), hi=Math.max(...c), rng=(hi-lo)||1;
+  const ma50=o.ma50?c.map((_,i)=>ma(50,i)):null;
+  const ma200=o.ma200?c.map((_,i)=>ma(200,i)):null;
+  const fit=(o.ols||o.band)?olsFit(c.map(v=>Math.log(v))):null;
+  const line=k=>fit?c.map((_,i)=>Math.exp(fit.a+fit.b*i+k*fit.sigma)):null;
+  const mid=fit&&o.ols?line(0):null;
+  const up1=fit&&o.band?line(1):null, dn1=fit&&o.band?line(-1):null;
+  const up2=fit&&o.band?line(2):null, dn2=fit&&o.band?line(-2):null;
+
+  // Data-driven extent: whatever is actually drawn sets the axis, so switching an
+  // overlay on cannot push it off the top of its own chart.
+  const drawn=[c, ma50, ma200, mid, up2, dn2].filter(Boolean).flat().filter(nz);
+  const lo=Math.min(...drawn), hi=Math.max(...drawn);
+  const ticks=niceTicks(lo,hi,4);
+  const yLo=Math.min(lo,ticks[0]), yHi=Math.max(hi,ticks[ticks.length-1]);
+  const rng=(yHi-yLo)||1;
   const X=i=>m.l+i/(c.length-1)*(W-m.l-m.r);
-  const Y=v=>H-m.b-(v-lo)/rng*(H-m.t-m.b);
+  const Y=v=>H-m.b-(v-yLo)/rng*(H-m.t-m.b);
   const path=a=>a.map((v,i)=>v==null?null:`${i===0||a[i-1]==null?'M':'L'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`)
                  .filter(Boolean).join(' ');
+  const band=(hiA,loA,op)=>
+    `<path d="${hiA.map((v,i)=>`${i?'L':'M'}${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' ')} `
+    + `${loA.map((v,i)=>`L${X(loA.length-1-i).toFixed(1)},${Y(loA[loA.length-1-i]).toFixed(1)}`).join(' ')} Z"`
+    + ` fill="${cssVar('--s1')}" fill-opacity="${op}" stroke="none"/>`;
+
   let g='';
-  for(let i=0;i<=3;i++){
-    const v=lo+rng*i/3;
+  ticks.forEach(v=>{
     g+=`<line x1="${m.l}" y1="${Y(v)}" x2="${W-m.r}" y2="${Y(v)}" class="gridline"/>`
-     + `<text x="${m.l-7}" y="${Y(v)+3}" class="tick" text-anchor="end">${v.toFixed(0)}</text>`;
+     + `<text x="${m.l-7}" y="${Y(v)+3}" class="tick" text-anchor="end">${
+          v>=100?v.toFixed(0):v.toFixed(v>=10?1:2)}</text>`;
+  });
+  let rangeMarks='';
+  if(o.range&&nz(r.hi_52w)&&nz(r.lo_52w)){
+    [[r.hi_52w,'52w high'],[r.lo_52w,'52w low']].forEach(([v,label])=>{
+      if(v<yLo||v>yHi) return;
+      rangeMarks+=`<line x1="${m.l}" y1="${Y(v)}" x2="${W-m.r}" y2="${Y(v)}"
+          stroke="${cssVar('--axis')}" stroke-width="1" stroke-dasharray="2 3"/>
+        <text x="${W-m.r}" y="${Y(v)-3}" class="tick" text-anchor="end">${label}</text>`;
+    });
   }
   const yrAgo=d[Math.max(0,d.length-252)]||d[0];
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
-     aria-label="Daily close with 50-day moving average">
+  const last=c[c.length-1];
+  const z=fit ? (Math.log(last)-(fit.a+fit.b*(c.length-1)))/(fit.sigma||1) : null;
+  // Annualise only when the bars carry dates. The bundled history.json is a downsample
+  // — 130 points across two years — so multiplying its per-bar drift by 252 reported a
+  // 2%/week trend as +265%/yr. With dates the real bar spacing is known; without them
+  // the drift is quoted over the window it was measured on, which needs no assumption.
+  const dayOf=s=>Date.parse(s+'T00:00:00Z')/864e5;
+  const dated = d.length===c.length && d.length>1
+             && Number.isFinite(dayOf(d[0])) && Number.isFinite(dayOf(d[d.length-1]));
+  const barsPerYear = dated
+    ? (c.length-1)/Math.max(1,(dayOf(d[d.length-1])-dayOf(d[0]))/365.25)
+    : null;
+  const drift = fit ? (barsPerYear
+      ? {v:Math.exp(fit.b*barsPerYear)-1, unit:'/yr'}
+      : {v:Math.exp(fit.b*(c.length-1))-1, unit:' over the window'})
+    : null;
+
+  return `<div class="ovl" role="group" aria-label="Chart overlays">
+      <button type="button" data-ovl="ols"   aria-pressed="${!!o.ols}">OLS</button>
+      <button type="button" data-ovl="band"  aria-pressed="${!!o.band}">±σ</button>
+      <button type="button" data-ovl="ma50"  aria-pressed="${!!o.ma50}">MA50</button>
+      <button type="button" data-ovl="ma200" aria-pressed="${!!o.ma200}">MA200</button>
+      <button type="button" data-ovl="range" aria-pressed="${!!o.range}">52W</button>
+    </div>
+    <svg viewBox="0 0 ${W} ${H}" width="100%" role="img"
+     aria-label="Daily close with a fitted log-linear channel and moving averages">
     ${g}
+    ${up2&&dn2?band(up2,dn2,0.07):''}
+    ${up1&&dn1?band(up1,dn1,0.10):''}
+    ${rangeMarks}
     <line x1="${m.l}" y1="${H-m.b}" x2="${W-m.r}" y2="${H-m.b}" class="axisline"/>
-    <path d="${path(ma50)}" fill="none" stroke="${cssVar('--s2')}" stroke-width="2"
-          stroke-linejoin="round" opacity="0.9"/>
-    <path d="${path(c)}" fill="none" stroke="${cssVar('--s1')}" stroke-width="2"
+    ${mid?`<path d="${path(mid)}" fill="none" stroke="${cssVar('--s1')}" stroke-width="1.2"
+          stroke-dasharray="5 3" opacity="0.85"/>`:''}
+    ${ma200?`<path d="${path(ma200)}" fill="none" stroke="${cssVar('--s3')}" stroke-width="1.6"
+          stroke-linejoin="round" opacity="0.9"/>`:''}
+    ${ma50?`<path d="${path(ma50)}" fill="none" stroke="${cssVar('--s2')}" stroke-width="1.6"
+          stroke-linejoin="round" opacity="0.9"/>`:''}
+    <path d="${path(c)}" fill="none" stroke="${cssVar('--ink')}" stroke-width="1.8"
           stroke-linejoin="round"/>
     <text x="${m.l}" y="${H-6}" class="tick">${esc(yrAgo)}</text>
     <text x="${W-m.r}" y="${H-6}" class="tick" text-anchor="end">${esc(d[d.length-1]||'')}</text>
   </svg>
   <div class="legend">
-    <span><i style="background:${cssVar('--s1')}"></i>Close</span>
-    <span><i style="background:${cssVar('--s2')}"></i>50-day average</span>
+    <span><i style="background:${cssVar('--ink')}"></i>Close</span>
+    ${o.ma50?`<span><i style="background:${cssVar('--s2')}"></i>50-day</span>`:''}
+    ${o.ma200?`<span><i style="background:${cssVar('--s3')}"></i>200-day</span>`:''}
+    ${fit&&(o.ols||o.band)?`<span><i style="background:${cssVar('--s1')}"></i>OLS channel</span>`:''}
     <span>52w high ${money(r.hi_52w)} · low ${money(r.lo_52w)}</span>
-  </div>`;
+  </div>
+  ${fit?`<div class="src">Log-linear fit over ${fit.n} bars: drift
+    ${spct(drift.v,0)}${drift.unit}, R² ${num(fit.r2,2)}, residual σ ${pct(fit.sigma,1)}.
+    Last close sits ${num(Math.abs(z),2)}σ ${z>=0?'above':'below'} the fitted line.
+    Fitted in logs so the drift is a rate and the band a constant percentage — a channel
+    fitted to the level would be proportionally wider at low prices than at high ones.
+    <b>This describes where the price has been</b>; extending the line is not a forecast
+    and the terminal does not draw one.</div>`:''}`;
 }
+/* The overlays redraw in place. The bars for the open name live on S so the toggle does
+   not have to refetch them, and the section is addressed by id rather than by
+   nth-of-type — an added section above it would otherwise silently retarget this. */
+function priceSection(){
+  const host=$('#p-price');
+  if(!host||!S._row) return;
+  host.innerHTML='<h3>Price · 2 years</h3>'+priceChart(S._bars||{close:[],dates:[]},S._row);
+}
+document.addEventListener('click',e=>{
+  const b=e.target.closest && e.target.closest('.ovl [data-ovl]');
+  if(!b) return;
+  S.ovl[b.dataset.ovl]=!S.ovl[b.dataset.ovl];
+  try{ localStorage.setItem('ecm-ovl',JSON.stringify(S.ovl)); }catch{}
+  priceSection();
+});
+try{
+  const saved=JSON.parse(localStorage.getItem('ecm-ovl')||'null');
+  if(saved&&typeof saved==='object') Object.assign(S.ovl,saved);
+}catch{}
 const FACTOR_LABELS={
   p_roic:'ROIC', p_fcf_yield:'FCF yield', p_gross_margin:'Gross margin',
   p_leverage:'Leverage (inv.)', p_earnings_stability:'Earnings stability',
@@ -2121,6 +2701,10 @@ function factorBars(r){
 }
 function openPanel(r){
   if(!r) return;
+  // Held on S so an overlay toggle can redraw the chart without refetching, and so the
+  // lazily-loaded full series replaces the bundled downsample for the same name only.
+  S._row=r;
+  S._bars={close:S.hist[r.symbol]||[],dates:[]};
   $('#p-sym').textContent=r.symbol;
   const profName=qualityProfile(r.profile||r.sector);
   $('#p-name').textContent=[r.name, r.sector,
@@ -2148,9 +2732,9 @@ function openPanel(r){
       </div>
     </section>
 
-    <section>
+    <section id="p-price">
       <h3>Price · 2 years</h3>
-      ${priceChart(S.fullbars||{close:S.hist[r.symbol]||[],dates:[]},r)}
+      ${priceChart(S._bars,r)}
     </section>
 
     <section>
@@ -2229,12 +2813,15 @@ function openPanel(r){
     .catch(()=>{ const el=$('#conv-hist');
       if(el) el.innerHTML='<div class="pending">No factor history recorded yet.</div>'; });
 
-  // Load the full OHLCV series lazily, then upgrade the chart in place.
+  // Load the full OHLCV series lazily, then upgrade the chart in place. Guarded on the
+  // symbol still being the open one: two quick clicks race, and without the check the
+  // slower response paints one name's prices under the other name's heading.
   fetch(S.base+'history/'+encodeURIComponent(r.symbol)+'.json',{cache:'no-cache'})
     .then(x=>x.json())
     .then(b=>{
-      const host=$('#p-body section:nth-of-type(2)');
-      if(host && b && b.close) host.innerHTML='<h3>Price · 2 years</h3>'+priceChart(b,r);
+      if(!b||!b.close||!S._row||S._row.symbol!==r.symbol) return;
+      S._bars=b;
+      priceSection();
     }).catch(()=>{});
 
   $('#panel').classList.add('open'); $('#panel').setAttribute('aria-hidden','false');
@@ -2247,7 +2834,6 @@ function closePanel(){
 }
 $('#p-close').onclick=closePanel;
 $('#scrim').onclick=closePanel;
-addEventListener('keydown',e=>{if(e.key==='Escape')closePanel();});
 
 /* ---------- sectors ---------- */
 function sectorStats(){
@@ -2317,6 +2903,37 @@ function renderSectors(){
     <td class="conv" style="color:${convInk(d.conv)}">${d.conv.toFixed(0)}</td>
     <td class="${(d.ret??0)>=0?'up':'down'}">${spct(d.ret,0)}</td>
     <td>${pct(d.cov,0)}</td></tr>`).join('');
+
+  // Borderless tiles. The deviation from the universe median rides the left edge as a
+  // 3px rule, so the sign is legible before the number is read and no box needs an
+  // outline to be a box.
+  const grid=$('#secgrid');
+  if(grid){
+    const live=$('#f-sector')?$('#f-sector').value:'';
+    grid.innerHTML=stats.map(d=>{
+      const dev=d.conv-mid;
+      const col=dev>=0?cssVar('--pos-pole'):cssVar('--neg-pole');
+      return `<button class="secbox" data-sec="${esc(d.sector)}"
+          aria-pressed="${live===d.sector}"
+          style="border-left-color:${live===d.sector?cssVar('--s1'):col}"
+          title="${esc(d.sector)} · median conviction ${d.conv.toFixed(0)}, ${
+            dev>=0?'+':''}${dev.toFixed(0)} against the universe median ${mid.toFixed(0)}">
+        <span class="k">${esc(d.sector)}</span>
+        <span class="v" style="color:${convInk(d.conv)}">${d.conv.toFixed(0)}</span>
+        <span class="s">${dev>=0?'+':'−'}${Math.abs(dev).toFixed(0)} · ${d.n} names ·
+          ${spct(d.ret,0)}</span>
+      </button>`;
+    }).join('');
+    grid.onclick=e=>{
+      const b=e.target.closest('[data-sec]');
+      if(!b) return;
+      // A tile already selected clears back to the whole universe rather than
+      // reselecting itself, so the control can undo its own last action.
+      const now=$('#f-sector').value;
+      runFunction('SCR', now===b.dataset.sec ? '' : b.dataset.sec);
+      if(now===b.dataset.sec){ $('#f-sector').value=''; renderGrid(); }
+    };
+  }
 }
 
 /* ---------- portfolio ---------- */
@@ -2635,9 +3252,9 @@ document.addEventListener('click',e=>{
   // silently intersect, and neither could be cleared without guessing which was doing
   // the work — the "0 rows found" dead end.
   S.flipSet = new Set(syms);
+  S.topN = 0;
   const box=$('#f-q'); if(box) box.value='';
-  $$('nav button[role=tab]').forEach(b=>b.setAttribute('aria-selected', String(b.dataset.view==='screener')));
-  $$('.view').forEach(v=>{v.hidden = v.id!=='view-screener';});
+  showView('screener');
   renderGrid();
 });
 
@@ -2654,43 +3271,77 @@ document.addEventListener('click',e=>{
 const SZ_TOP = 25;
 // Named sizeLines, not sizeBook: a sizeBook(rows,{min,max,rule}) already exists
 // further down this file and, being defined later, silently overrode it.
-function sizeLines(rows, notional, participation){
+function sizeLines(rows, notional, participation, maxPos, maxSec){
   const held=rows.filter(r=>(r.weight||0)>0)
                  .sort((a,b)=>(b.conviction||0)-(a.conviction||0)).slice(0,SZ_TOP);
   const tw=held.reduce((s,r)=>s+(r.weight||0),0)||1;
-  const out=held.map(r=>{
-    const target=notional*(r.weight||0)/tw;
+  const posCap=notional*maxPos;
+  const items=held.map(r=>{
     const adv=r.adv_usd||0;
-    const cap=adv*participation;
-    const sized=adv>0?Math.min(target,cap):0;
-    return {sym:r.symbol, conv:r.conviction, target, adv, cap, sized,
-            binding: adv<=0?'no ADV data' : sized<target-0.01?'ADV cap':'conviction',
-            exitDays: adv>0&&sized>0 ? sized/(adv*participation) : null};
+    const advCap=adv*participation;
+    // Whichever ceiling is lower is the one that binds this line; recording which lets
+    // the panel say why a line is small instead of only that it is.
+    const cap=adv>0?Math.min(posCap,advCap):0;
+    return {key:r.symbol, sector:r.sector||'—',
+            demand:(r.weight||0)/tw,
+            cap,
+            capReason: adv<=0 ? 'no ADV data' : (advCap<posCap ? 'ADV cap' : 'position cap'),
+            row:r, target:notional*(r.weight||0)/tw, adv, advCap};
   });
+  const fill=waterFill(items, notional, notional*maxSec);
+  const out=items.map(i=>{
+    const sized=fill.alloc.get(i.key)||0;
+    const binding = i.adv<=0 ? 'no ADV data'
+      : sized>=i.cap-1e-6 ? i.capReason
+      : fill.reason(i.key)==='sector cap' ? 'sector cap'
+      : sized<i.target-0.01 ? 'sector cap'
+      : 'conviction';
+    return {sym:i.key, sector:i.sector, conv:i.row.conviction, target:i.target,
+            adv:i.adv, sized, binding,
+            exitDays: i.adv>0&&sized>0 ? sized/(i.adv*participation) : null};
+  }).sort((a,b)=>b.sized-a.sized);
   const allocated=out.reduce((s,r)=>s+r.sized,0);
   return {rows:out, allocated, unallocated:Math.max(0,notional-allocated),
-          capped:out.filter(r=>r.binding==='ADV cap').length};
+          pinned:fill.pinned, sectorsAtCap:fill.sectorsAtCap,
+          capped:out.filter(r=>r.binding!=='conviction').length};
 }
 function renderSizing(){
   const host=$('#sizing'); if(!host) return;
   if(!S.rows.length){ host.innerHTML='<div class="pending">Awaiting the ledger.</div>'; return; }
   const notional=parseFloat($('#sz-notional').value)||0;
   const part=Math.min(parseFloat($('#sz-participation').value)||2,25)/100;
+  const maxPos=Math.min(Math.max(parseFloat($('#sz-maxpos').value)||6,0.5),25)/100;
+  const maxSec=Math.min(Math.max(parseFloat($('#sz-maxsec').value)||30,5),100)/100;
   if(!notional){ host.innerHTML='<div class="pending">Enter a book size to see suggested lines.</div>'; return; }
-  const b=sizeLines(S.rows,notional,part);
+  const b=sizeLines(S.rows,notional,part,maxPos,maxSec);
   const usd=v=>v>=1e6?'$'+(v/1e6).toFixed(2)+'M':v>=1e3?'$'+(v/1e3).toFixed(0)+'k':'$'+v.toFixed(0);
-  $('#sz-note').textContent=`${b.capped} of ${b.rows.length} lines capped by liquidity`;
+  const cashPct=notional?b.unallocated/notional*100:0;
+  $('#sz-note').textContent=
+    `${b.capped} of ${b.rows.length} lines at a ceiling · ${cashPct.toFixed(1)}% cash`;
+  const tone=r=>r.sized<=0?cssVar('--neg-pole')
+    :r.binding==='conviction'?'var(--label)':cssVar('--warn');
   host.innerHTML=b.rows.map(r=>`<div class="sz-row">
       <b>${esc(r.sym)}</b>
-      <span style="color:var(--ink-3)">conviction ${r.conv}</span>
+      <span style="color:var(--label)">conviction ${r.conv}</span>
       <span class="num">${r.sized>0?usd(r.sized):'—'}</span>
-      <span style="color:${r.sized<=0?'var(--neg)':r.binding==='ADV cap'?'var(--warn)':'var(--ink-3)'};font-size:11px">
+      <span style="color:${tone(r)};font-size:11px">
         ${esc(r.binding)}${r.exitDays!=null?` · ~${r.exitDays.toFixed(1)}d out`:''}</span>
     </div>`).join('')
-    + `<p class="card-note">Allocated <b>${usd(b.allocated)}</b> · unallocated
-       <b style="color:${b.unallocated>notional*0.2?'var(--warn)':'inherit'}">${usd(b.unallocated)}</b>.
-       Conviction sets the shape, the ADV cap sets the ceiling, and refused size stays in
-       cash rather than being pushed into the next name.
+    + `<p class="card-note">Allocated <b>${usd(b.allocated)}</b> · forced cash
+       <b style="color:${cashPct>20?cssVar('--warn'):'inherit'}">${usd(b.unallocated)}</b>
+       (${cashPct.toFixed(1)}% of the book).
+       ${b.pinned.position} line${b.pinned.position===1?'':'s'} pinned at the
+       ${(maxPos*100).toFixed(1)}% position ceiling, ${b.pinned.adv} at the ADV ceiling,
+       ${b.pinned.sector} held back by a sector ceiling${
+         b.sectorsAtCap.length?` (${esc(b.sectorsAtCap.join(', '))} at ${(maxSec*100).toFixed(0)}%)`:''}.
+       The three ceilings are solved together rather than in sequence: capping positions,
+       redistributing, then capping sectors pushes weight back over the position ceiling,
+       and only the last pass applied is actually satisfied. Each round fills the free
+       names in proportion to conviction, stops at the first ceiling it would cross,
+       freezes it and refills the remainder — so the answer satisfies all three at once.
+       <b>Refused size stays in cash</b> rather than being pushed into the next name,
+       which would concentrate the book into whatever happened to be liquid and then
+       present that as the portfolio the model recommended.
        <b>Not an optimal allocation</b> — the measured information coefficient is
        indistinguishable from zero, so there is no expected return to size against.
        These are bounds on damage, not a bet size.</p>`;
@@ -2784,11 +3435,17 @@ const FOCUS_N = 40;
 
 /* Rank gutter, pinned identity, column-group hooks, monospace numerics. Everything
    above this in renderGrid — filter, sort, row cap, count — is unchanged. */
-function gridRows(shown){
-  return shown.map((r,i)=>{
-    const n=i+1;
-    const cls=[(Math.floor(i/LANE_N)%2===1)?'lane':'',(n%LANE_N===0)?'rule':''].filter(Boolean).join(' ');
-    return `<tr data-sym="${esc(r.symbol)}"${cls?` class="${cls}"`:''}>
+function gridRows(shown, offset){
+  // `offset` is the absolute index of shown[0] in the filtered set. The banding, the
+  // routing rule and the rank gutter are all functions of the absolute position, so a
+  // virtualised window has to be told where it starts — deriving them from the slice
+  // index restarts the stripe pattern at the top of every repaint.
+  const off=offset||0;
+  return shown.map((r,j)=>{
+    const i=off+j, n=i+1;
+    const cls=[(Math.floor(i/LANE_N)%2===1)?'lane':'',(n%LANE_N===0)?'rule':'',
+               i===S.cursor?'cursor':''].filter(Boolean).join(' ');
+    return `<tr data-sym="${esc(r.symbol)}" data-i="${i}"${cls?` class="${cls}"`:''}>
     <td class="pin pin-rank">${n}</td>
     <td class="pin pin-sym l"><span class="sym">${esc(r.symbol)}</span>
         <span class="co">${esc(r.name||'')}</span></td>
@@ -2987,46 +3644,41 @@ function drawQuadrantLabels(s, m, W, H){
 }
 
 /* ---------- position sizing sandbox ---------- */
-S.sbx={min:70,max:6,rule:'conv'};
+S.sbx={min:70,max:6,sector:30,rule:'conv'};
 const SBX_RULES={
   equal:'Every name the same weight. The score decides membership only, never size.',
   conv :'Weight proportional to (conviction − threshold + 5), so a name sitting exactly at the floor still gets a real position rather than zero.',
   conv2:'The same quantity squared. Concentrates into the top of the board, and the cap ends up doing most of the work.',
 };
 
-function sizeBook(rows,{min,max,rule}){
+/* The sandbox's own sizer. Percent space rather than dollars — there is no notional
+   here, so the ADV ceiling has nothing to be measured against and only the position and
+   sector ceilings apply. The solver is the same convergent water-fill the Portfolio tab
+   uses, so the two panels cannot disagree about what a cap does. */
+function sizeBook(rows,{min,max,sector,rule}){
   const held=rows.filter(r=>nz(r.conviction)&&r.conviction>=min);
-  if(!held.length) return {held:[],capped:0,cash:0,infeasible:false};
+  if(!held.length) return {held:[],capped:0,cash:0,infeasible:false,sectorsAtCap:[]};
   const raw=held.map(r =>
     rule==='equal' ? 1 :
     rule==='conv'  ? (r.conviction-min+5) :
                      Math.pow(r.conviction-min+5,2));
-  const sum=raw.reduce((a,b)=>a+b,0);
-  let w=raw.map(v=>v/sum*100);
-  const atCap=new Set();
-  let infeasible=false;
-
-  /* Cap, then redistribute the excess pro-rata across everything still under the
-     ceiling. Six passes converge for any input this can be handed; an unbounded while()
-     would spin when every name is capped. */
-  for(let pass=0;pass<6;pass++){
-    const over=w.map((v,i)=>v>max+1e-9?i:-1).filter(i=>i>=0);
-    if(!over.length) break;
-    over.forEach(i=>{atCap.add(i);});
-    const excess=over.reduce((a,i)=>a+(w[i]-max),0);
-    over.forEach(i=>{w[i]=max;});
-    const under=w.map((v,i)=>v<max-1e-9?i:-1).filter(i=>i>=0);
-    const pool=under.reduce((a,i)=>a+w[i],0);
-    // No room left to redistribute into: held.length × max < 100, so the ceiling cannot
-    // be satisfied and the remainder is genuinely unallocated. Reporting it as cash is
-    // the honest answer; silently dropping it would show a book that does not sum to 100.
-    if(!pool){ infeasible=true; break; }
-    under.forEach(i=>{w[i]+=excess*(w[i]/pool);});
-  }
+  const sum=raw.reduce((a,b)=>a+b,0)||1;
+  const secCap=nz(sector)?sector:100;
+  const items=held.map((r,i)=>({key:r.symbol, sector:r.sector||'—',
+    demand:raw[i]/sum, cap:max, capReason:'position cap', row:r}));
+  const fill=waterFill(items,100,secCap);
+  const w=items.map(i=>fill.alloc.get(i.key)||0);
   const total=w.reduce((a,b)=>a+b,0);
+  const capped=w.filter(v=>v>=max-1e-9).length;
   return {
-    held:held.map((r,i)=>({r,wt:w[i]})).sort((a,b)=>b.wt-a.wt),
-    capped:atCap.size, cash:Math.max(0,100-total), infeasible,
+    held:items.map((i,k)=>({r:i.row, wt:w[k], why:fill.reason(i.key)}))
+              .sort((a,b)=>b.wt-a.wt),
+    capped, cash:Math.max(0,100-total),
+    // The ceilings genuinely cannot fill a book: every name is pinned and there is
+    // still cash left over. Reported rather than hidden — silently dropping it would
+    // show a book that does not sum to 100 and say nothing about why.
+    infeasible: (100-total)>0.05 && capped>=items.length,
+    sectorsAtCap:fill.sectorsAtCap,
   };
 }
 
@@ -3036,7 +3688,7 @@ function renderSandbox(){
   // The rows the ledger is actually showing, so the sandbox answers "what would THIS
   // screen look like as a book" rather than a different, larger slice.
   const universe = S.shown || filtered();
-  const {held,capped,cash,infeasible}=sizeBook(universe,cfg);
+  const {held,capped,cash,infeasible,sectorsAtCap}=sizeBook(universe,cfg);
   const tot=held.reduce((a,b)=>a+b.wt,0)||1;
   const top10=held.slice(0,10).reduce((a,b)=>a+b.wt,0);
   const wConv=held.length?held.reduce((a,b)=>a+b.r.conviction*b.wt,0)/tot:null;
@@ -3056,8 +3708,11 @@ function renderSandbox(){
     + stat('Wtd conviction',wConv==null?'—':wConv.toFixed(0),
            medUniv==null?'':`universe median ${medUniv.toFixed(0)}`)
     + stat('Largest sector',secTop[1].toFixed(0)+'%',
-           secTop[1]>35?`${secTop[0]} · above 35%`:secTop[0],secTop[1]>35)
-    + stat('At the ceiling',capped,capped?`pinned at ${cfg.max.toFixed(1)}%`:'cap not binding',capped>0);
+           sectorsAtCap.length?`${secTop[0]} · at the ${cfg.sector}% ceiling`:secTop[0],
+           sectorsAtCap.length>0)
+    + stat('At the ceiling',capped,capped?`pinned at ${cfg.max.toFixed(1)}%`:'cap not binding',capped>0)
+    + stat('Forced cash',cash.toFixed(1)+'%',
+           cash>0.05?'no ceiling left to fill into':'fully invested',cash>0.05);
 
   $('#sbx-book tbody').innerHTML=held.slice(0,12).map((b,i)=>`
     <tr data-sym="${esc(b.r.symbol)}"${(i+1)%LANE_N===0?' class="rule"':''}>
@@ -3073,10 +3728,15 @@ function renderSandbox(){
     ? `Every name is pinned at the ${cfg.max.toFixed(1)}% ceiling and ${cash.toFixed(1)}% is `
       + `unallocated — ${held.length} positions cannot fill a book at this cap. Raise the `
       + `ceiling or lower the conviction floor.`
-    : capped
-    ? `${capped} name${capped>1?'s are':' is'} pinned at the ${cfg.max.toFixed(1)}% ceiling; `
-      + `the excess redistributes pro-rata across the rest.`
-    : `No name reaches the ${cfg.max.toFixed(1)}% ceiling — the cap is not binding here.`;
+    : (capped||sectorsAtCap.length)
+    ? `${capped} name${capped===1?' is':'s are'} pinned at the ${cfg.max.toFixed(1)}% position `
+      + `ceiling${sectorsAtCap.length?` and ${sectorsAtCap.join(', ')} `
+        + `${sectorsAtCap.length===1?'is':'are'} at the ${cfg.sector}% sector ceiling`:''}. `
+      + `Both are solved together rather than one after the other, and `
+      + `${cash>0.05?`${cash.toFixed(1)}% that no ceiling had room for stays in cash`
+                    :'the remainder refills the names still under theirs'}.`
+    : `Neither the ${cfg.max.toFixed(1)}% position ceiling nor the ${cfg.sector}% sector `
+      + `ceiling is binding here.`;
   $('#sbx-rule-note').textContent=SBX_RULES[cfg.rule];
 
   renderExposure(held, tot);
@@ -3693,6 +4353,12 @@ if($('#sandbox')){
     e.target.setAttribute('aria-valuetext',S.sbx.max.toFixed(1)+'%');
     renderSandbox();
   });
+  $('#sbx-sector').addEventListener('input',e=>{
+    S.sbx.sector=+e.target.value;
+    $('#sbx-sector-v').textContent=S.sbx.sector+'%';
+    e.target.setAttribute('aria-valuetext',S.sbx.sector+'%');
+    renderSandbox();
+  });
   $$('#f-mode button').forEach(b=>{
     b.onclick=()=>{
       if(b.disabled) return;
@@ -3714,6 +4380,921 @@ if($('#sandbox')){
   });
 }
 
+/* =====================================================================
+   AXES FROM THE DATA
+   ---------------------------------------------------------------------
+   A fixed five-tick axis over a rebased series prints labels like 97.3 and
+   104.8 — technically correct, unreadable at a glance, and different on
+   every reload. This picks a round step at or just above the requested
+   density and returns the ticks that fall inside the range, so the labels
+   are 100, 105, 110 whatever the data happens to span.
+   ===================================================================== */
+function niceTicks(lo,hi,target){
+  if(!(hi>lo)) hi=lo+1;
+  const raw=(hi-lo)/Math.max(1,target||5);
+  const mag=Math.pow(10,Math.floor(Math.log10(raw)));
+  const norm=raw/mag;
+  const step=(norm<=1?1:norm<=2?2:norm<=2.5?2.5:norm<=5?5:10)*mag;
+  const first=Math.ceil(lo/step-1e-9)*step;
+  const out=[];
+  for(let v=first; v<=hi+step*1e-9; v+=step) out.push(+v.toPrecision(12));
+  // A range narrower than one step yields nothing to draw against; fall back to the
+  // ends themselves rather than an axis with no ticks on it.
+  return out.length>=2 ? out : [lo,hi];
+}
+
+/* =====================================================================
+   MARKET & BOOK OVERVIEW
+   ---------------------------------------------------------------------
+   The layer above the eight views. Everything here is a property of the
+   whole board rather than of one tab: what the tape did over each window,
+   how broad the move was, the universe and the book rebased against the
+   benchmark, and which of the fifteen model inputs the top of the board is
+   actually leaning on.
+   ===================================================================== */
+const RET_PERIODS=[['1D','chg_1d'],['1M','ret_1m'],['3M','ret_3m'],
+                   ['6M','ret_6m'],['12M','ret_12m'],['YTD','ret_ytd']];
+
+function renderOverview(){
+  if(!$('#ovw')||!S.ledger) return;
+  overviewReturns();
+  overviewBreadth();
+  overviewNormalised();
+  overviewFactorRank();
+  const med=median(S.rows.map(r=>r.conviction));
+  const held=S.rows.filter(r=>r.weight>0).length;
+  const adv=S.rows.filter(r=>(r.chg_1d??0)>0).length;
+  $('#ovw-sum').textContent=
+    `median ${med==null?'—':med.toFixed(0)} · ${held} held · ${adv}/${S.rows.length} up`;
+}
+
+/* Return boxes. Median rather than mean across the universe, so one 60% mover cannot
+   carry a window, sitting beside the benchmark's own figure for the same window —
+   which is the only thing that makes "+3.1%" mean anything. */
+function overviewReturns(){
+  const host=$('#ovw-rets'); if(!host) return;
+  const bench=S.bench.find(b=>b.symbol===(S.ledger.benchmark||'SPY'));
+  host.innerHTML=RET_PERIODS.map(([label,key])=>{
+    const vals=S.rows.map(r=>r[key]).filter(nz);
+    const m=median(vals);
+    const b=bench?bench[key]:null;
+    const dir=!nz(m)?'':m>=0?'up':'down';
+    return `<div class="ret-box ${dir}">
+      <div class="ret-k">${label}</div>
+      <div class="ret-v ${dir}">${nz(m)?spct(m,key==='chg_1d'?2:1):'—'}</div>
+      <div class="ret-b">${nz(b)?`${esc(bench.symbol)} ${spct(b,key==='chg_1d'?2:1)}`:'—'}</div>
+    </div>`;
+  }).join('');
+  const note=$('#ovw-bench-note');
+  if(note) note.textContent=bench
+    ? `universe median vs ${bench.symbol} · ${S.rows.length} scored`
+    : `universe median · ${S.rows.length} scored`;
+}
+
+/* Breadth. A median return says where the middle went; breadth says how many names
+   went with it, and the two come apart exactly when it matters — a tape carried by
+   six names has the same median as one that rose on every ticker. */
+function overviewBreadth(){
+  const host=$('#ovw-breadth'); if(!host) return;
+  const n=S.rows.length||1;
+  const bar=(a,b,aCol,bCol)=>{
+    const t=a+b||1;
+    return `<span class="br-track">
+      <i style="width:${(a/t*100).toFixed(1)}%;background:${aCol}"></i>
+      <i style="width:${(b/t*100).toFixed(1)}%;background:${bCol}"></i></span>`;
+  };
+  const pos=cssVar('--pos-pole'), neg=cssVar('--neg-pole'), grid=cssVar('--grid');
+  const up=S.rows.filter(r=>(r.chg_1d??0)>0).length;
+  const dn=S.rows.filter(r=>(r.chg_1d??0)<0).length;
+  const a50=S.rows.filter(r=>(r.px_vs_ma50??0)>0).length;
+  const a200=S.rows.filter(r=>(r.px_vs_ma200??0)>0).length;
+  const nearHi=S.rows.filter(r=>nz(r.drawdown_52w)&&r.drawdown_52w<=0.02).length;
+  const deep=S.rows.filter(r=>nz(r.drawdown_52w)&&r.drawdown_52w>=0.20).length;
+  const rows=[
+    ['Advancing / declining', bar(up,dn,pos,neg), `${up} / ${dn}`,
+     'Names closing up against names closing down in the last session'],
+    ['Above 50-day', bar(a50,n-a50,pos,grid), `${(a50/n*100).toFixed(0)}%`,
+     'Share trading above their own 50-day moving average'],
+    ['Above 200-day', bar(a200,n-a200,pos,grid), `${(a200/n*100).toFixed(0)}%`,
+     'Share trading above their own 200-day moving average'],
+    ['At the 52w high', bar(nearHi,n-nearHi,pos,grid), `${nearHi}`,
+     'Within 2% of the 52-week high'],
+    ['Down 20%+ from high', bar(deep,n-deep,neg,grid), `${deep}`,
+     'At least 20% below the 52-week high — the pool the mean-reversion uplift draws from'],
+  ];
+  host.innerHTML=rows.map(([k,b,v,t])=>`<div class="br-row" title="${esc(t)}">
+    <span style="color:var(--label)">${esc(k)}</span>${b}
+    <span class="br-val">${esc(v)}</span></div>`).join('');
+}
+
+/* The rebased series. Computed once — the ledger does not change under the page — and
+   aligned to the benchmark's own window from the right, so every line covers the same
+   sessions rather than the same index positions. */
+function overviewSeries(){
+  if(S._norm) return S._norm;
+  const benchSym=S.ledger.benchmark||'SPY';
+  const bh=S.hist[benchSym]||[];
+  const L=bh.length;
+  const out={len:L, bench:bh.slice(), benchSym, universe:null, book:null, names:0};
+  if(L>=2){
+    const acc=new Array(L).fill(0), bacc=new Array(L).fill(0);
+    let n=0, bw=0;
+    for(const r of S.rows){
+      const h=S.hist[r.symbol];
+      if(!h||h.length<L) continue;
+      const seg=h.slice(h.length-L);
+      if(!nz(seg[0])||seg[0]<=0) continue;
+      n++;
+      for(let i=0;i<L;i++) acc[i]+=seg[i]/seg[0];
+      const w=r.weight||0;
+      if(w>0){ bw+=w; for(let i=0;i<L;i++) bacc[i]+=w*seg[i]/seg[0]; }
+    }
+    if(n>0){ out.universe=acc.map(v=>v/n*100); out.names=n; }
+    if(bw>0) out.book=bacc.map(v=>v/bw*100);
+  }
+  S._norm=out;
+  return out;
+}
+
+function overviewNormalised(){
+  const host=$('#ovw-norm'); if(!host) return;
+  const d=overviewSeries();
+  if(!d.universe||d.len<2){
+    host.innerHTML=`<div class="pending">The bundled price history has fewer than two
+      aligned sessions, so there is nothing to rebase. This chart draws only what the
+      pipeline published.</div>`;
+    return;
+  }
+  const span=S.ovwSpan>0 ? Math.min(S.ovwSpan,d.len) : d.len;
+  const cut=a=>{ if(!a) return null; const s=a.slice(a.length-span);
+                 return s[0]>0 ? s.map(v=>v/s[0]*100) : null; };
+  const series=[
+    ['Universe (equal weight)', cut(d.universe), cssVar('--s1'), false],
+    ['Published book',          cut(d.book),     cssVar('--pos-pole'), false],
+    [d.benchSym,                cut(d.bench),    cssVar('--label'), true],
+  ].filter(s=>s[1]&&s[1].length>1);
+  const W=fitW(host,520,1000), H=210, m={t:12,r:14,b:26,l:46};
+  const flat=series.flatMap(s=>s[1]);
+  const lo=Math.min(...flat), hi=Math.max(...flat);
+  const ticks=niceTicks(lo,hi,4);
+  const yLo=Math.min(lo,ticks[0]), yHi=Math.max(hi,ticks[ticks.length-1]);
+  const rng=(yHi-yLo)||1;
+  const g=svgIn(host,W,H);
+  g.setAttribute('aria-label','Universe, book and benchmark rebased to 100');
+  const X=i=>m.l+(span===1?0.5:i/(span-1))*(W-m.l-m.r);
+  const Y=v=>H-m.b-(v-yLo)/rng*(H-m.t-m.b);
+  ticks.forEach(v=>{
+    el('line',{x1:m.l,y1:Y(v),x2:W-m.r,y2:Y(v),class:'gridline'},g);
+    const t=el('text',{x:m.l-6,y:Y(v)+3,class:'tick','text-anchor':'end'},g);
+    t.textContent=v.toFixed(Math.abs(ticks[1]-ticks[0])<1?1:0);
+  });
+  // 100 is the baseline the whole chart is about, so it is an axis line and not one
+  // more gridline the eye has to find among five.
+  if(100>=yLo&&100<=yHi) el('line',{x1:m.l,y1:Y(100),x2:W-m.r,y2:Y(100),class:'axisline'},g);
+  series.forEach(([,vals,col,dash])=>{
+    el('polyline',{points:vals.map((v,i)=>`${X(i).toFixed(1)},${Y(v).toFixed(1)}`).join(' '),
+      fill:'none',stroke:col,'stroke-width':1.9,'stroke-linejoin':'round',
+      ...(dash?{'stroke-dasharray':'4 3'}:{})},g);
+  });
+  const xt=el('text',{x:m.l,y:H-7,class:'tick'},g);
+  xt.textContent=`${span} sessions`;
+  const xr=el('text',{x:W-m.r,y:H-7,class:'tick','text-anchor':'end'},g);
+  xr.textContent='latest';
+  host.insertAdjacentHTML('beforeend',
+    `<div class="legend">${series.map(([label,vals,col,dash])=>
+        `<span><i style="background:${col};${dash?'height:2px;border-radius:0':''}"></i>${
+          esc(label)} — ${spct(vals[vals.length-1]/100-1,1)}</span>`).join('')}
+     </div>
+     <p class="card-note">Rebased to 100 at the left edge, ${d.names} names with an
+       aligned series. The axis is stepped from the data rather than fixed, so the
+       labels stay round whatever the window spans. The book line is the weights the
+       ledger published, applied to prices — it is not the paper-return curve, which is
+       chained across snapshots and lives on the Portfolio tab.</p>`);
+}
+
+/* Which inputs the top of the board is leaning on. Not the same question as "which
+   factor is largest" — every one of these is a percentile, so the only meaningful
+   statement is how far the leading decile sits from the universe median on it. */
+function overviewFactorRank(){
+  const host=$('#ovw-frank'); if(!host) return;
+  const sorted=[...S.rows].sort((a,b)=>b.conviction-a.conviction);
+  const n=Math.max(20,Math.round(sorted.length*0.1));
+  const top=sorted.slice(0,n);
+  const out=[];
+  for(const k of Object.keys(FACTOR_DEFS)){
+    let sum=0, cnt=0;
+    for(const r of top){
+      const w=weightsFor(r.profile||r.sector);
+      if(w.quality[k]==null&&w.confirmation[k]==null&&w.risk[k]==null) continue;
+      if((r.imputed||[]).includes(k)||!nz(r[k])) continue;
+      sum+=r[k]*100; cnt++;
+    }
+    if(cnt>=8) out.push({k, dev:sum/cnt-50, cov:cnt/top.length});
+  }
+  if(!out.length){ host.innerHTML='<div class="pending">No input is measured on enough of the leading decile to rank.</div>'; return; }
+  out.sort((a,b)=>Math.abs(b.dev)-Math.abs(a.dev));
+  host.innerHTML=`<div class="frank">`+out.map((d,i)=>{
+    const mag=Math.min(Math.abs(d.dev),50)/50*50;
+    const col=d.dev>=0?cssVar('--pos-pole'):cssVar('--neg-pole');
+    return `<div class="frank-row" data-fk="${esc(d.k)}" data-def="${esc(d.k)}"
+        title="Click for the leaders on this input">
+      <span class="frank-n">${i+1}</span>
+      <span style="color:var(--ink-2)">${esc(FACTOR_LABELS[d.k]||d.k)}${
+        d.cov<0.999?` <span class="src">${(d.cov*100).toFixed(0)}%</span>`:''}</span>
+      <span class="frank-track"><span class="frank-zero"></span>
+        <span class="frank-bar" style="background:${col};left:${d.dev>=0?50:50-mag}%;width:${mag}%"></span></span>
+      <span class="frank-v" style="color:${col}">${d.dev>=0?'+':'−'}${Math.abs(d.dev).toFixed(1)}</span>
+    </div>`;
+  }).join('')+`</div>
+  <p class="card-note">Top ${n} names by conviction, each input averaged over the
+    names whose own sector profile reads it — a percentage beside a label is the share
+    of the decile that input covers. Percentile points against the universe median, on
+    the same fixed ±50 yardstick as the exposure panel.</p>`;
+  host.onclick=e=>{
+    const row=e.target.closest('[data-fk]');
+    if(row) runFunction('FKQ',row.dataset.fk);
+  };
+}
+
+/* =====================================================================
+   COMMAND BAR — function codes
+   ---------------------------------------------------------------------
+   Eight views, six filters, a detail panel and a scenario is more reachable
+   state than a pointer can address in one gesture. The codes are the
+   address bar: DES AAPL reaches a tear sheet from anywhere without first
+   finding the row it lives in. Every code that takes an argument accepts it
+   inline, and anything that matches no code at all falls through to a fuzzy
+   search over tickers and company names — a mistyped code should land you
+   on a name, not on an error.
+   ===================================================================== */
+const FUNCTIONS=[
+  {code:'DES', arg:'<ticker>', view:null,
+   desc:'Description — open the full tear sheet for one name'},
+  {code:'SCR', arg:'[sector | signal | text]', view:'screener',
+   desc:'Screener — the conviction ledger, optionally filtered'},
+  {code:'RV',  arg:'<ticker>', view:'screener',
+   desc:'Relative value — the name against its own sector peers'},
+  {code:'PORT',arg:'', view:'portfolio',
+   desc:'Portfolio — held book, constrained sizing, paper return'},
+  {code:'WL',  arg:'', view:'watchlist',
+   desc:'Watchlist diff — what changed since the last run and whether it matters'},
+  {code:'MON', arg:'', view:'monitor',
+   desc:'Monitor — pipeline health, ranking stability, churn diagnosis'},
+  {code:'SHK', arg:'[percent]', view:'portfolio',
+   desc:'Scenario — shock every price and re-score under the frozen spec'},
+  {code:'TOP', arg:'[n]', view:'screener',
+   desc:'Top N by conviction, pinned into the screener'},
+  {code:'FKQ', arg:'[factor]', view:'research',
+   desc:'Factor ranking — leaders on one model input, ranked within sector'},
+  {code:'CSV', arg:'', view:null,
+   desc:'Export every scored name and its decomposition as CSV'},
+  {code:'SEC', arg:'[sector]', view:'sectors',
+   desc:'Sectors — median conviction against the universe median'},
+  {code:'DQ',  arg:'', view:'data',
+   desc:'Data quality — input coverage, weakest names, run diagnostics'},
+  {code:'MTH', arg:'', view:'method',
+   desc:'Method — how the score is built, and what it does not claim'},
+  {code:'HELP',arg:'', view:null,
+   desc:'List every function code'},
+];
+const VIEW_ORDER=['screener','watchlist','sectors','research','portfolio','data','monitor','method'];
+
+function showView(name){
+  if(!VIEW_ORDER.includes(name)) return;
+  S.view=name;
+  $$('nav button[role=tab]').forEach(b=>
+    b.setAttribute('aria-selected', String(b.dataset.view===name)));
+  $$('.view').forEach(v=>{ v.hidden = v.id!=='view-'+name; });
+  redrawCharts();
+}
+/* Bring a card into view and mark it, so a code that lands on one panel among six does
+   not leave the reader hunting for which one it meant. The scroll target is computed
+   rather than handed to scrollIntoView, which knows nothing about the sticky topbar and
+   would park the card's heading behind it. */
+function measureTopbar(){
+  const t=$('.topbar');
+  if(t) document.documentElement.style.setProperty(
+    '--topbar-h', Math.ceil(t.getBoundingClientRect().height)+'px');
+}
+function focusCard(sel){
+  const n=$(sel); if(!n) return;
+  measureTopbar();
+  const top=n.getBoundingClientRect().top+window.scrollY
+          - (parseFloat(cssVar('--topbar-h'))||140) - 8;
+  window.scrollTo({top:Math.max(0,top),behavior:'smooth'});
+  n.animate?n.animate([{outline:'2px solid '+cssVar('--s1'),outlineOffset:'2px'},
+                       {outline:'2px solid transparent',outlineOffset:'2px'}],
+                      {duration:900,easing:'ease-out'}):0;
+}
+
+/* Subsequence match, scored so that a prefix beats a scatter. Deliberately forgiving:
+   the alternative to a fuzzy fallback is an error message, and an error message is the
+   one response that cannot be right — the reader typed something, and the closest name
+   is a better answer than nothing. */
+/* Levenshtein with adjacent transposition, bounded. The transposition step is the whole
+   reason this exists beside the subsequence matcher: "protfolo" is one swap and one
+   deletion from "portfolio", and a subsequence pass cannot see a swap at any cost —
+   it needs the letters in order, which is exactly what a typo destroys. */
+function editDist(a, b, cap){
+  const n=a.length, m=b.length;
+  if(Math.abs(n-m)>cap) return -1;
+  let prev2=null, prev=Array.from({length:m+1},(_,j)=>j), cur=new Array(m+1);
+  for(let i=1;i<=n;i++){
+    cur[0]=i;
+    let best=cur[0];
+    for(let j=1;j<=m;j++){
+      const cost=a[i-1]===b[j-1]?0:1;
+      let v=Math.min(prev[j]+1, cur[j-1]+1, prev[j-1]+cost);
+      if(i>1&&j>1&&a[i-1]===b[j-2]&&a[i-2]===b[j-1]) v=Math.min(v, prev2[j-2]+1);
+      cur[j]=v;
+      if(v<best) best=v;
+    }
+    if(best>cap) return -1;                       // no completion can come back under
+    prev2=prev; prev=cur; cur=new Array(m+1);
+  }
+  return prev[m]<=cap ? prev[m] : -1;
+}
+function fuzzyScore(hay, needle){
+  if(!needle) return 0;
+  const h=String(hay||'').toLowerCase(), q=needle.toLowerCase();
+  if(h===q) return 1000;
+  if(h.startsWith(q)) return 700-h.length;
+  const at=h.indexOf(q);
+  if(at>=0) return 400-at;
+  let i=0, gaps=0;
+  for(const ch of h){ if(i<q.length&&ch===q[i]) i++; else if(i>0&&i<q.length) gaps++; }
+  if(i===q.length) return Math.max(1,150-gaps);
+  // Subsequence failed. Score the closest single word instead, so a transposed or
+  // doubled letter still lands on the function the reader meant rather than on nothing.
+  let best=-1;
+  for(const w of h.split(/[^a-z0-9]+/)){
+    if(!w||Math.abs(w.length-q.length)>3) continue;
+    const d=editDist(w,q,3);
+    if(d<0) continue;
+    const sim=1-d/Math.max(w.length,q.length);
+    if(sim>=0.6) best=Math.max(best, Math.round(sim*140));
+  }
+  return best;
+}
+
+function cmdMatches(raw){
+  const text=String(raw||'').trim();
+  const parts=text.split(/\s+/).filter(Boolean);
+  const head=(parts[0]||'').toUpperCase();
+  const rest=parts.slice(1).join(' ');
+  const out=[];
+  const exact=FUNCTIONS.find(f=>f.code===head);
+  if(exact){
+    // The code is settled; the rest of the line is its argument, and the list turns
+    // into a picker for that argument rather than a list of other codes.
+    out.push({kind:'fn', fn:exact, arg:rest, label:exact.code,
+              hint:rest?rest:exact.arg, desc:exact.desc});
+    if((exact.code==='DES'||exact.code==='RV') ){
+      fuzzyNames(rest,6).forEach(r=>out.push({kind:'name', row:r, fn:exact,
+        label:exact.code+' '+r.symbol, hint:r.sector||'',
+        desc:`${r.name||r.symbol} · conviction ${r.conviction} · ${r.signal}`}));
+    }
+    if(exact.code==='FKQ'){
+      Object.keys(FACTOR_DEFS)
+        .map(k=>[k,fuzzyScore((FACTOR_LABELS[k]||k)+' '+k, rest)])
+        .filter(([,s])=>!rest||s>=0)
+        .sort((a,b)=>b[1]-a[1]).slice(0,6)
+        .forEach(([k])=>out.push({kind:'fn', fn:exact, arg:k,
+          label:'FKQ '+k.replace(/^p_/,''), hint:'factor',
+          desc:'Leaders on '+(FACTOR_LABELS[k]||k)}));
+    }
+    if(exact.code==='SCR'||exact.code==='SEC'){
+      [...new Set(S.rows.map(r=>r.sector).filter(Boolean))]
+        .map(s=>[s,fuzzyScore(s,rest)]).filter(([,v])=>!rest||v>=0)
+        .sort((a,b)=>b[1]-a[1]).slice(0,5)
+        .forEach(([s])=>out.push({kind:'fn', fn:exact, arg:s,
+          label:exact.code+' '+s, hint:'sector',
+          desc:`${S.rows.filter(r=>r.sector===s).length} names`}));
+    }
+    return out;
+  }
+  if(!text) return FUNCTIONS.map(f=>({kind:'fn', fn:f, arg:'', label:f.code,
+    hint:f.arg, desc:f.desc}));
+  // No settled code: rank the codes by fuzzy match, then the names, and interleave so
+  // a two-letter query that is both a code fragment and a ticker offers both.
+  // A hit on the code outranks any hit on the description — but by a constant added to
+  // the winner rather than a penalty subtracted from the loser, which is what a first
+  // pass did: a typo that only the description could recognise scored below zero and
+  // was filtered out entirely, so the fuzzy fallback had nothing to fall back to.
+  FUNCTIONS.map(f=>{
+      const code=fuzzyScore(f.code,text), desc=fuzzyScore(f.desc,text);
+      return {f, s: code>=0 ? code+500 : desc};
+    })
+    .filter(x=>x.s>=0).sort((a,b)=>b.s-a.s).slice(0,6)
+    .forEach(x=>out.push({kind:'fn', fn:x.f, arg:'', label:x.f.code,
+      hint:x.f.arg, desc:x.f.desc}));
+  const des=FUNCTIONS.find(f=>f.code==='DES');
+  fuzzyNames(text,8).forEach(r=>out.push({kind:'name', row:r, fn:des,
+    label:'DES '+r.symbol, hint:r.sector||'',
+    desc:`${r.name||r.symbol} · conviction ${r.conviction} · ${r.signal}`}));
+  return out;
+}
+function fuzzyNames(q,limit){
+  if(!q) return [...S.rows].sort((a,b)=>b.conviction-a.conviction).slice(0,limit);
+  return S.rows
+    .map(r=>({r, s:Math.max(fuzzyScore(r.symbol,q), fuzzyScore(r.name||'',q)-200)}))
+    .filter(x=>x.s>=0)
+    .sort((a,b)=>b.s-a.s || b.r.conviction-a.r.conviction)
+    .slice(0,limit).map(x=>x.r);
+}
+
+S.cmd={open:false, sel:0, items:[]};
+function renderCmdList(){
+  const host=$('#cmdk-list'); if(!host) return;
+  const items=S.cmd.items;
+  if(!items.length){
+    host.innerHTML=`<div class="cmdk-empty">Nothing matches. <b>HELP</b> lists every
+      code; a ticker or a company name opens its tear sheet.</div>`;
+    return;
+  }
+  S.cmd.sel=Math.max(0,Math.min(items.length-1,S.cmd.sel));
+  host.innerHTML=items.map((it,i)=>`<div class="cmdk-row" role="option" data-i="${i}"
+      aria-selected="${i===S.cmd.sel}">
+    <span class="cmdk-code">${esc(it.label)}</span>
+    <span class="cmdk-desc">${esc(it.desc)}</span>
+    <span class="cmdk-arg">${esc(it.hint||'')}</span></div>`).join('');
+  const sel=host.querySelector('[aria-selected="true"]');
+  if(sel) sel.scrollIntoView({block:'nearest'});
+}
+function openCmd(prefill){
+  const box=$('#cmdk'); if(!box) return;
+  S.cmd.open=true; box.classList.add('open');
+  const input=$('#cmdk-input');
+  input.value=prefill||'';
+  S.cmd.sel=0; S.cmd.items=cmdMatches(input.value);
+  renderCmdList();
+  input.focus(); input.select();
+}
+function closeCmd(){
+  const box=$('#cmdk'); if(!box) return;
+  S.cmd.open=false; box.classList.remove('open');
+}
+function runCmdItem(it){
+  if(!it) return;
+  closeCmd();
+  if(it.kind==='name'){ runFunction(it.fn.code, it.row.symbol); return; }
+  runFunction(it.fn.code, it.arg||'');
+}
+
+/* One switch, so a code invoked from the bar, from a keyboard shortcut and from a
+   click on the factor ranking all take the same path and cannot drift apart. */
+function runFunction(code, arg){
+  const a=String(arg||'').trim();
+  const row=sym=>S.rows.find(r=>r.symbol===String(sym||'').toUpperCase())
+                || fuzzyNames(sym,1)[0];
+  switch(code){
+    case 'DES': {
+      const r=a?row(a):cursorRow();
+      if(r){ showView('screener'); openPanel(r); }
+      else openCmd('DES ');
+      return;
+    }
+    case 'RV': {
+      const r=a?row(a):cursorRow();
+      if(!r||!r.sector){ openCmd('RV '); return; }
+      // A peer view is a sector filter with a name attached, sorted by conviction, with
+      // the cursor already on the name you asked about — so the comparison is the first
+      // thing on screen rather than something to scroll for.
+      S.flipSet=null; S.topN=0; S.rvSymbol=r.symbol;
+      $('#f-q').value=''; $('#f-signal').value=''; $('#f-sector').value=r.sector;
+      S.sort={k:'conviction',dir:-1};
+      $$('#grid thead th').forEach(t=>t.removeAttribute('aria-sort'));
+      const th=$('#grid thead th[data-k="conviction"]');
+      if(th) th.setAttribute('aria-sort','descending');
+      showView('screener'); renderGrid();
+      const i=(S.shown||[]).findIndex(x=>x.symbol===r.symbol);
+      if(i>=0) moveCursor(0,i);
+      return;
+    }
+    case 'SCR': {
+      S.flipSet=null;
+      if(a){
+        const sec=[...new Set(S.rows.map(r=>r.sector).filter(Boolean))]
+          .find(s=>s.toLowerCase()===a.toLowerCase());
+        const sig=['STRONG','BUY','HOLD','WATCH','AVOID'].find(s=>s===a.toUpperCase());
+        if(sec){ $('#f-sector').value=sec; $('#f-q').value=''; $('#f-signal').value=''; }
+        else if(sig){ $('#f-signal').value=sig; $('#f-q').value=''; $('#f-sector').value=''; }
+        else { $('#f-q').value=a; $('#f-sector').value=''; $('#f-signal').value=''; }
+      }
+      showView('screener'); renderGrid(); return;
+    }
+    case 'TOP': {
+      const n=parseInt(a,10);
+      S.topN=Number.isFinite(n)&&n>0 ? n : 25;
+      S.flipSet=null;
+      showView('screener'); renderGrid(); return;
+    }
+    case 'FKQ': {
+      showView('research');
+      const sel=$('#lead-factor');
+      if(sel&&a){
+        const keys=[...sel.options].map(o=>o.value);
+        const hit=keys.find(k=>k===a)
+               || keys.map(k=>[k,fuzzyScore(k+' '+(FACTOR_LABELS[k]||''),a)])
+                      .filter(([,s])=>s>=0).sort((x,y)=>y[1]-x[1])[0]?.[0];
+        if(hit){ sel.value=hit; renderLeaders(); }
+      }
+      focusCard('#lead-factor');
+      return;
+    }
+    case 'SHK': {
+      const p=parseFloat(a);
+      if(Number.isFinite(p)){
+        const s=$('#shk-px');
+        s.value=String(Math.max(-40,Math.min(20,p)));
+        S.shock.px=+s.value;
+        $('#shk-px-v').textContent=S.shock.px.toFixed(1)+'%';
+        s.setAttribute('aria-valuetext',S.shock.px.toFixed(1)+'%');
+      }
+      showView('portfolio'); renderScenario(); focusCard('#scenario-card'); return;
+    }
+    case 'CSV': $('#csv').click(); return;
+    case 'HELP': openCmd(''); return;
+    case 'SEC': {
+      showView('sectors');
+      if(a) runFunction('SCR',a);
+      return;
+    }
+    default: {
+      const fn=FUNCTIONS.find(f=>f.code===code);
+      if(fn&&fn.view) showView(fn.view);
+    }
+  }
+}
+
+if($('#cmdk')){
+  const input=$('#cmdk-input');
+  input.addEventListener('input',()=>{
+    S.cmd.sel=0; S.cmd.items=cmdMatches(input.value); renderCmdList();
+  });
+  input.addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'){ e.preventDefault(); S.cmd.sel++; renderCmdList(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); S.cmd.sel--; renderCmdList(); }
+    else if(e.key==='Enter'){
+      e.preventDefault();
+      // A fully typed code with an argument runs as typed even when the highlighted
+      // suggestion is a refinement of it — otherwise "DES NVDA" plus Enter would open
+      // whatever the picker happened to have selected.
+      const txt=input.value.trim();
+      const parts=txt.split(/\s+/).filter(Boolean);
+      const fn=FUNCTIONS.find(f=>f.code===(parts[0]||'').toUpperCase());
+      if(fn && S.cmd.sel===0){ closeCmd(); runFunction(fn.code, parts.slice(1).join(' ')); }
+      else runCmdItem(S.cmd.items[S.cmd.sel]);
+    }
+    else if(e.key==='Escape'){ e.preventDefault(); closeCmd(); }
+  });
+  $('#cmdk-list').addEventListener('click',e=>{
+    const r=e.target.closest('[data-i]');
+    if(r) runCmdItem(S.cmd.items[+r.dataset.i]);
+  });
+  $('#cmdk').addEventListener('mousedown',e=>{ if(e.target.id==='cmdk') closeCmd(); });
+  $('#cmd-open').onclick=()=>openCmd('');
+}
+
+/* =====================================================================
+   KEYBOARD
+   ---------------------------------------------------------------------
+   1–8 jump views, J/K walk the ledger, g/G and PgUp/PgDn move in bulk,
+   and the single letters address the things a desk reaches for constantly:
+   R peers, S scenario, M the overview layer, E export, T theme.
+
+   Escape is a hierarchy rather than a single action, because at any moment
+   several things are "open" and dismissing the wrong one loses work: the
+   command bar first, then the detail panel, then a pill or TOP selection,
+   then the ordinary filters, and only then the row cursor.
+   ===================================================================== */
+function escapeHierarchy(){
+  if(S.cmd.open){ closeCmd(); return; }
+  if($('#panel').classList.contains('open')){ closePanel(); return; }
+  if((S.flipSet&&S.flipSet.size)||S.topN>0){
+    S.flipSet=null; S.topN=0; renderGrid(); return;
+  }
+  const dirty = ($('#f-q').value.trim()||$('#f-sector').value||$('#f-signal').value
+                 ||(parseFloat($('#f-conf').value)||0)>0);
+  if(dirty){
+    $('#f-q').value=''; $('#f-sector').value=''; $('#f-signal').value='';
+    $('#f-conf').value='0'; S.rvSymbol=null; renderGrid(); return;
+  }
+  if(S.cursor>=0){ S.cursor=-1; paintGrid(false); renderContext(); }
+}
+addEventListener('keydown',e=>{
+  // The palette opens from anywhere, including out of a text field, so it is tested
+  // before the typing guard rather than after it.
+  if((e.metaKey||e.ctrlKey) && (e.key==='k'||e.key==='K')){
+    e.preventDefault();
+    S.cmd.open ? closeCmd() : openCmd('');
+    return;
+  }
+  if(e.key==='Escape'){ escapeHierarchy(); return; }
+  if(S.cmd.open) return;                       // the input owns the rest
+  const t=e.target;
+  if(t && (t.tagName==='INPUT'||t.tagName==='SELECT'||t.tagName==='TEXTAREA'
+           ||t.isContentEditable)) return;
+  if(e.metaKey||e.ctrlKey||e.altKey) return;
+
+  const k=e.key;
+  if(k>='1'&&k<='8'){ e.preventDefault(); showView(VIEW_ORDER[+k-1]); return; }
+  const page=()=>Math.max(1,Math.floor(
+    (($('#screener .tbl-wrap')||{clientHeight:600}).clientHeight||600)/rowHeight())-1);
+  switch(k){
+    case 'j': case 'J': e.preventDefault(); showView('screener'); moveCursor(1); return;
+    case 'k': case 'K': e.preventDefault(); showView('screener'); moveCursor(-1); return;
+    case 'g': e.preventDefault(); showView('screener'); moveCursor(0,0); return;
+    case 'G': e.preventDefault(); showView('screener');
+              moveCursor(0,(S.shown||[]).length-1); return;
+    case 'PageDown': e.preventDefault(); showView('screener'); moveCursor(page()); return;
+    case 'PageUp':   e.preventDefault(); showView('screener'); moveCursor(-page()); return;
+    case 'Enter': {
+      const r=cursorRow();
+      if(r){ e.preventDefault(); openPanel(r); }
+      return;
+    }
+    case 'r': case 'R': {
+      const r=cursorRow();
+      e.preventDefault();
+      r ? runFunction('RV',r.symbol) : openCmd('RV ');
+      return;
+    }
+    case 's': case 'S': e.preventDefault(); runFunction('SHK',''); return;
+    case 'm': case 'M': e.preventDefault(); toggleOverview(); return;
+    case 'e': case 'E': e.preventDefault(); runFunction('CSV',''); return;
+    case 't': case 'T': e.preventDefault(); $('#theme').click(); return;
+    case '?': e.preventDefault(); openCmd(''); return;
+  }
+});
+
+function toggleOverview(force){
+  const box=$('#ovw'); if(!box) return;
+  const open = force!=null ? !!force : box.dataset.open!=='true';
+  box.dataset.open=String(open);
+  $('#ovw-toggle').setAttribute('aria-expanded',String(open));
+  try{ localStorage.setItem('ecm-ovw',open?'1':'0'); }catch{}
+  if(open) renderOverview();
+}
+if($('#ovw-toggle')){
+  $('#ovw-toggle').onclick=()=>toggleOverview();
+  try{
+    const v=localStorage.getItem('ecm-ovw');
+    if(v==='0') toggleOverview(false);
+  }catch{}
+  $$('#ovw-span button').forEach(b=>{
+    b.onclick=()=>{
+      S.ovwSpan=+b.dataset.span;
+      $$('#ovw-span button').forEach(o=>o.setAttribute('aria-pressed',String(o===b)));
+      overviewNormalised();
+    };
+  });
+}
+
+/* =====================================================================
+   CONVERGENT WATER-FILL
+   ---------------------------------------------------------------------
+   Three ceilings bind at once: a per-position cap, a per-sector cap, and a
+   per-name liquidity cap set by ADV and the participation rate you are
+   willing to be. Applying them in sequence does not work — capping
+   positions, then redistributing, then capping sectors moves weight back
+   over the position ceiling, and whichever pass ran last is the only one
+   the output actually satisfies.
+
+   So they are solved together. Each round fills the names that are still
+   free in proportion to their demand, advances only as far as the first
+   constraint that would be violated, freezes everything now sitting on a
+   ceiling, and refills what is left. It terminates because every round
+   either places the whole remaining budget or freezes at least one name or
+   sector, which bounds the loop at names + sectors rounds.
+
+   Whatever cannot be placed is cash. It is returned as cash and printed as
+   cash: pushing refused size into the next name concentrates the book into
+   whatever happened to be liquid and then presents that as the portfolio
+   the model recommended.
+   ===================================================================== */
+function waterFill(items, budget, sectorCap){
+  const alloc=new Map(items.map(i=>[i.key,0]));
+  const frozen=new Set();
+  const reason=new Map();
+  const sectors=[...new Set(items.map(i=>i.sector))];
+  const secTotal=()=>{
+    const m=new Map(sectors.map(s=>[s,0]));
+    for(const i of items) m.set(i.sector,(m.get(i.sector)||0)+alloc.get(i.key));
+    return m;
+  };
+  let remaining=budget;
+  const EPS=Math.max(1e-9, budget*1e-12);
+  const maxRounds=items.length+sectors.length+4;
+  for(let round=0; round<maxRounds; round++){
+    if(remaining<=EPS) break;
+    const sec=secTotal();
+    const free=items.filter(i=>!frozen.has(i.key)
+      && alloc.get(i.key) < i.cap-EPS
+      && (sec.get(i.sector)||0) < sectorCap-EPS
+      && i.demand>0);
+    if(!free.length) break;
+    const denom=free.reduce((a,i)=>a+i.demand,0);
+    if(denom<=0) break;
+    const add=new Map(free.map(i=>[i.key, remaining*i.demand/denom]));
+    // How far this round can advance before the first ceiling is reached. t=1 means
+    // the remaining budget is placed outright and the loop is done.
+    let t=1;
+    for(const i of free){
+      const room=i.cap-alloc.get(i.key), want=add.get(i.key);
+      if(want>0 && room<want) t=Math.min(t, room/want);
+    }
+    for(const s of sectors){
+      const wantS=free.filter(i=>i.sector===s).reduce((a,i)=>a+add.get(i.key),0);
+      if(wantS<=0) continue;
+      const roomS=sectorCap-(sec.get(s)||0);
+      if(roomS<wantS) t=Math.min(t, roomS/wantS);
+    }
+    t=Math.max(0,Math.min(1,t));
+    let placed=0;
+    for(const i of free){
+      const give=add.get(i.key)*t;
+      alloc.set(i.key, alloc.get(i.key)+give);
+      placed+=give;
+    }
+    remaining-=placed;
+    // Freeze whatever is now sitting on a ceiling, naming which one bound it. A name at
+    // both its own cap and its sector's is recorded against its own — that is the one
+    // that would still bind if the sector ceiling were lifted.
+    const sec2=secTotal();
+    let froze=false;
+    for(const i of free){
+      if(alloc.get(i.key)>=i.cap-EPS){
+        frozen.add(i.key); reason.set(i.key, i.capReason); froze=true;
+      }
+    }
+    for(const s of sectors){
+      if((sec2.get(s)||0)>=sectorCap-EPS){
+        for(const i of items) if(i.sector===s && !frozen.has(i.key)){
+          frozen.add(i.key);
+          if(!reason.has(i.key)) reason.set(i.key,'sector cap');
+          froze=true;
+        }
+      }
+    }
+    if(t>=1-1e-12) break;      // the budget was placed in full
+    if(!froze) break;          // nothing advanced and nothing bound — cannot converge
+  }
+  return {
+    alloc, cash:Math.max(0,remaining),
+    reason:k=>reason.get(k)||'conviction',
+    pinned:{
+      position:items.filter(i=>reason.get(i.key)==='position cap').length,
+      adv:     items.filter(i=>reason.get(i.key)==='ADV cap').length,
+      sector:  items.filter(i=>reason.get(i.key)==='sector cap').length,
+    },
+    sectorsAtCap:(()=>{ const m=secTotal();
+      return sectors.filter(s=>(m.get(s)||0)>=sectorCap-EPS); })(),
+  };
+}
+
+/* =====================================================================
+   SCENARIO — a shock applied to the board, never to the ledger
+   ---------------------------------------------------------------------
+   What actually changes under a one-day price move, and what does not: a
+   price shock moves the drawdown from the 52-week high, the position
+   against the 50- and 200-day averages, the vol-adjusted excess return
+   against the benchmark, and the earnings and EBITDA yields. It does not
+   move ROIC, gross margin, leverage or earnings stability, and pretending
+   otherwise would make the scenario a different model rather than the same
+   model under different prices. The inputs that move are re-ranked
+   cross-sectionally and the board is re-scored under the frozen spec.
+   ===================================================================== */
+function rankInto(rows, src, dst, groupKey){
+  const groups=new Map();
+  for(const r of rows){
+    if(!nz(r[src])) continue;
+    const g=groupKey ? (r[groupKey]||'—') : '*';
+    if(!groups.has(g)) groups.set(g,[]);
+    groups.get(g).push(r);
+  }
+  for(const list of groups.values()){
+    list.sort((a,b)=>a[src]-b[src]);
+    const n=list.length;
+    list.forEach((r,i)=>{ r[dst] = n>1 ? i/(n-1) : 0.5; });
+  }
+}
+function applyShock(pxPct, betaSpread){
+  const px=pxPct/100, spread=betaSpread/10;
+  const vols=S.rows.map(r=>r.vol_1y).filter(nz);
+  const vmed=median(vols)||0.25;
+  const out=S.rows.map(r=>{
+    const beta = (nz(r.vol_1y)&&vmed>0) ? r.vol_1y/vmed : 1;
+    const mv = px*(1+spread*(beta-1));
+    const p0 = r.price||0;
+    const p1 = p0*(1+mv);
+    const c=Object.assign({},r);
+    c.price=p1; c._mv=mv;
+    const hi=Math.max(r.hi_52w||p1, p1);
+    c.drawdown_52w = hi>0 ? Math.max(0,1-p1/hi) : (r.drawdown_52w||0);
+    const vs50 = (nz(r.ma50)&&r.ma50>0) ? p1/r.ma50-1 : r.px_vs_ma50;
+    const vs200= (nz(r.ma200)&&r.ma200>0) ? p1/r.ma200-1 : r.px_vs_ma200;
+    c._trendRaw = 0.4*(vs50??0)+0.6*(vs200??0);
+    c._rsRaw = (nz(r.vol_1y)&&r.vol_1y>0)
+      ? (r.rs_blend||0)+(mv-px)/r.vol_1y      // excess over the benchmark's own move
+      : (r.rs_blend||0);
+    // Yields rise as the price falls. EV's debt leg is held fixed, so the EBITDA yield
+    // moves slightly less than proportionally — stated in the note rather than fudged.
+    const scale = p1>0 ? p0/p1 : 1;
+    const ey = nz(r.earnings_yield) ? r.earnings_yield*scale : null;
+    const by = nz(r.ebitda_yield) ? r.ebitda_yield*scale : null;
+    c._valRaw = (ey!=null&&by!=null) ? (ey+by)/2 : (ey!=null?ey:by);
+    return c;
+  });
+  rankInto(out,'_rsRaw','p_rs',null);
+  rankInto(out,'_trendRaw','p_trend',null);
+  rankInto(out,'_valRaw','p_value','sector');
+  return out.map(c=>Object.assign(c, score(c)));
+}
+function renderScenario(){
+  const out=$('#shk-out'), tbl=$('#shk-table');
+  if(!out||!S.rows.length) return;
+  const px=S.shock.px, beta=S.shock.beta;
+  if(!px && !beta){
+    out.innerHTML=`<div class="pending">No shock applied. Move either slider to
+      re-price the board; the ledger on disk is never touched.</div>`;
+    tbl.innerHTML='';
+    return;
+  }
+  const shocked=applyShock(px,beta);
+  const base=new Map(S.rows.map(r=>[r.symbol,r]));
+  const rows=shocked.map(c=>{
+    const b=base.get(c.symbol);
+    return {sym:c.symbol, sector:c.sector, from:b.conviction, to:c.conviction,
+            d:c.conviction-b.conviction, fromTier:b.signal, toTier:c.signal, mv:c._mv};
+  });
+  const tierMoved=rows.filter(r=>r.fromTier!==r.toTier).length;
+  const rescored=rows.filter(r=>r.d!==0).length;
+  const medFrom=median(rows.map(r=>r.from)), medTo=median(rows.map(r=>r.to));
+  const buysFrom=rows.filter(r=>r.from>=70).length, buysTo=rows.filter(r=>r.to>=70).length;
+  const stat=(k,v,s)=>`<div class="sbx-stat"><div class="k">${esc(k)}</div>
+    <div class="v">${v}</div><div class="s">${esc(s)}</div></div>`;
+  out.innerHTML=`<div class="sbx-stats">
+      ${stat('Median conviction', medTo.toFixed(0),
+             `was ${medFrom.toFixed(0)} · ${(medTo-medFrom>=0?'+':'')}${(medTo-medFrom).toFixed(1)}`)}
+      ${stat('BUY or better', buysTo, `was ${buysFrom}`)}
+      ${stat('Re-scored', rescored, `of ${rows.length} names`)}
+      ${stat('Changed tier', tierMoved, `of ${rows.length} names`)}
+    </div>
+    ${!beta?`<p class="card-note" style="margin-top:8px"><b>A uniform shock barely moves a
+      cross-sectional score, and that is the reading, not a broken slider.</b> Every input
+      here is a percentile: multiply every price by the same factor and the relative
+      strength, trend and valuation rankings come out in exactly the same order, because
+      a monotone transform of an input cannot reorder a rank. What does move is the
+      distance from the 52-week high — which is an absolute quantity — so the whole
+      effect at ${num(px,0)}% runs through the mean-reversion gate, lifting high-quality
+      names in a drawdown and leaving the rest where they were. Add dispersion to make
+      the moves differ by name; that is what re-ranks the board.</p>`:''}`;
+  const worst=[...rows].sort((a,b)=>a.d-b.d).slice(0,8);
+  const best=[...rows].sort((a,b)=>b.d-a.d).slice(0,8);
+  const half=(title,list)=>`<div>
+    <div class="sub-h">${title}</div>
+    <div class="tbl-wrap" style="max-height:230px"><table>
+      <thead><tr><th class="l">Ticker</th><th>Move</th><th>From</th><th>To</th>
+        <th class="l">Tier</th></tr></thead>
+      <tbody>${list.map(r=>`<tr data-sym="${esc(r.sym)}">
+        <td class="l"><span class="sym">${esc(r.sym)}</span></td>
+        <td class="${r.mv>=0?'up':'down'}">${spct(r.mv,1)}</td>
+        <td>${r.from}</td>
+        <td style="color:${convInk(r.to)}">${r.to}</td>
+        <td class="l src">${r.fromTier===r.toTier?'—':esc(r.fromTier+' → '+r.toTier)}</td>
+      </tr>`).join('')}</tbody></table></div></div>`;
+  tbl.innerHTML=`<div class="row split">${half('Score falls furthest',worst)}
+    ${half('Score rises furthest',best)}</div>
+    <p class="card-note">Prices move; ROIC, gross margin, leverage and earnings
+      stability do not — a one-day tape does not change what a business earns, and
+      re-ranking them here would make this a different model rather than this model
+      under different prices. Momentum, trend, drawdown and the valuation yields are
+      recomputed and re-ranked cross-sectionally, then the board is re-scored under
+      specification <code>${esc(S.ledger.spec_hash||'?')}</code>. EV's debt leg is held
+      constant, so the EBITDA yield moves slightly less than proportionally.
+      <b>Nothing here is written anywhere</b> — reload and the board is the published
+      one again.</p>`;
+  tbl.onclick=e=>{
+    const tr=e.target.closest('tr[data-sym]');
+    if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+  };
+}
+if($('#shk-px')){
+  const wire=(sel,key,fmt)=>{
+    const n=$(sel);
+    n.addEventListener('input',()=>{
+      S.shock[key]=+n.value;
+      const txt=fmt(S.shock[key]);
+      $(sel+'-v').textContent=txt;
+      n.setAttribute('aria-valuetext',txt);
+      renderScenario();
+    });
+  };
+  wire('#shk-px','px',v=>v.toFixed(1)+'%');
+  wire('#shk-beta','beta',v=>(v/10).toFixed(1)+'×');
+}
+
 /* ---------- chrome ---------- */
 // A chart in a hidden view measures zero, so it is drawn at its minimum width and has
 // to be redrawn once its tab is actually on screen. Same on resize: the SVG scales
@@ -3721,16 +5302,18 @@ if($('#sandbox')){
 function redrawCharts(){
   if(!S.ledger) return;
   renderMap(); renderDist(); renderSectors(); renderData(); renderMonitor(); renderAlpha(); renderEdge(); renderHealth(); renderSizing(); renderPersistence();
+  renderOverview();
+  // The ledger's own scroll port only has a height once its tab is on screen, so the
+  // virtual window is recomputed here as well as on scroll.
+  paintGrid(false);
 }
-$$('nav button').forEach(b=>{
-  b.onclick=()=>{
-    $$('nav button').forEach(o=>o.setAttribute('aria-selected', String(o===b)));
-    $$('.view').forEach(v=>{v.hidden = v.id!=='view-'+b.dataset.view;});
-    redrawCharts();
-  };
-});
+$$('nav button[role=tab]').forEach(b=>{ b.onclick=()=>showView(b.dataset.view); });
 let resizeT;
-addEventListener('resize',()=>{ clearTimeout(resizeT); resizeT=setTimeout(redrawCharts,160); });
+addEventListener('resize',()=>{
+  measureTopbar();
+  clearTimeout(resizeT); resizeT=setTimeout(redrawCharts,160);
+});
+measureTopbar();
 $('#theme').onclick=()=>{
   const cur=document.documentElement.getAttribute('data-theme');
   const next = cur==='dark' ? 'light' : cur==='light' ? 'dark'
@@ -3740,7 +5323,8 @@ $('#theme').onclick=()=>{
   if(S.ledger){ renderMacro(); renderMap(); renderGrid(); renderSectors();
                 renderPortfolio(); renderData(); renderSale(); renderDist(); renderAlpha();
                 renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
-                renderWatchlist(); renderMonitor(); }
+                renderWatchlist(); renderMonitor(); renderOverview(); renderScenario();
+                renderSizing(); }
 };
 try{
   const saved=localStorage.getItem('ecm-theme');
