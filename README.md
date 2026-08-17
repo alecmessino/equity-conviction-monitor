@@ -193,6 +193,125 @@ snapshot is structurally identical to a recorded one, so a mixed series cannot b
 and an Information Coefficient computed over it would be measuring the leak rather than the
 model. The refusal is a `realpath` check with its own exit code, not a convention.
 
+### Driving the terminal
+
+The terminal is addressed by **function code**, not only by clicking. `⌘K` / `Ctrl+K`
+opens the command bar; every code takes its argument inline, and anything that matches no
+code at all falls through to a fuzzy search over tickers and company names — including
+transpositions, so a mistyped code lands on the function you meant rather than on an error.
+
+| | | | |
+|---|---|---|---|
+| `DES <ticker>` tear sheet | `SCR [sector\|signal\|text]` screener | `RV <ticker>` sector peers | `PORT` book and sizing |
+| `WL` overnight diff | `MON` pipeline health | `SHK [pct]` price scenario | `TOP [n]` top N |
+| `FKQ [factor]` factor leaders | `CSV` export | `SEC` · `DQ` · `MTH` views | `HELP` list them all |
+
+Keyboard: `1`–`8` jump views, `J`/`K` walk the ledger, `g`/`G` and `PgUp`/`PgDn` move in
+bulk, `Enter` opens the row under the cursor, `R` peers, `S` scenario, `M` collapses the
+overview, `E` exports, `T` theme. `Esc` is a hierarchy rather than one action — command
+bar, then detail panel, then a pill or `TOP` selection, then the filters, then the cursor —
+because at any moment several things are open and dismissing the wrong one loses work.
+
+A **market & book overview** sits above all eight views — one block, not a row of cards,
+because everything below it is name-level and a desk that opens on a ticker has skipped
+the two questions that decide whether the ticker matters. It carries Morningstar-style
+return boxes where the cell *is* the swatch, tinted by magnitude and capped at 37% alpha
+so the figure stays `--ink` at every step: index and region across 1D/1M/3M/YTD/1Y, the
+book against the benchmark, and the style ETFs as excess in percentage points (excess
+rather than total — these are all US large-cap funds, so their totals agree to a point or
+two and a total-return column would read as five copies of the index). Under it, a
+normalised chart rebased to **0%** at the window start with up to six selectable legs and
+a hover that reads every line at one date, the FRED rates & credit column, and the eleven
+sector SPDRs ordered by the selected horizon. Universe breadth and the model's own factor
+tilt sit with the board on the Screener, since they describe the scored names rather than
+the tape.
+
+Growth is proxied by the Nasdaq-100 and labelled `†`: there is no growth ETF in the
+committed universe, and substituting one that is not there would be the kind of quiet
+invention this rebuild exists to remove. Tracking error and the systematic share of
+variance do not exist upstream either — there is no covariance matrix in the ledger — so
+they are computed in the browser from the published weights against the bundled series
+and say so wherever they appear.
+
+The palette is teal and coral over a warm neutral, light mode primary. Measured on the
+light surface: teal 6.06:1, coral 4.82:1. Teal/coral separates on the blue-yellow axis as
+well as red-green, so it survives protanopia and deuteranopia where the previous blue/red
+pair narrowed sharply — and the whole system moves, not only the diverging poles, because
+leaving the sequential ramp blue would put "high on this factor" and "above the median" in
+the same hue on the same screen.
+
+The ledger is **virtualised** — "Show all" is 1014 rows across 19 columns, and building
+all of them costs ~19,000 nodes on every keystroke in the search box. Only the visible
+window plus an overscan margin reaches the DOM; two spacer rows carry the rest of the
+height so the scrollbar still describes the real list. The row pitch lives in one CSS
+custom property that the virtualiser reads back, because a JS constant and a CSS rule that
+disagree by a pixel put the spacers out by a row every forty rows.
+
+Position sizing solves its three ceilings **together**. A per-position cap, a per-sector
+cap and a per-name liquidity cap set by ADV and participation cannot be applied in
+sequence: capping positions, redistributing, then capping sectors pushes weight back over
+the position ceiling, and only the last pass applied is actually satisfied. A convergent
+water-fill fills the free names in proportion to conviction, advances only as far as the
+first ceiling it would cross, freezes it and refills the remainder — bounded at
+names + sectors rounds. Whatever cannot be placed is **cash, reported as cash**; pushing
+refused size into the next name concentrates the book into whatever happened to be liquid
+and then presents that as the portfolio the model recommended.
+
+The scenario panel shocks every price and re-scores under the frozen specification. What
+moves: drawdown from the 52-week high, position against the 50- and 200-day averages, the
+vol-adjusted excess return, and the earnings and EBITDA yields. What does not: ROIC, gross
+margin, leverage, earnings stability — a one-day tape does not change what a business
+earns. A *uniform* shock therefore barely moves the board, and the panel says so rather
+than looking broken: every input is a percentile, and a monotone transform of an input
+cannot reorder a rank, so the entire effect runs through the drawdown gate. The dispersion
+slider scales each move by the name's own realised volatility, and that is what re-ranks.
+Nothing is written anywhere.
+
+The tear sheet fits an OLS channel to the **log** of the close. A line fitted to the level
+implies a constant dollar drift, so the same channel is proportionally four times as wide
+at $20 as at $80 and the name looks calmer the higher it goes; in logs the drift is a rate
+and the band a constant percentage. Drift is annualised only when the bars carry dates —
+the bundled `history.json` is a downsample, and multiplying its per-bar drift by 252
+reported a 2%-per-week trend as +265%/yr.
+
+### The earnings calendar
+
+There is no keyless forward earnings calendar. Vendors sell one; SEC does not publish
+one, because no company is obliged to file its reporting date in a structured form. So
+`equity_monitor/earnings.py` does not pretend to have one — it measures what SEC *does*
+publish, which is when every filer actually reported, and projects the next date from
+that filer's own cadence.
+
+Every row is one of two things, and the distinction is the whole panel:
+
+- **confirmed** — a filing has landed, with the form that reported it beside the date.
+- **estimated** — no filing yet. The date is the filer's last period end plus the lag it
+  has historically taken to report: 32 days at the universe median over 899 observations,
+  ±4 at the median absolute deviation. These are wrong by a few days routinely.
+
+A calendar that renders those alike is worse than no calendar, because a desk will
+schedule around the projection exactly as if it were the fact.
+
+The history comes from EDGAR's own index files — one request covers every filer at once,
+the same property that makes the `frames` API affordable for fundamentals. Completed
+quarters are immutable and cached indefinitely; the current quarter is assembled from
+daily index files, each immutable once the day is over. **There is no per-ticker loop**,
+and on a warm cache a run fetches exactly one file: today's. Names that cannot be matched
+to a CIK carry no date rather than a guessed one.
+
+Two defects worth recording, because both were silent and both produced plausible
+numbers. The daily index writes `20260814` where the quarterly writes `2026-05-07`, so a
+reader looking for an ISO date found none and matched inside the accession number
+instead — yielding four-digit CIKs and dates like `1371-26-00`, with the only symptom
+being a calendar containing no filing newer than the last completed quarter. And
+`max(end)` over a name's facts picks the dei cover-page date, not the period end: NetApp
+files sixteen facts dated 2026-04-24 and one dated 2026-05-28, so pairing the maximum
+with the filing measured cover-date-to-filing and reported an 8-day median lag for a form
+that takes a month. Every observed lag came out at exactly 8 — a distribution with no
+spread is the signature of measuring the wrong quantity, not of a punctual universe. The
+period end is now the mode across the name's facts, and the index parser reads columns
+positionally rather than hunting for a date.
+
 ### Reading the terminal
 
 The screener ledger pins rank and ticker, rules every fifth row rather than every row, and

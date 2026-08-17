@@ -21,8 +21,8 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from equity_monitor import (churn, edge, features, health, model, monitor, performance,
-                            snapshots, universe as uni, watchlist)
+from equity_monitor import (churn, earnings, edge, features, health, model, monitor,
+                            performance, snapshots, universe as uni, watchlist)
 from equity_monitor.sources import edgar, macro, prices
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -127,6 +127,7 @@ def turnover(prev: dict | None, rows: list[dict]) -> dict:
 
 
 def build(limit: int | None = None, skip_macro: bool = False,
+          skip_earnings: bool = False,
           skip_fundamentals: bool = False, offline: bool = False) -> dict:
     members, provenance = uni.load(limit)
     equities = [m for m in members if not m.is_etf]
@@ -219,6 +220,21 @@ def build(limit: int | None = None, skip_macro: bool = False,
     if attribution:
         moved = attribution.get("names", {})
         print(f"attribution: {len(moved)} names moved since {attribution.get('since')}")
+    # Earnings calendar. Derived from EDGAR's own filing index rather than bought:
+    # completed quarters are immutable and cached, so on a warm runner this costs one
+    # request. It is written inside its own try because a calendar is a convenience and
+    # a failed one must not cost the night its snapshot or its board.
+    if not skip_earnings:
+        try:
+            cal = earnings.build(scored, on_progress=progress)
+            earnings.write(os.path.join(LEDGER, "earnings.json"), cal)
+            print(f"earnings: {cal['confirmed']} confirmed, {cal['projected']} projected "
+                  f"({cal['in_horizon']} inside {cal['horizon_days']}d, "
+                  f"{cal['in_book']} held) · median lag {cal['median_lag_days']}d "
+                  f"±{cal['band_days']} over {cal['lag_observations']} observations")
+        except Exception as exc:
+            print(f"earnings: skipped ({exc})")
+
     try:
         with open(os.path.join(LEDGER, "trends.json"), "w") as fh:
             json.dump(snapshots.build_trends(LEDGER), fh, separators=(",", ":"))
@@ -340,13 +356,16 @@ def main() -> int:
     ap.add_argument("--limit", type=int, default=None,
                     help="cap the number of equities (ETFs always included)")
     ap.add_argument("--skip-macro", action="store_true")
+    ap.add_argument("--skip-earnings", action="store_true",
+                    help="skip the EDGAR-derived earnings calendar")
     ap.add_argument("--skip-fundamentals", action="store_true",
                     help="prices only; useful for isolating a price-source problem")
     ap.add_argument("--offline", action="store_true",
                     help="replay committed price history instead of refetching, so a "
                          "scoring change can be re-run in seconds against identical prices")
     args = ap.parse_args()
-    build(args.limit, args.skip_macro, args.skip_fundamentals, args.offline)
+    build(args.limit, args.skip_macro, args.skip_earnings,
+          args.skip_fundamentals, args.offline)
     return 0
 
 
