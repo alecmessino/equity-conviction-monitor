@@ -264,6 +264,40 @@ RANK_SPEC: list[tuple[str, str, bool]] = [
 
 ALL_PERCENTILES = [k for k, _, _ in RANK_SPEC] + ["p_value"]
 
+# Inputs that no profile scores on, but which are still worth measuring, mapped to the
+# population they describe. `efficiency_ratio` is the whole reason this table exists:
+# it is a bank measure, it feeds no percentile, and reporting it against all 1,011
+# scored names made a 29%-of-Financials number read as a 5% universe-wide failure.
+CONTEXT_SCOPE: dict[str, tuple[str, ...]] = {
+    "efficiency_ratio": ("Financials",),
+}
+
+
+def input_scope(field: str) -> tuple[str, ...]:
+    """Profiles that actually consume ``field``. Empty tuple means every scored name.
+
+    A profile-specific input must be measured against the profile that asks for it.
+    Universe-wide coverage of a Financials-only metric is not a low number, it is the
+    wrong number: it counts 853 names as missing something their score never wanted.
+    """
+    if field in CONTEXT_SCOPE:
+        return CONTEXT_SCOPE[field]
+    key = next((k for k, f, _ in RANK_SPEC if f == field), None)
+    if key is None:
+        return ()  # not a ranked input at all — market_cap, sector, drawdown_52w
+    if key in WEIGHTS["confirmation"] or key in WEIGHTS["risk"]:
+        return ()  # every name is scored on confirmation and risk
+    used = tuple(sorted(p for p, w in QUALITY_PROFILES.items() if key in w))
+    return () if len(used) == len(QUALITY_PROFILES) else used
+
+
+def scoped_rows(rows: list[dict], scope: tuple[str, ...]) -> list[dict]:
+    """The scoreable rows a scope applies to. Empty scope means all of them."""
+    scoreable = [r for r in rows if r.get("asset_class") != "ETF"]
+    if not scope:
+        return scoreable
+    return [r for r in scoreable if quality_profile(r.get("sector") or "") in scope]
+
 
 def _value_metric(row: dict) -> float | None:
     """Composite cheapness: average of earnings yield and EBITDA/EV where both exist.

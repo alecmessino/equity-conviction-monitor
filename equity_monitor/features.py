@@ -15,6 +15,7 @@ import math
 from concurrent.futures import ThreadPoolExecutor
 from datetime import date
 
+from . import model
 from . import universe as uni
 from .sources import edgar, prices
 
@@ -213,18 +214,42 @@ def build(members: list[uni.Member], bars: dict[str, prices.Bars],
     return rows
 
 
+def _observed(row: dict, field: str) -> bool:
+    v = row.get(field)
+    return v is not None and not (isinstance(v, float) and math.isnan(v))
+
+
 def coverage(rows: list[dict], fields: list[str]) -> dict[str, float]:
-    """Fraction of scoreable rows carrying a real value for each field.
+    """Fraction of the rows each field applies to that carry a real value.
 
     Surfaced in the run log and the terminal. The whole reason the previous
     dashboard could ship broken for weeks is that nothing measured this.
+
+    The denominator is the population the input is *scored against*, not the whole
+    universe — see ``coverage_report`` for why, and for the scope each field got.
     """
-    scoreable = [r for r in rows if r.get("asset_class") != "ETF"]
-    n = len(scoreable) or 1
-    out = {}
+    return {f: rep["share"] for f, rep in coverage_report(rows, fields).items()}
+
+
+def coverage_report(rows: list[dict], fields: list[str]) -> dict[str, dict]:
+    """Coverage with its denominator shown: share, observed, population, scope.
+
+    A profile-specific input measured against the whole universe is not a low
+    number, it is the wrong number. `efficiency_ratio` read 4.5% because 853 names
+    that are not banks were counted as missing a bank metric; against the Financials
+    it actually describes it reads 29.1%, which is a real and much more useful
+    coverage gap. Every field now names the population it was measured over.
+    """
+    out: dict[str, dict] = {}
     for f in fields:
-        present = sum(1 for r in scoreable
-                      if r.get(f) is not None and not (
-                          isinstance(r.get(f), float) and math.isnan(r[f])))
-        out[f] = round(present / n, 4)
+        scope = model.input_scope(f)
+        pop = model.scoped_rows(rows, scope)
+        n = len(pop)
+        present = sum(1 for r in pop if _observed(r, f))
+        out[f] = {
+            "share": round(present / n, 4) if n else 0.0,
+            "observed": present,
+            "population": n,
+            "scope": list(scope),
+        }
     return out

@@ -21,8 +21,9 @@ from datetime import datetime, timezone
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from equity_monitor import (churn, earnings, edge, features, health, model, monitor,
-                            performance, snapshots, universe as uni, watchlist)
+from equity_monitor import (churn, diagnostics, earnings, edge, features, freshness,
+                            health, model, monitor, performance, snapshots,
+                            universe as uni, watchlist)
 from equity_monitor.sources import edgar, macro, prices
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -48,6 +49,35 @@ MAX_WEIGHT = 5.0
 
 def _now() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _stamp(name: str) -> None:
+    """Record that this artifact refreshed on this run, and clear any old stale flag.
+
+    watchlist, performance, edge and trends publish dicts their writers never dated.
+    Without a date, "did this refresh tonight?" has no answer, and no answer reads as
+    yes — which is precisely how a three-day-old earnings calendar published as current.
+    """
+    try:
+        freshness.stamp(os.path.join(LEDGER, name), _now())
+    except Exception as exc:  # noqa: BLE001 — a stamp must never cost the run its data
+        print(f"  could not stamp {name} ({exc})")
+
+
+def _flag(name: str, exc: BaseException) -> None:
+    """Say, in the file itself, that this step failed and left the previous copy behind.
+
+    Every one of these steps already caught its own exception and carried on, which is
+    the right call — a failed convenience must not cost the night its board. What was
+    missing is that the file left on disk then looked exactly like a fresh one. It no
+    longer does.
+    """
+    try:
+        if freshness.mark_stale(os.path.join(LEDGER, name),
+                                reason=f"{type(exc).__name__}: {exc}", as_of=_now()):
+            print(f"  {name}: previous copy flagged stale for the terminal")
+    except Exception as inner:  # noqa: BLE001
+        print(f"  {name}: could not flag the previous copy ({inner})")
 
 
 # Rounding happens once, here, on the way out. model.score() deliberately returns full
@@ -167,11 +197,35 @@ def build(limit: int | None = None, skip_macro: bool = False,
     for r in rows:
         round_row(r)
 
-    cov = features.coverage(rows, COVERAGE_FIELDS)
-    print("coverage: " + "  ".join(f"{k}={v:.0%}" for k, v in cov.items()))
+    # Each input is measured against the population it is scored on, not the whole
+    # universe. efficiency_ratio read 4.5% for months because 853 names that are not
+    # banks were counted as missing a bank metric; the real number is 29% of Financials,
+    # which is a genuine coverage gap rather than a phantom catastrophe.
+    cov_detail = features.coverage_report(rows, COVERAGE_FIELDS)
+    cov = {k: v["share"] for k, v in cov_detail.items()}
+    print("coverage: " + "  ".join(
+        f"{k}={d['share']:.0%}({d['observed']}/{d['population']}"
+        + (f" {'+'.join(d['scope'])}" if d["scope"] else "") + ")"
+        for k, d in cov_detail.items()))
     print(f"conviction: n={len(scored)} dispersion={model.dispersion(scored):.1f} "
           f"range={min((r['conviction'] for r in scored), default=0)}–"
           f"{max((r['conviction'] for r in scored), default=0)}")
+
+    # Descriptions of the board, computed after scoring and incapable of changing it.
+    # score_rows has already run and every row is final; diagnostics only reads them.
+    diag = diagnostics.build(scored)
+    pi = diag["pillar_influence"]
+    if pi.get("sufficient"):
+        print("influence: " + "  ".join(
+            f"{p['pillar'][:4]}={p['influence']:.0%}" for p in pi["pillars"])
+            + f"  (nominal 33% each; {pi['leader']} leads by {pi['spread']}x)")
+    tilt = diag["sector_tilt"]
+    if tilt.get("sufficient"):
+        print(f"tilt: top {tilt['top_n']} most over-represented in "
+              f"{tilt['most_over']} at {tilt['most_over_multiple']}x its universe weight")
+    capped = diag["capped_by_data"]
+    print(f"capped by missing data: {capped['constrained']} names, "
+          f"{capped['tier_changes']} would change tier if their gaps were observed")
 
     # history: one bundled file for the grid, per-symbol OHLCV for the detail view
     bundle = {}
@@ -259,10 +313,12 @@ def build(limit: int | None = None, skip_macro: bool = False,
     try:
         with open(os.path.join(LEDGER, "trends.json"), "w") as fh:
             json.dump(snapshots.build_trends(LEDGER), fh, separators=(",", ":"))
+        _stamp("trends.json")
         n_factor_files = snapshots.write_symbol_factors(LEDGER)
         print(f"trends + per-symbol factor history: {n_factor_files} symbols")
     except Exception as exc:
         print(f"trends: skipped ({exc})")
+        _flag("trends.json", exc)
 
     prev = None
     prev_path = os.path.join(LEDGER, "index.json")
@@ -285,7 +341,12 @@ def build(limit: int | None = None, skip_macro: bool = False,
         "universe": len(scored),
         "weights": model.WEIGHTS,
         "quality_profiles": model.QUALITY_PROFILES,
+        # `coverage` stays a flat field->share map: scripts/validate_ledger.py reads it
+        # as floats and the terminal's header chip averages three of them. The
+        # denominators live beside it rather than inside it.
         "coverage": cov,
+        "coverage_detail": cov_detail,
+        "diagnostics": diag,
         "dispersion": round(model.dispersion(scored), 2),
         "price_failures": failures,
         "turnover": turnover(prev, scored),
@@ -326,6 +387,7 @@ def build(limit: int | None = None, skip_macro: bool = False,
             print("churn: pending (needs a second snapshot)")
     except Exception as exc:
         print(f"monitor: skipped ({exc})")
+        _flag("monitor.json", exc)
 
     # The overnight diff, published separately: it is a daily workflow rather than a
     # diagnostic, and pinning it to monitor.json would couple a morning view to a
@@ -334,6 +396,7 @@ def build(limit: int | None = None, skip_macro: bool = False,
         diff = watchlist.from_ledger(LEDGER, payload)
         with open(os.path.join(LEDGER, "watchlist.json"), "w") as fh:
             json.dump(diff, fh, separators=(",", ":"))
+        _stamp("watchlist.json")
         if diff:
             c = diff["counts"]
             print(f"watchlist: {c['upgrades']} up, {c['downgrades']} down, "
@@ -342,16 +405,19 @@ def build(limit: int | None = None, skip_macro: bool = False,
             print("watchlist: pending (needs a second snapshot)")
     except Exception as exc:
         print(f"watchlist: skipped ({exc})")
+        _flag("watchlist.json", exc)
 
     # Paper return of the published book. Chained across recorded snapshots only — it
     # cannot be back-filled, because it needs the weights that were actually published
     # on the earlier night and those were not recorded before the ledger started.
     try:
         perf = performance.write(LEDGER)
+        _stamp("performance.json")
         # The edge measurement rides on the same legs as the curve, so it is written
         # immediately after: whether the ordering is informative is the question that
         # decides whether any of the rest is worth acting on.
         edge.write(LEDGER)
+        _stamp("edge.json")
         # Cohort stickiness, persistence and tier flips — the ribbon that says
         # whether tonight's board is a trend or a twitch. Read from the same
         # snapshots; no schema extension was needed for any of it.
@@ -367,6 +433,23 @@ def build(limit: int | None = None, skip_macro: bool = False,
             print("performance: pending (needs two snapshots)")
     except Exception as exc:
         print(f"performance: skipped ({exc})")
+        for name in ("performance.json", "edge.json", "health.json"):
+            _flag(name, exc)
+
+    # Last, because most artifacts are written after the board and an audit taken any
+    # earlier would be describing last night's copies of half of them. Recorded inside
+    # index.json rather than a file of its own: the terminal already has index.json, and
+    # a health report that can itself go missing is not much of a health report.
+    audit = freshness.write_audit(LEDGER, _now())
+    payload["data_health"] = audit
+    if audit["ok"]:
+        print(f"data health: all {len(audit['files'])} artifacts refreshed with the board")
+    else:
+        for label, names in (("stale", audit["stale"]), ("lagging", audit["lagging"]),
+                             ("missing", audit["missing"]),
+                             ("unstamped", audit["unstamped"])):
+            if names:
+                print(f"data health: {label} — {', '.join(names)}")
 
     print(f"wrote {prev_path} ({len(scored)} scored, {len(benchmarks)} benchmarks)")
     return payload

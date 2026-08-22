@@ -32,10 +32,17 @@ MCAP_LOW, MCAP_HIGH = 1e8, 2e13   # v2 published GOOGL at 4.4e18 (a 1e6 unit err
 # reports roic 64%, fcf_yield 82%, market_cap 97%. Fundamentals coverage is
 # genuinely lower than large-cap-only, because banks do not report gross margin and
 # small caps tag inconsistently — that is real, not a defect.
+#
+# These floors read a scoped share. `coverage` now measures each input against the
+# population that is scored on it rather than the whole universe, so roic and
+# fcf_yield are quoted against the ~78% of names on the default quality profile and
+# report ~72% and ~89% where they previously reported 64% and 82%. The floors moved
+# with the denominator; leaving them alone would have quietly loosened the gate by
+# 8-11 points on exactly the two fields it exists to protect.
 MIN_FIELD_COVERAGE = {
-    "roic": 0.40,             # v2: 0.00
-    "fcf_yield": 0.55,        # v2: 0.00
-    "market_cap": 0.85,       # v2: 0.19
+    "roic": 0.45,             # v2: 0.00 — of the default-profile names that use it
+    "fcf_yield": 0.60,        # v2: 0.00 — of the default-profile names that use it
+    "market_cap": 0.85,       # v2: 0.19 — universe-wide, no profile scopes it
     "rs_blend": 0.95,         # v2: 0.00 — momentum was constant across the universe
     "drawdown_52w": 0.90,
 }

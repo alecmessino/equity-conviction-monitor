@@ -1164,8 +1164,11 @@ table.mig th.l,table.mig td.l,
           <thead><tr>
             <th class="l">Sector</th><th>Names</th><th>Median conv</th>
             <th>Median 12m</th><th>Coverage</th>
+            <th class="l" title="Share of the top conviction decile, against this sector's share of the universe">Top 10% / universe</th>
+            <th title="Top-decile share divided by universe share. Above 1 is over-represented at the top of the board.">Tilt</th>
           </tr></thead><tbody></tbody>
         </table></div>
+        <p class="card-note" id="sec-tilt-note"></p>
       </div>
     </div>
   </div>
@@ -1319,10 +1322,15 @@ table.mig th.l,table.mig td.l,
       <h2>Input coverage</h2>
       <div id="cov-chart"></div>
       <p class="card-note">
-        Share of scored names carrying a real, filing-derived value. Anything below 100% is
-        imputed from the sector median for those names and reflected in their confidence
-        score. This panel exists because the previous version of this terminal published a
-        board of zeros for weeks while reporting success — nothing was measuring its own output.
+        Share of the names an input is <em>scored on</em> that carry a real, filing-derived
+        value — not the share of the whole universe. A profile-specific input is labelled
+        with the population it applies to: <code>efficiency_ratio</code> is a bank measure,
+        so it reads against Financials, where it covers 29% rather than the 5% a
+        universe-wide denominator reported for months. Anything below 100% is imputed from
+        the sector median for those names and reflected in their confidence score, except
+        where the input feeds no profile at all and is carried for context only. This panel
+        exists because the previous version of this terminal published a board of zeros for
+        weeks while reporting success — nothing was measuring its own output.
       </p>
     </div>
     <div class="row split" style="margin-top:12px">
@@ -1337,6 +1345,13 @@ table.mig th.l,table.mig td.l,
         <h2>Run diagnostics</h2>
         <table class="kv" id="diag"></table>
       </div>
+    </div>
+    <div class="card" style="margin-top:12px" id="capped-card">
+      <div class="tile-row" style="margin-bottom:8px">
+        <h2 style="margin:0">Held down by what we cannot see</h2>
+        <span class="tile-sub" id="capped-head"></span>
+      </div>
+      <div id="capped-body"></div>
     </div>
   </div>
 
@@ -1531,6 +1546,18 @@ table.mig th.l,table.mig td.l,
       </div>
       </div>
     </div>
+
+    <!-- Nominal weighting versus realised influence. The prose above describes the
+         weights the model was given; this describes the say each pillar actually ends
+         up having over the ordering, which is not the same number and was never
+         measured until it was asked for directly. -->
+    <div class="card" id="pillar-influence" style="margin-top:12px">
+      <div class="tile-row" style="margin-bottom:8px">
+        <h2 style="margin:0">What actually drives the ranking</h2>
+        <span class="tile-sub" id="pi-head"></span>
+      </div>
+      <div id="pi-body"></div>
+    </div>
   </div>
 </main>
 
@@ -1657,6 +1684,9 @@ const nz=v=>v!==null&&v!==undefined&&!Number.isNaN(v);
 const pct=(v,d=1)=>nz(v)?(v*100).toFixed(d)+'%':'—';
 const spct=(v,d=1)=>nz(v)?(v>=0?'+':'')+(v*100).toFixed(d)+'%':'—';
 const num=(v,d=2)=>nz(v)?v.toFixed(d):'—';
+// Signed, but NOT a percentage. Correlations and other unit-free signed quantities read
+// as nonsense through spct(), which multiplies by 100: a 0.79 correlation is not 79%.
+const sgn=(v,d=2)=>nz(v)?(v>=0?'+':'')+v.toFixed(d):'—';
 const money=v=>nz(v)?'$'+v.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
 function cap(v){
   if(!nz(v)||v<=0) return '—';
@@ -1814,7 +1844,7 @@ async function boot(){
   buildSectorFilter(); renderGrid(); renderSectors(); renderPortfolio(); renderData();
   renderAlpha(); renderEdge(); renderHealth(); renderSizing(); renderPersistence();
   renderWatchlist(); renderMonitor(); renderOverview(); renderScenario();
-  renderBreadth(); renderFactorRank(); renderEarnings();
+  renderBreadth(); renderFactorRank(); renderEarnings(); renderPillars(); renderCapped(); renderDataHealth();
   // Last: the health ribbon un-hides itself during the pass above, so the topbar is
   // taller now than it was when the stylesheet's default was written.
   measureTopbar();
@@ -2214,6 +2244,42 @@ function renderContext(){
       sectorsAtCap.length?`color:${cssVar('--warn')}`:'',
       'Sectors the water-fill pinned at the ceiling; weight refused here becomes cash rather than moving to another sector.'),
   ];
+
+  // Which pillar is actually doing the ranking tonight, and whether every artifact on
+  // the page refreshed with the board. Both ride in `.ctx` rather than the health
+  // ribbon: `.ctx` is nowrap with overflow-x:auto, so a cell added here scrolls
+  // sideways and leaves --topbar-h alone, while `.health-ribbon` wraps and would grow
+  // the sticky box at laptop widths without warning.
+  const pi=(S.ledger.diagnostics||{}).pillar_influence;
+  if(pi&&pi.sufficient){
+    const lead=pi.pillars.find(x=>x.pillar===pi.leader)||pi.pillars[0];
+    cells.push(cell('Ranking driven by',
+      esc(PILLAR_LETTER[pi.leader]||pi.leader),
+      `${pct(lead.influence,0)} of variance · nominal 33%`,
+      lead.influence>=0.5?`color:${cssVar('--s2')}`:'',
+      `Realised influence over the ordering, not the published weight. Conviction weights `
+      +`the three pillars equally; ranking follows ln Q + ln C + ln R, so the say each `
+      +`pillar has is set by how much it varies across the universe. `
+      +`${(PILLAR_DEFS[pi.leader]||{}).title||pi.leader} carries `
+      +`${(lead.influence*100).toFixed(0)}% of that variance against a nominal 33.3%. `
+      +`Measured on tonight's board; the model is unchanged. Method tab for the full table.`));
+  }
+  const dh=S.ledger.data_health;
+  if(dh){
+    const bad=(dh.stale||[]).length+(dh.missing||[]).length;
+    const late=(dh.lagging||[]).length;
+    cells.push(cell('Data health',
+      dh.ok?'all current':`${bad+late} file${bad+late===1?'':'s'}`,
+      dh.ok?`${(dh.files||[]).length} artifacts with the board`
+           :[...(dh.stale||[]),...(dh.lagging||[]),...(dh.missing||[])]
+              .map(f=>f.replace('.json','')).join(', '),
+      dh.ok?'':`color:${cssVar(bad?'--bad':'--warn')}`,
+      `Every published artifact's own timestamp against the board's. Age is measured `
+      +`against the board rather than the clock because the nightly runs on weekdays — `
+      +`wall-clock age reads as a failure every weekend for a ledger behaving normally. `
+      +`A file more than ${dh.lag_warn_hours||24}h behind the board did not refresh on `
+      +`this run. Files keyed by symbol carry no timestamp and are not audited.`));
+  }
   // The filter state rides on the end of the same ribbon rather than in a strip of its
   // own: a screener showing 38 rows because a pill selection is live looks identical to
   // one showing 38 because that is the universe.
@@ -2780,6 +2846,9 @@ const FACTOR_DEFS={
     note:'Ranked inverted. Used for Real Estate, where debt/EBITDA is distorted by '
       +'property-level financing.'},
 };
+// Single letters for places too tight for a title — the context ribbon in particular,
+// where a cell is three short lines and "Confirmation" would wrap.
+const PILLAR_LETTER={quality:'Q',confirmation:'C',risk:'R'};
 const PILLAR_DEFS={
   quality:{title:'Q — Structural quality',
     note:'How good the business is, ranked against its own sector. Ranking within '
@@ -2876,6 +2945,207 @@ function factorBars(r){
       }).join('')}
     </div>`).join('');
 }
+
+/* Nominal weight versus realised influence.
+
+   Conviction is 100·(Q·C·R)^(1/3), which weights the three pillars equally and reads
+   as though it gives each an equal say. Ranking, though, follows ln Q + ln C + ln R —
+   a plain sum in which each pillar carries the same coefficient — so what actually
+   decides the ordering is how much each pillar VARIES across the universe. A pillar
+   that is nearly the same number for every name cannot separate any two of them, no
+   matter how heavily it is weighted.
+
+   On the current board that gap is large: confirmation carries roughly 59% of the
+   ranking variance against a nominal 33%, and risk roughly 10%. Two mechanisms produce
+   it, and the table names both rather than leaving the reader to infer a cause:
+
+     · the blend — confirmation is a weighted mean of two inputs correlated at ~0.79,
+       which is close to one signal counted twice, so almost none of their dispersion
+       cancels; quality averages five near-independent inputs and loses nearly half of
+       its own that way;
+     · the floor and span — each pillar is mapped onto its own range, and risk's 0.35
+       floor compresses it into a narrow band whose *log* dispersion, which is what the
+       geometric mean sees, is narrower still.
+
+   Neither is a weight anybody chose, and nothing here changes a score. The model is
+   untouched: this reports the property so it can be watched as the forward record
+   accumulates, and the split is a measurement of THIS board, not a constant. */
+function renderPillars(){
+  const host=$('#pi-body'); if(!host) return;
+  const d=(S.ledger.diagnostics||{}).pillar_influence;
+  const head=$('#pi-head');
+  if(!d||!d.sufficient){
+    if(head) head.textContent='';
+    host.innerHTML=`<div class="pending"><b>Not measured.</b> An influence share is a
+      share of ranking variance, and this board is too small for a variance to mean
+      anything.</div>`;
+    return;
+  }
+  const lead=d.pillars.find(p=>p.pillar===d.leader)||d.pillars[0];
+  if(head) head.textContent=`${d.population} names · nominal 33.3% each · `
+    +`model ${d.model_version||'—'}`;
+
+  const bar=p=>{
+    // Nominal sits as a hairline on the same track the realised share fills, so the
+    // gap between what the model was given and what it does is visible without
+    // subtracting two numbers by eye.
+    const w=Math.max(0,Math.min(100,p.influence*100));
+    const tone=p.influence>0.4?cssVar('--s2'):p.influence<0.2?cssVar('--axis'):cssVar('--s1');
+    return `<span class="pb-track" style="flex:1;width:auto;position:relative">
+      <span class="pb-fill" style="width:${w.toFixed(1)}%;background:${tone}"></span>
+      <span style="position:absolute;left:33.3%;top:-1px;bottom:-1px;width:1px;
+        background:var(--ink-2);opacity:.55"></span></span>`;
+  };
+
+  const rows=d.pillars.map(p=>{
+    const b=p.blend||{};
+    const pair=(b.strongest_pair||[]).map(k=>FACTOR_LABELS[k]||k).join(' ~ ');
+    return `<tr data-pillar="${esc(p.pillar)}">
+      <td class="l">${esc((PILLAR_DEFS[p.pillar]||{}).title||p.pillar)}</td>
+      <td style="width:34%"><div style="display:flex;align-items:center;gap:7px">
+        ${bar(p)}<span class="num" style="min-width:42px;text-align:right">${
+          pct(p.influence,1)}</span></div></td>
+      <td class="num">${num(p.vs_nominal,2)}×</td>
+      <td class="num">${num(p.sd,3)}</td>
+      <td class="num">${num(p.rank_correlation,2)}</td>
+      <td class="l src">${b.components||'—'} inputs${
+        nz(b.dispersion_retained)?` · keeps ${pct(b.dispersion_retained,0)} of their spread`:''}${
+        pair?`<br>closest ${esc(pair)} ${sgn(b.strongest_correlation,2)}`:''}</td>
+      <td class="num src">${num(p.floor,2)} + ${num(p.span,2)}</td>
+    </tr>`;
+  }).join('');
+
+  host.innerHTML=`
+    <div class="tbl-wrap"><table>
+      <thead><tr>
+        <th class="l">Pillar</th>
+        <th class="l">Share of ranking variance</th>
+        <th>× nominal</th><th>SD</th><th>ρ conv</th>
+        <th class="l">Why it lands there</th><th>Range</th>
+      </tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>
+    <p class="card-note">
+      <b>${esc((PILLAR_DEFS[d.leader]||{}).title||d.leader)} leads at ${pct(lead.influence,0)}
+      against a nominal 33.3%</b>${d.spread?`, ${num(d.spread,1)}× the influence of the
+      weakest pillar`:''}. The hairline on each bar marks the nominal third. Nothing about
+      the model changed to produce this: the weights are exactly as published above, and
+      the split falls out of how much each pillar varies across the universe. Two things
+      set that — how much dispersion survives a pillar's internal blend (a mean of two
+      inputs measuring nearly the same thing keeps almost all of it; a mean of five
+      independent ones averages half of it away) and the floor-and-span range each pillar
+      is mapped onto, since a narrow band above a high floor has little room to separate
+      names once the geometric mean takes its log.
+    </p>
+    <p class="card-note">${esc(d.basis)}</p>
+    <p class="card-note"><em>Descriptive, not a correction.</em> Rankings, signals and
+    weights are untouched by this panel. Whether confirmation's larger realised say
+    corresponds to predictive value is a question for the forward record, which is what
+    the snapshots are accumulating — it is not settled by measuring the board.</p>`;
+}
+
+/* Staleness, said once for every artifact rather than once for the calendar.
+
+   A step that fails leaves its previous file on disk, where it is indistinguishable
+   from a current one. The earnings calendar learned to say so after it published a
+   three-day-old board silently for a night; every other artifact could still do exactly
+   the same thing without a word. The nightly now flags any file it failed to rebuild
+   and publishes an age for each one measured against the board, and this reads both.
+
+   Age is relative to the board, not the clock, because the nightly runs on weekdays: a
+   wall-clock rule calls a perfectly healthy ledger stale every Saturday. */
+function staleNote(p, what){
+  if(!p||!p.stale) return '';
+  return `<b>${esc(what)} did not refresh.</b> It was built ${
+    esc(p.built_as_of||p.as_of||'—')} and the run at ${
+    esc(String(p.stale_since||'').replace('T',' ').replace('Z',' UTC'))} could not rebuild
+    it, so what you are reading is the earlier copy.
+    <code>${esc(p.stale_reason||'no reason recorded')}</code>`;
+}
+
+function renderDataHealth(){
+  const host=$('#alert'); if(!host) return;
+  const d=S.ledger.data_health;
+  const old=$('#data-health-banner');
+  if(old) old.remove();
+  if(!d||d.ok) return;
+  const rows=(d.files||[]).filter(f=>f.stale||f.lagging||!f.present);
+  if(!rows.length) return;
+  const line=f=>{
+    const why=!f.present ? 'not published at all'
+      : f.stale ? `did not rebuild — <code>${esc(f.stale_reason||'no reason recorded')}</code>`
+      : `${num(f.lag_hours,0)}h behind the board (built ${esc(f.as_of||'—')})`;
+    return `<li><b>${esc(f.file)}</b> · ${esc(f.label||'')} — ${why}</li>`;
+  };
+  // Not named `el` — that is the SVG element helper, and shadowing it inside a renderer
+  // is how a later edit here would silently stop drawing.
+  const box=document.createElement('div');
+  box.className='banner';
+  box.id='data-health-banner';
+  box.innerHTML=`<b>${rows.length} published file${rows.length===1?'':'s'} ${
+    rows.length===1?'is':'are'} not current with the board.</b>
+    Everything drawn from ${rows.length===1?'it':'them'} is the earlier copy, not tonight's.
+    <ul style="margin:6px 0 0 16px;padding:0">${rows.map(line).join('')}</ul>
+    <div class="src" style="margin-top:6px">${esc(d.basis||'')}</div>`;
+  host.prepend(box);
+}
+
+/* Names whose score is held down by inputs nobody could observe.
+
+   model.prepare substitutes the group median for an input it cannot see. That is the
+   conservative choice and the right one — the alternative is fabricating a signal — but
+   it has a consequence worth stating out loud: a good business with a gap in its
+   disclosure is scored partly on a median it did not earn, and the top of the board is
+   therefore, in part, a ranking of how completely companies file.
+
+   The counterfactual asks one question. If this name's unobserved inputs looked like
+   the inputs it DOES report in the same pillar, what would it have scored? Per pillar,
+   so a name strong on quality and weak on risk is not handed its quality average in
+   place of a missing risk input. Nothing here is a correction: the gap is reported and
+   never added to anything. No score, signal, ordering or weight on this page moves
+   because of it. */
+function renderCapped(){
+  const host=$('#capped-body'); if(!host) return;
+  const d=(S.ledger.diagnostics||{}).capped_by_data;
+  const head=$('#capped-head');
+  if(!d||!(d.names||[]).length){
+    if(head) head.textContent='';
+    host.innerHTML=`<div class="pending"><b>Nothing material.</b> No name would gain
+      ${d?d.min_gap:2} points or more if its unobserved inputs matched what it does
+      report. Missing data is costing the board nothing worth naming tonight.</div>`;
+    return;
+  }
+  if(head) head.textContent=`${d.constrained} of ${d.population} names · `
+    +`${d.tier_changes} would change tier`;
+  host.innerHTML=`
+    <div class="tbl-wrap" style="max-height:340px"><table>
+      <thead><tr>
+        <th class="l">Ticker</th><th class="l">Sector</th>
+        <th>Conv</th><th>Would be</th><th>Gap</th>
+        <th class="l">Tier</th><th>Conf</th><th class="l">Not observed</th>
+      </tr></thead>
+      <tbody>${d.names.map(n=>`<tr data-sym="${esc(n.symbol)}">
+        <td class="l"><span class="sym">${esc(n.symbol)}</span>
+          <span class="co">${esc(n.name||'')}</span></td>
+        <td class="l src">${esc(SECTOR_SHORT[n.sector]||n.sector||'—')}</td>
+        <td class="conv" style="color:${convInk(n.conviction)}">${n.conviction}</td>
+        <td class="conv" style="color:${convInk(n.would_be)}">${n.would_be}</td>
+        <td class="num" style="color:${cssVar('--s1')}">+${n.gap}</td>
+        <td class="l src">${n.tier_change
+          ? `${esc(n.signal||'—')} → ${esc(n.would_be_signal||'—')}` : '·'}</td>
+        <td class="num">${pct(n.data_confidence,0)}</td>
+        <td class="l src">${(n.imputed||[]).map(k=>esc(FACTOR_LABELS[k]||k.replace(/^p_/,''))).join(', ')}</td>
+      </tr>`).join('')}</tbody>
+    </table></div>
+    ${d.truncated?`<p class="card-note">${d.truncated} further name${
+      d.truncated===1?'':'s'} clear the same bar and are not listed.</p>`:''}
+    <p class="card-note">${esc(d.basis)}</p>`;
+  host.onclick=ev=>{
+    const tr=ev.target.closest && ev.target.closest('tr[data-sym]');
+    if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
+  };
+}
+
 /* Data lineage, in one badge. A percentile computed from a filing and one substituted
    from the sector median render identically as numbers, and this whole rebuild exists
    because absent data once read as a confident zero. The badge reads the ledger's own
@@ -2905,11 +3175,29 @@ function openPanel(r){
     profName!=='default' ? `${profName} scoring profile` : null]
     .filter(Boolean).join(' · ');
   const sc=score(r);   // recomputed live so the panel reflects the current weights
+  // EDGAR resolves a ticker in the CIK parameter, which is why this has always worked;
+  // the form filter is dropped so the link lands on everything this filer has filed
+  // rather than only its annual reports — an 8-K is the thing most often wanted here.
+  const edgarAll=`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany`
+    +`&CIK=${encodeURIComponent(r.symbol)}&type=&dateb=&owner=include&count=40`;
   const cik=(r.as_of&&Object.keys(r.as_of).length)
-    ? `<a href="https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${encodeURIComponent(r.symbol)}&type=10-K&dateb=&owner=include&count=10"
-         target="_blank" rel="noopener">EDGAR filings</a>` : '';
+    ? `<a href="${esc(edgarAll)}" target="_blank" rel="noopener noreferrer">all EDGAR filings ↗</a>`
+      + ` · <a href="${esc(edgarAll.replace('&type=','&type=8-K'))}"
+           target="_blank" rel="noopener noreferrer"
+           title="Current reports, newest first. Item 2.02 is the one carrying results of operations."
+           >recent 8-K ↗</a>` : '';
+  // Every fact now reaches its own filing. The Method tab has claimed since it was
+  // written that each figure "traces to an accession number, linked from each name's
+  // detail panel" — the accession was in the ledger the whole time and this panel was
+  // dropping it, so the sentence described something that did not exist.
   const facts=Object.entries(r.as_of||{}).slice(0,8)
-    .map(([k,v])=>`<tr><td>${esc(k)}</td><td class="src">${esc(v.tag)} · ${esc(v.end)}</td></tr>`).join('');
+    .map(([k,v])=>{
+      const u=edgarDoc(v.accn);
+      return `<tr><td>${esc(k)}</td><td class="src">${esc(v.tag)} · ${esc(v.end)}${
+        u?` · <a href="${esc(u)}" target="_blank" rel="noopener noreferrer"
+             title="Filing index for accession ${esc(v.accn)}">${esc(v.accn)} ↗</a>`
+         :(v.accn?` · ${esc(v.accn)}`:'')}</td></tr>`;
+    }).join('');
 
   $('#p-body').innerHTML=`
     <section>
@@ -3092,11 +3380,38 @@ function renderSectors(){
                       fill:cssVar('--muted')},s);
   zt.textContent=`universe median ${mid.toFixed(0)}`;
 
-  $('#sec-table tbody').innerHTML=stats.map(d=>`<tr>
+  // Top-decile concentration. Quality, valuation and leverage are ranked WITHIN sector,
+  // so the model takes no deliberate sector view — but relative strength, trend,
+  // liquidity and volatility are ranked universe-wide and are free to pile the top of
+  // the board into a handful of sectors. That happens silently unless it is measured.
+  // Descriptive only: nothing here neutralises the ranking.
+  const tilt=(S.ledger.diagnostics||{}).sector_tilt;
+  const tmap={};
+  if(tilt&&tilt.sufficient) (tilt.sectors||[]).forEach(t=>{ tmap[t.sector]=t; });
+  $('#sec-table tbody').innerHTML=stats.map(d=>{
+    const t=tmap[d.sector];
+    const mult=t&&nz(t.multiple)?t.multiple:null;
+    const ink=mult==null?'':mult>=1.5?cssVar('--s1'):mult<=0.67?cssVar('--s2'):'';
+    return `<tr>
     <td class="l">${esc(d.sector)}</td><td>${d.n}</td>
     <td class="conv" style="color:${convInk(d.conv)}">${d.conv.toFixed(0)}</td>
     <td class="${(d.ret??0)>=0?'up':'down'}">${spct(d.ret,0)}</td>
-    <td>${pct(d.cov,0)}</td></tr>`).join('');
+    <td>${pct(d.cov,0)}</td>
+    <td class="src"${t?` title="${esc(t.top)} of the top ${esc(String(tilt.top_n))} names, `
+      +`against ${esc(t.universe)} of ${esc(String(tilt.population))} in the universe"`:''}>${
+      t?`${pct(t.top_share,1)} / ${pct(t.universe_share,1)}`:'—'}</td>
+    <td class="num"${ink?` style="color:${ink}"`:''}>${mult==null?'—':num(mult,2)+'×'}</td>
+  </tr>`;}).join('');
+
+  const tnote=$('#sec-tilt-note');
+  if(tnote){
+    tnote.innerHTML = (tilt&&tilt.sufficient)
+      ? `Top ${(tilt.share*100).toFixed(0)}% by conviction is ${
+          tilt.top_n} names, cutting off at ${tilt.cutoff}. Most over-represented: <b>${
+          esc(tilt.most_over||'—')}</b> at ${num(tilt.most_over_multiple,2)}× its universe
+         weight. ${esc(tilt.basis)}`
+      : 'Not enough scored names to measure a top-decile tilt.';
+  }
 
   // Borderless tiles. The deviation from the universe median rides the left edge as a
   // 3px rule, so the sign is legible before the number is read and no box needs an
@@ -3575,6 +3890,11 @@ function renderPersistence(){
 /* ---------- data quality ---------- */
 function renderData(){
   const cov=S.ledger.coverage||{};
+  // Each bar is measured against the population its input is scored on, not the whole
+  // universe. efficiency_ratio sat at 5% here for months and read as a broken feed; it
+  // is a bank metric, and against the Financials it actually describes it is 29% — a
+  // real gap, an order of magnitude less alarming, and the only honest denominator.
+  const det=S.ledger.coverage_detail||{};
   const entries=Object.entries(cov).sort((a,b)=>a[1]-b[1]);
   const W=fitW($('#cov-chart'),880,1400), rowH=24, H=entries.length*rowH+32,
         m={t:8,r:52,b:20,l:172};
@@ -3591,10 +3911,25 @@ function renderData(){
     el('rect',{x:m.l,y:y+3,width:Math.max(1.5,x(v)-m.l),height:rowH-9,rx:3,
       fill: v>=0.9?cssVar('--s1') : v>=0.6?cssVar('--warn') : cssVar('--bad'),
       'fill-opacity':.85},s);
+    const d=det[k]||{};
+    const scope=(d.scope&&d.scope.length)?d.scope.join(' + '):'';
     const lbl=el('text',{x:m.l-8,y:y+rowH/2,class:'tick','text-anchor':'end'},s);
     lbl.textContent=k;
+    if(scope){
+      // The scope rides under the label so a scoped bar can never be misread as a
+      // universe-wide one the way efficiency_ratio was for months.
+      lbl.setAttribute('y',y+rowH/2-3);
+      const tag=el('text',{x:m.l-8,y:y+rowH/2+8,'text-anchor':'end',
+        fill:cssVar('--muted'),'font-size':'9','font-family':'var(--mono)'},s);
+      tag.textContent=scope;
+    }
     const val=el('text',{x:x(v)+6,y:y+rowH/2,class:'tick',fill:cssVar('--ink-2')},s);
-    val.textContent=(v*100).toFixed(0)+'%';
+    val.textContent=(v*100).toFixed(0)+'%'
+      +(nz(d.population)?`   ${d.observed}/${d.population}`:'');
+    const tip=el('title',{},s);
+    tip.textContent=`${k} — ${nz(d.observed)?`${d.observed} of ${d.population}`:'—'} `
+      +`${scope?scope+' ':'scored '}names carry a filing-derived value`
+      +(scope?`. Only ${scope} names are scored on it, so that is the denominator.`:'.');
   });
   el('line',{x1:m.l,y1:m.t,x2:m.l,y2:H-m.b,class:'axisline'},s);
 
@@ -4068,7 +4403,43 @@ function renderWatchlist(){
    + tile('Big moves, same tier', c.movers??0, `${num(d.material_move,0)}+ points without crossing`)
    + tile('Boundary crossings', c.boundary??0, 'label moved, view did not');
 
+  // How much of tonight's movement is in names actually held. A diff of 40 rows reads
+  // as a busy night whether it touches the book or not, and those are different
+  // mornings: movement outside the book is a watchlist question, movement inside it is
+  // a position question. The held flag is the published weight, so this is the book as
+  // it stands rather than a re-derivation.
+  const heldW=new Map(S.rows.filter(r=>r.weight>0).map(r=>[r.symbol,r.weight]));
+  const groups=[['upgrades',d.upgrades],['downgrades',d.downgrades],
+                ['movers',d.movers],['boundary',d.boundary]];
+  const touched=new Map();
+  for(const [kind,list] of groups)
+    for(const r of (list||[]))
+      if(heldW.has(r.symbol)&&!touched.has(r.symbol))
+        touched.set(r.symbol,{kind, w:heldW.get(r.symbol), delta:r.delta});
+  const movedW=[...touched.values()].reduce((a,x)=>a+x.w,0);
+  const bookW=[...heldW.values()].reduce((a,w)=>a+w,0);
+  const outOf=groups.reduce((a,[,l])=>a+((l||[]).length),0);
+  const down=[...touched.values()].filter(x=>(x.delta??0)<0).length;
+
   $('#wl-main').innerHTML=`
+    <div class="card" style="margin-bottom:12px">
+      <div class="tile-row" style="margin-bottom:8px">
+        <h3 class="sub-h" style="margin:0">Net book impact</h3>
+        <span class="tile-sub">${esc(d.from)} → ${esc(d.to)}</span>
+      </div>
+      <p class="card-note" style="margin-top:0" id="wl-book-impact">${
+        touched.size
+        ? `<b>${touched.size} of ${heldW.size} current holdings moved</b>, carrying
+           <b>${num(movedW,2)}%</b> of the ${num(bookW,2)}% invested book${
+             bookW>0?` — ${pct(movedW/bookW,0)} of it`:''}. ${down} of those moved down.
+           The other ${outOf-touched.size} row${outOf-touched.size===1?'':'s'} in this
+           diff ${outOf-touched.size===1?'is':'are'} not held, so ${
+             outOf-touched.size===1?'it is':'they are'} a watchlist question rather than
+           a position one.`
+        : `<b>No current holding moved tonight.</b> All ${outOf} row${outOf===1?'':'s'} in
+           this diff sit outside the ${heldW.size}-name book, so nothing here is a
+           position question.`}</p>
+    </div>
     <div class="card" style="margin-bottom:12px">
       <div class="tile-row" style="margin-bottom:8px">
         <h3 class="sub-h" style="margin:0">Upgrades</h3>
@@ -5118,6 +5489,45 @@ function renderFactorRank(){
    is worse than no calendar, because a desk will schedule around the
    projection exactly as if it were the fact.
    ===================================================================== */
+/* One click from a row to the filing behind it.
+
+   Deliberately a LINK and not a fetch. EDGAR's browse endpoint takes a CIK and a form
+   type and returns that filer's filings of that type, newest first, so the filing a row
+   names is the top of the list. Building the URL costs nothing, adds no request to this
+   page and no per-ticker loop to the nightly, and cannot go stale or rate-limit — the
+   three things that would have made a live lookup the wrong trade for a convenience.
+
+   `accn` deep links are used where the ledger already carries one (the tear sheet's
+   source filings do); the calendar records cik + form + date but not the accession, so
+   its rows link to the filtered list instead of guessing an accession that may not
+   exist. A link to the right list beats a link to the wrong document. */
+function edgarUrl(cik, form){
+  if(!nz(cik)) return null;
+  const p=new URLSearchParams({action:'getcompany', CIK:String(cik).padStart(10,'0'),
+    type:form||'', dateb:'', owner:'include', count:'25'});
+  return 'https://www.sec.gov/cgi-bin/browse-edgar?'+p.toString();
+}
+/* The filing index page for one accession number.
+
+   The CIK in the path is taken from the accession's own prefix, NOT from the company.
+   Those are frequently different: Microsoft's XBRL is submitted by Donnelley Financial
+   (1193125) and several REITs here by Workiva (1628280), so building the path from the
+   registrant's CIK 404s on exactly the large names most likely to be clicked. EDGAR
+   serves the accession index under the submitting filer's path; verified against eight
+   randomly drawn accessions from this ledger, agent-filed ones included, all 200. */
+function edgarDoc(accn){
+  if(!accn||!/^\d{10}-\d{2}-\d{6}$/.test(String(accn))) return null;
+  const s=String(accn), filer=String(parseInt(s.slice(0,10),10));
+  return `https://www.sec.gov/Archives/edgar/data/${filer}/${s.replace(/-/g,'')}/${s}-index.htm`;
+}
+function edgarLink(cik, form, label){
+  const u=edgarUrl(cik, form);
+  if(!u) return `<span class="src">${esc(label||form||'—')}</span>`;
+  return `<a class="src" href="${esc(u)}" target="_blank" rel="noopener noreferrer"
+    title="Open this filer's ${esc(form||'')} filings on SEC EDGAR, newest first"
+    >${esc(label||form||'filing')} ↗</a>`;
+}
+
 S.ern={scope:'book', win:30, state:'', q:''};
 
 function ernRows(){
@@ -5152,19 +5562,16 @@ function renderEarnings(){
   // indistinguishable from current ones — which is exactly how this project's original
   // board of zeros survived for weeks. The nightly stamps the payload when it could not
   // refresh; that stamp is the one thing the reader has to see before the dates.
+  // Shared wording with every other artifact, plus the one consequence specific to a
+  // calendar: a confirmed row is a filing that landed, and a stale file's confirmed
+  // rows may already have been superseded by filings this run never saw.
   const stale=$('#ern-stale');
   if(stale){
-    if(cal.stale){
-      stale.hidden=false;
-      stale.innerHTML=`<b>This calendar did not refresh.</b> It was built
-        ${esc(cal.built_as_of||cal.as_of||'—')} and the run at
-        ${esc((cal.stale_since||'').replace('T',' ').replace('Z',' UTC'))} could not
-        rebuild it, so every date below is as of the earlier board and the confirmed
-        rows may already have been superseded.
-        <code>${esc(cal.stale_reason||'no reason recorded')}</code>`;
-    } else {
-      stale.hidden=true;
-    }
+    const note=staleNote(cal,'This calendar');
+    stale.hidden=!note;
+    if(note) stale.innerHTML=note
+      + ` Every date below is as of the earlier board, and the confirmed rows may
+          already have been superseded.`;
   }
   $('#ern-kpis').innerHTML=
      tile('Confirmed', cal.confirmed, `filed in the last ${cal.horizon_days?6:6} days`)
@@ -5225,13 +5632,16 @@ function renderEarnings(){
                 : `No filing yet. Projected from this filer's own cadence and wrong by a few days routinely — the band is ±${e.band_days} days.`}"
               >${conf?'CONFIRMED':'EST ±'+e.band_days+'d'}</span></td>
             <td class="l src">${e.last_reported
-              ? `${esc(e.last_reported)} <span class="src">${esc(e.last_form||'')}</span>`
+              ? `${esc(e.last_reported)} ${edgarLink(e.cik, e.last_form,
+                  e.last_form||'filing')}`
               : '—'}</td>
             <td class="n src">${e.lag_days!=null?e.lag_days+'d':'—'}</td>
           </tr>`;
         }).join('');
       }).join('')}</tbody></table></div>`;
     host.onclick=ev=>{
+      // A link inside the row must not also open the panel behind it.
+      if(ev.target.closest('a')) return;
       const tr=ev.target.closest('tr[data-sym]');
       if(tr) openPanel(S.rows.find(r=>r.symbol===tr.dataset.sym));
     };
@@ -6024,7 +6434,7 @@ $('#theme').onclick=()=>{
                 renderObservations(); renderHeatmap(); renderMovers(); renderLeaders();
                 renderWatchlist(); renderMonitor(); renderOverview(); renderScenario();
                 renderSizing(); renderBreadth(); renderFactorRank();
-                renderEarnings(); }
+                renderEarnings(); renderPillars(); renderCapped(); }
 };
 try{
   const saved=localStorage.getItem('ecm-theme');
