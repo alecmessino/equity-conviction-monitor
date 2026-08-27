@@ -111,6 +111,8 @@ equity_monitor/
   snapshots.py         nightly factor-level history + score-change attribution
   monitor.py           self-grading: stability, coverage trend, regime, health
   churn.py             why the board moved: information vs. model sensitivity
+  diagnostics.py       descriptions of the board that cannot change it
+  freshness.py         did each published artifact actually refresh, and says so if not
   watchlist.py         the overnight diff: what changed and whether it matters
   rebuild.py           reconstruct an earlier board from cached prices (never committed)
   nightly.py           orchestrator; writes ledger/
@@ -120,6 +122,7 @@ equity_monitor/
     prices.py          OHLCV chain + all price-derived features
     macro.py           FRED series
 scripts/validate_ledger.py   CI gate — degenerate ledger, and snapshot-history integrity
+scripts/export_standalone.py one self-contained HTML: the terminal with its ledger inlined
 web/terminal.html            the terminal (self-contained, no CDN)
 tests/                       model behaviour, v2 regressions, JS<->Python parity
 ```
@@ -141,6 +144,114 @@ Whether high-conviction names outperform is an Information Coefficient question 
 months of accumulated snapshots within a single specification hash — it is not measured
 here, and every panel that depends on history states its sample size and what it is still
 waiting for rather than rendering a default.
+
+### Effective pillar contribution to cross-sectional variance
+
+Conviction is `100 · (Q · C · R)^(1/3)`, which weights the three pillars equally. Ranking
+orders on `ln Q + ln C + ln R` — a sum in which each pillar carries the same coefficient —
+so a pillar's effective contribution to the *ordering* is set by how much it **varies**
+across the universe. A pillar taking nearly the same value for every name separates none of
+them, whatever weight it carries.
+
+`diagnostics.pillar_influence` publishes that split as a variance decomposition. The
+estimator, exactly:
+
+```
+share_j = Cov(ln P_j, ln Q + ln C + ln R) / Var(ln Q + ln C + ln R)
+```
+
+computed on the **final transformed pillars** — `C` post-uplift and post-ceiling, `R` on
+its floor — read before serialisation rounds them. Shares account for covariance between
+pillars and sum to 1. (It is implemented as `Cov(ln P_j / 3, S)/Var(S)` with `S` the mean
+of the three logs, which is the same quantity: scaling the sum by 1/3 divides the
+covariance by 3 and the variance by 9, and the 1/3 on the term restores it.)
+
+On the 2026-08-21 board of 1,011 names:
+
+| pillar | nominal | effective share | × nominal | observed alongside it |
+|---|---|---|---|---|
+| Confirmation | 33.3% | **59.1%** | 1.77× | 2 strongly overlapping inputs (observed correlation +0.79); the blend retains 96% of their spread |
+| Quality | 33.3% | 30.4% | 0.91× | 5 near-independent inputs; the blend retains 56% of their spread |
+| Risk | 33.3% | **10.5%** | 0.32× | 3 near-independent inputs, retaining 56%, mapped onto a range with a 0.35 floor — which narrows the log dispersion the geometric mean operates on |
+
+Two things this table is not. It is **not causal** — it is an accounting identity over one
+cross-section, reporting where the ordering's variance currently sits, not what produces
+it. And it is **not evidence about predictive value**: whether a larger effective share
+corresponds to skill is a forward-record question the snapshots are accumulating, and
+measuring the board does not settle it.
+
+Both the pillar blends and the floor-and-span ranges are **deliberate model transforms** —
+the floors are non-zero on purpose and are hashed into `model.spec()`. Neither is an
+explicit *top-level* pillar weight, which is why the split cannot be read off the weights
+alone; what the decomposition reports is the implicit influence produced by the chosen
+transforms and the covariance observed on this cross-section.
+
+**None of it changes a score.** `diagnostics` has no write path,
+`tests/test_diagnostics.py` asserts that running every function leaves the rows
+byte-identical and the spec hash unmoved, and the figures are recomputed nightly because
+the split is a property of the cross-section rather than a constant of the model. A share
+is a covariance ratio and is not bounded to [0, 1] a priori; it is reported as computed
+rather than clipped, and the renderer clamps only the drawn bar while saying so.
+
+The same module publishes two other descriptions, both observational:
+
+* **Sector tilt** — the top decile's sector mix against the universe's. Margins, leverage
+  and valuation are ranked *within* GICS sector, so the model takes no deliberate sector
+  view; relative strength, trend, liquidity and volatility are ranked universe-wide and are
+  free to concentrate the top of the board. On the same run Energy sat at 3.4× its universe
+  weight. Nothing neutralises it.
+* **Capped by missing data** — `model.prepare` substitutes the group median for an input it
+  could not observe, which is the conservative choice and means a good business with a gap
+  in its disclosure is scored partly on a median it did not earn. The sensitivity case
+  re-scores each name with its unobserved inputs set to **the mean of that name's observed
+  percentiles within the same pillar** — per-pillar, so a name strong on quality and weak
+  on risk is not handed its quality average for a missing risk input. Under that
+  substitution 83 names come out 2 or more points higher and 18 land in a different tier
+  (ADP 72→80, EOG 79→84). Those are results under the stated sensitivity, not estimates of
+  what the scores should be. Nothing is added to any published score.
+
+### Did every file actually refresh
+
+A step that fails leaves its previous file on disk, where it is indistinguishable from a
+current one. That is not hypothetical: on 2026-08-17 the earnings step raised a `TypeError`
+its own `except` swallowed, the run reported success, and `earnings.json` kept a three-day
+-old board's convictions for 597 of 1,015 names. The only tell was that one filename was
+missing from the refresh commit.
+
+`equity_monitor/freshness.py` closes that class of failure for every artifact, not just the
+calendar:
+
+* each artifact that lacked one now carries an `as_of`, stamped on a successful write;
+* any step that fails annotates the file it could not rebuild — `stale`, `stale_reason`,
+  `stale_since`, and `built_as_of` preserving the date it was really built — rather than
+  leaving it silent, and a successful rebuild clears the flag by itself;
+* every artifact's age is measured **against the board, not the clock**, and published into
+  `index.json` as `data_health`. The nightly runs on weekdays, so wall-clock age calls a
+  perfectly healthy ledger stale every Saturday; comparing each file to `index.json`'s
+  `as_of` asks instead whether it refreshed on the same run, which has the same answer on a
+  Sunday as on a Tuesday.
+
+The terminal reads that block: a page-wide banner names any file that is stale, lagging or
+missing along with the reason, and a **Data health** cell in the context ribbon carries the
+summary. Files keyed by symbol — `history.json`, `macro.json`, the per-name factor files —
+have nowhere to put a timestamp and are deliberately excluded rather than reported as
+unstamped every night, which would only teach the reader to ignore the panel.
+
+### Coverage is measured against the population that uses it
+
+`efficiency_ratio` reported 4.5% coverage for months and read like a broken feed. It is a
+bank measure: 853 of the names counted against it are not banks and are never scored on it.
+Against the Financials it actually describes it is 29% — a real gap, an order of magnitude
+less alarming, and the only honest denominator.
+
+`model.input_scope` resolves each input to the profiles that consume it (derived from
+`RANK_SPEC` and `QUALITY_PROFILES`, with an explicit table for context-only metrics that
+feed no profile at all), and `features.coverage_report` measures against exactly that
+population. The scope and the raw `observed / population` are published alongside the share
+and shown on every bar in the **Data quality** tab. The change moved `roic` from 64% to 72%,
+`gross_margin` from 61% to 73% and `ffo_yield` from 81% to 90% of REITs, so the validator's
+floors were raised with the denominator — leaving them alone would have quietly loosened the
+gate by 8–11 points on the two fields it exists to protect.
 
 ### Diagnosing churn
 

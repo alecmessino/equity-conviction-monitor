@@ -32,6 +32,7 @@ from __future__ import annotations
 
 import json
 import os
+from datetime import datetime, timezone
 
 from . import performance, snapshots
 
@@ -197,7 +198,12 @@ def flips(ledger_dir: str = LEDGER) -> dict:
 
 
 def build(ledger_dir: str = LEDGER) -> dict:
-    return {"stickiness": stickiness(ledger_dir),
+    # `as_of` is not decoration. This file carried no timestamp of any kind, which
+    # meant nothing could tell a health report written tonight from one left behind by
+    # a step that failed three nights ago — the same blindness that let a stale
+    # earnings calendar publish as current. freshness.audit reads this key.
+    return {"as_of": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "stickiness": stickiness(ledger_dir),
             "persistence": persistence(ledger_dir),
             "flips": flips(ledger_dir)}
 
