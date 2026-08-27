@@ -194,6 +194,15 @@ def build(limit: int | None = None, skip_macro: bool = False,
     scored = [r for r in rows if r.get("conviction") is not None]
     scored.sort(key=lambda r: r["conviction"], reverse=True)
     assign_weights(scored)
+
+    # Diagnostics BEFORE rounding, deliberately. The influence estimator is defined on
+    # the final transformed pillars, and round_row takes q/c/r to four places on the way
+    # out for serialisation. At the precision these shares are reported to, the two
+    # agree exactly — measured, the difference is 0.00e+00 — but "agrees at reporting
+    # precision" is not the same claim as "computed from the finals", and only the
+    # second one is worth making about a number the panel puts a formula next to.
+    diag = diagnostics.build(scored)
+
     for r in rows:
         round_row(r)
 
@@ -211,21 +220,23 @@ def build(limit: int | None = None, skip_macro: bool = False,
           f"range={min((r['conviction'] for r in scored), default=0)}–"
           f"{max((r['conviction'] for r in scored), default=0)}")
 
-    # Descriptions of the board, computed after scoring and incapable of changing it.
-    # score_rows has already run and every row is final; diagnostics only reads them.
-    diag = diagnostics.build(scored)
+    # Descriptions of the board — computed above, from the unrounded finals, and
+    # incapable of changing anything they describe.
     pi = diag["pillar_influence"]
     if pi.get("sufficient"):
-        print("influence: " + "  ".join(
+        print("log-score variance share: " + "  ".join(
             f"{p['pillar'][:4]}={p['influence']:.0%}" for p in pi["pillars"])
-            + f"  (nominal 33% each; {pi['leader']} leads by {pi['spread']}x)")
+            + f"  (nominal 33% each; {pi['leader']} largest"
+            + (f", {pi['spread']}x the smallest" if pi.get("spread") else "")
+            + " — this cross-section only)")
     tilt = diag["sector_tilt"]
     if tilt.get("sufficient"):
         print(f"tilt: top {tilt['top_n']} most over-represented in "
               f"{tilt['most_over']} at {tilt['most_over_multiple']}x its universe weight")
     capped = diag["capped_by_data"]
     print(f"capped by missing data: {capped['constrained']} names, "
-          f"{capped['tier_changes']} would change tier if their gaps were observed")
+          f"{capped['tier_changes']} would change tier under the within-pillar "
+          "substitution sensitivity (reported, never applied)")
 
     # history: one bundled file for the grid, per-symbol OHLCV for the detail view
     bundle = {}

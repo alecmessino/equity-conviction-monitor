@@ -10,15 +10,21 @@ byte-identical afterwards.
 
 Three things are described.
 
-**Pillar influence.** Conviction is ``100·(Q·C·R)^(1/3)``, which looks like it weights
-the three pillars equally, and in nominal terms it does. Ranking, though, is driven by
-``ln Q + ln C + ln R`` — a plain sum in which each pillar carries a coefficient of 1/3 —
-so a pillar's real say over the ordering is set by how much it *varies* across the
-universe, not by its coefficient. A pillar that is nearly the same number for every name
-cannot separate any two of them however heavily it is weighted. ``pillar_influence``
-reports the standard variance decomposition of that sum, which sums to exactly 1, and
-then reports the two mechanisms that produce it: how much dispersion survives each
-pillar's internal blend, and how much of it survives the floor-and-span map afterwards.
+**Pillar influence.** Conviction is ``100·(Q·C·R)^(1/3)``, which weights the three
+pillars equally. Ranking orders on ``ln Q + ln C + ln R`` — a sum in which each pillar
+carries a coefficient of 1/3 — so a pillar's effective contribution to the ordering is
+set by how much it *varies* across the universe, not by its coefficient. A pillar taking
+nearly the same value for every name separates none of them, whatever weight it carries.
+``pillar_influence`` reports the variance decomposition of that sum, which sums to
+exactly 1, alongside two observable quantities associated with the split: how much spread
+each pillar's blend retains, and the floor-and-span range it is mapped onto.
+
+Both of those are deliberate model transforms — the floors are non-zero on purpose and
+are hashed into ``model.spec()``, and the blend weights are the published specification.
+Neither is an explicit *top-level* pillar weight, which is why the split cannot be read
+off the weights alone; what the decomposition reports is the implicit influence produced
+by the chosen transforms and the covariance observed on this cross-section. It is
+descriptive, not causal, and says nothing about predictive value.
 
 **Sector tilt.** Percentiles for margins, leverage and valuation are ranked within GICS
 sector, so the model takes no deliberate sector view — but the pillars that are ranked
@@ -39,9 +45,9 @@ import math
 
 from . import model
 
-# A pillar's influence is a share of ranking variance, so it needs a population big
-# enough for a variance to mean anything. Below this the decomposition is suppressed
-# rather than published with a number nobody should read.
+# A share is a share of current cross-sectional log-score variance, so it needs a
+# population big enough for a variance to mean anything. Below this the decomposition is
+# suppressed rather than published with a number nobody should read.
 MIN_POPULATION = 30
 
 # "Otherwise strong" for the capped-by-data list: a name has to be plausibly investable
@@ -106,13 +112,16 @@ def _scored(rows: list[dict]) -> list[dict]:
 
 
 def _component_detail(rows: list[dict], pillar: str) -> dict:
-    """How much of its components' dispersion a pillar's blend keeps.
+    """How much of its components' dispersion a pillar's blend retains.
 
-    A weighted mean of near-independent inputs averages their dispersion away; a
-    weighted mean of two inputs that measure the same thing keeps almost all of it.
-    This is the first of the two mechanisms behind an uneven influence split, and it
-    is entirely a consequence of how many inputs a pillar has and how correlated they
-    are — not of any weight anyone chose.
+    A weighted mean of near-independent inputs averages much of their dispersion away;
+    a weighted mean of strongly overlapping inputs preserves more of it. This is one of
+    the two observable quantities reported alongside an uneven split.
+
+    It is not an unchosen property. The retention computed here is a function of the
+    blend weights the specification assigns (``model.WEIGHTS[pillar]``, or the default
+    quality profile), the number of inputs, and the covariance observed on this
+    cross-section. The first two are deliberate model choices; only the third is not.
     """
     if pillar == "quality":
         # Quality's inputs vary by profile, so the correlation is only meaningful
@@ -159,13 +168,36 @@ def _component_detail(rows: list[dict], pillar: str) -> dict:
 
 
 def pillar_influence(rows: list[dict]) -> dict:
-    """Nominal weight versus realised influence over the ranking, and why they differ.
+    """Nominal weight against effective contribution to cross-sectional score variance.
 
-    ``influence`` is ``Cov(ln pillar / 3, S) / Var(S)`` where ``S`` is the log score
-    the ranking is a monotone function of. It is the standard variance decomposition
-    of a sum: the shares are exact, they account for the correlation between pillars,
-    and they add to 1. It is a description of *this* board — the split moves as the
-    cross-section moves — not a constant of the model.
+    **The estimator, exactly.** For pillar ``j`` in ``{Q, C, R}``::
+
+        share_j = Cov(ln P_j, ln Q + ln C + ln R) / Var(ln Q + ln C + ln R)
+
+    Implemented as ``Cov(ln P_j / 3, S) / Var(S)`` with ``S = (ln Q + ln C + ln R) / 3``,
+    which is the same quantity: scaling the summed score by 1/3 divides the covariance
+    by 3 and the variance by 9, and the 1/3 on the term restores it. The two forms agree
+    numerically; ``test_influence_matches_a_hand_rolled_decomposition`` checks the
+    implemented form against the summed form computed independently.
+
+    **What goes into it.** The final transformed pillars ``q``, ``c``, ``r`` — the exact
+    values the geometric mean consumes — so ``c`` is post-uplift and post-ceiling, and
+    ``r`` sits on its floor. Read before ``nightly.round_row`` serialises them to four
+    places; at the precision these shares are reported to the two are indistinguishable,
+    but the estimator is defined on the finals and is computed on the finals.
+
+    **What it is.** A descriptive decomposition of the current cross-section. It reports
+    each pillar's effective contribution to the variance of the log score the ranking
+    orders on, and the shares sum to 1 by construction while accounting for covariance
+    between pillars. It is a property of *this board*: the split moves as the
+    cross-section moves, and it is recomputed nightly for that reason.
+
+    **What it is not.** Not causal, and not evidence about predictive value. It says
+    where the ordering's variance currently comes from, not which pillar is right, nor
+    what would happen to returns under a different set of transforms. A share can in
+    principle fall outside [0, 1] if a pillar covaries negatively with the total; the
+    number is reported as computed rather than clipped, and the renderer is written to
+    survive it.
     """
     scored = _scored(rows)
     n = len(scored)
@@ -208,14 +240,20 @@ def pillar_influence(rows: list[dict]) -> dict:
         "pillars": out,
         "leader": lead["pillar"],
         "leader_influence": lead["influence"],
-        "spread": round(lead["influence"] / tail["influence"], 2) if tail["influence"] else None,
+        "spread": (round(lead["influence"] / tail["influence"], 2)
+                   if tail["influence"] > 0 else None),
+        "estimator": ("share_j = Cov(ln P_j, ln Q + ln C + ln R) / "
+                      "Var(ln Q + ln C + ln R), on the final transformed pillars"),
         "basis": (
-            "Conviction weights the three pillars equally. Ranking follows "
-            "ln Q + ln C + ln R, in which each pillar carries the same coefficient, so "
-            "a pillar's real say over the ordering is set by how much it varies across "
-            "the universe. Shares are Cov(ln pillar / 3, log score) / Var(log score): "
-            "they account for correlation between pillars and sum to 1. Measured on "
-            "this board, not a constant of the model."
+            "Conviction weights the three pillars equally. Ranking orders on "
+            "ln Q + ln C + ln R, in which each pillar carries the same coefficient, so a "
+            "pillar's effective contribution to the ordering is set by how much it varies "
+            "across the universe. Shares are "
+            "Cov(ln P_j, ln Q + ln C + ln R) / Var(ln Q + ln C + ln R), computed on the "
+            "final transformed pillars: they account for covariance between pillars and "
+            "sum to 1. This is a description of the current cross-section, recomputed "
+            "nightly — not a constant of the model, not a causal decomposition, and not "
+            "evidence about predictive value."
         ),
     }
 

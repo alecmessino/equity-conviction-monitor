@@ -122,6 +122,7 @@ equity_monitor/
     prices.py          OHLCV chain + all price-derived features
     macro.py           FRED series
 scripts/validate_ledger.py   CI gate — degenerate ledger, and snapshot-history integrity
+scripts/export_standalone.py one self-contained HTML: the terminal with its ledger inlined
 web/terminal.html            the terminal (self-contained, no CDN)
 tests/                       model behaviour, v2 regressions, JS<->Python parity
 ```
@@ -144,33 +145,55 @@ months of accumulated snapshots within a single specification hash — it is not
 here, and every panel that depends on history states its sample size and what it is still
 waiting for rather than rendering a default.
 
-### What actually drives the ranking
+### Effective pillar contribution to cross-sectional variance
 
-Conviction is `100 · (Q · C · R)^(1/3)`, which weights the three pillars equally. Ranking,
-though, follows `ln Q + ln C + ln R` — a plain sum in which each pillar carries the same
-coefficient — so a pillar's real say over the *ordering* is set by how much it **varies**
-across the universe. A pillar that is nearly the same number for every name cannot separate
-any two of them however heavily it is weighted.
+Conviction is `100 · (Q · C · R)^(1/3)`, which weights the three pillars equally. Ranking
+orders on `ln Q + ln C + ln R` — a sum in which each pillar carries the same coefficient —
+so a pillar's effective contribution to the *ordering* is set by how much it **varies**
+across the universe. A pillar taking nearly the same value for every name separates none of
+them, whatever weight it carries.
 
-`diagnostics.pillar_influence` publishes that split as a variance decomposition
-(`Cov(ln pillar / 3, log score) / Var(log score)`, which accounts for correlation between
-pillars and sums to exactly 1). On the 2026-08-21 board of 1,011 names:
+`diagnostics.pillar_influence` publishes that split as a variance decomposition. The
+estimator, exactly:
 
-| pillar | nominal | realised | × nominal | why it lands there |
+```
+share_j = Cov(ln P_j, ln Q + ln C + ln R) / Var(ln Q + ln C + ln R)
+```
+
+computed on the **final transformed pillars** — `C` post-uplift and post-ceiling, `R` on
+its floor — read before serialisation rounds them. Shares account for covariance between
+pillars and sum to 1. (It is implemented as `Cov(ln P_j / 3, S)/Var(S)` with `S` the mean
+of the three logs, which is the same quantity: scaling the sum by 1/3 divides the
+covariance by 3 and the variance by 9, and the 1/3 on the term restores it.)
+
+On the 2026-08-21 board of 1,011 names:
+
+| pillar | nominal | effective share | × nominal | observed alongside it |
 |---|---|---|---|---|
-| Confirmation | 33.3% | **59.1%** | 1.77× | 2 inputs correlated at +0.79 — close to one signal counted twice, so the blend cancels almost nothing (keeps 96% of their spread) |
-| Quality | 33.3% | 30.4% | 0.91× | 5 near-independent inputs; averaging them away leaves 56% of their spread |
-| Risk | 33.3% | **10.5%** | 0.32× | 3 near-independent inputs *and* a 0.35 floor, which compresses the log dispersion the geometric mean actually sees |
+| Confirmation | 33.3% | **59.1%** | 1.77× | 2 strongly overlapping inputs (observed correlation +0.79); the blend retains 96% of their spread |
+| Quality | 33.3% | 30.4% | 0.91× | 5 near-independent inputs; the blend retains 56% of their spread |
+| Risk | 33.3% | **10.5%** | 0.32× | 3 near-independent inputs, retaining 56%, mapped onto a range with a 0.35 floor — which narrows the log dispersion the geometric mean operates on |
 
-Neither mechanism is a weight anyone chose, and **none of this changes a score**. The model
-is untouched: `diagnostics` has no write path, `tests/test_diagnostics.py` asserts that
-running every function leaves the rows byte-identical and the spec hash unmoved, and the
-figures are recomputed nightly because the split is a property of the cross-section rather
-than a constant of the model. Whether confirmation's larger realised say corresponds to
-predictive value is a forward-record question the snapshots are accumulating — it is not
-settled by measuring the board.
+Two things this table is not. It is **not causal** — it is an accounting identity over one
+cross-section, reporting where the ordering's variance currently sits, not what produces
+it. And it is **not evidence about predictive value**: whether a larger effective share
+corresponds to skill is a forward-record question the snapshots are accumulating, and
+measuring the board does not settle it.
 
-The same module publishes two other descriptions, both explanatory only:
+Both the pillar blends and the floor-and-span ranges are **deliberate model transforms** —
+the floors are non-zero on purpose and are hashed into `model.spec()`. Neither is an
+explicit *top-level* pillar weight, which is why the split cannot be read off the weights
+alone; what the decomposition reports is the implicit influence produced by the chosen
+transforms and the covariance observed on this cross-section.
+
+**None of it changes a score.** `diagnostics` has no write path,
+`tests/test_diagnostics.py` asserts that running every function leaves the rows
+byte-identical and the spec hash unmoved, and the figures are recomputed nightly because
+the split is a property of the cross-section rather than a constant of the model. A share
+is a covariance ratio and is not bounded to [0, 1] a priori; it is reported as computed
+rather than clipped, and the renderer clamps only the drawn bar while saying so.
+
+The same module publishes two other descriptions, both observational:
 
 * **Sector tilt** — the top decile's sector mix against the universe's. Margins, leverage
   and valuation are ranked *within* GICS sector, so the model takes no deliberate sector
@@ -179,10 +202,13 @@ The same module publishes two other descriptions, both explanatory only:
   weight. Nothing neutralises it.
 * **Capped by missing data** — `model.prepare` substitutes the group median for an input it
   could not observe, which is the conservative choice and means a good business with a gap
-  in its disclosure is scored partly on a median it did not earn. Each name is re-scored
-  with its unobserved inputs set to the average of what it *does* report in the same
-  pillar, and the gap is published. On that board 83 names were held down by 2 points or
-  more and 18 would have changed tier. The gap is never added to anything.
+  in its disclosure is scored partly on a median it did not earn. The sensitivity case
+  re-scores each name with its unobserved inputs set to **the mean of that name's observed
+  percentiles within the same pillar** — per-pillar, so a name strong on quality and weak
+  on risk is not handed its quality average for a missing risk input. Under that
+  substitution 83 names come out 2 or more points higher and 18 land in a different tier
+  (ADP 72→80, EOG 79→84). Those are results under the stated sensitivity, not estimates of
+  what the scores should be. Nothing is added to any published score.
 
 ### Did every file actually refresh
 

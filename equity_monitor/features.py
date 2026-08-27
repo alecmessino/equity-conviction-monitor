@@ -184,6 +184,14 @@ def build(members: list[uni.Member], bars: dict[str, prices.Bars],
                 enterprise_value = market_cap + net_debt_ebitda * ebitda
 
         row.update(
+            # Registrant CIK, from SEC's own ticker file via edgar.cik_map. Provenance
+            # only — nothing scores on it. It is written because an accession number
+            # alone does not locate a filing: SEC archive paths are keyed by the
+            # REGISTRANT's CIK, and an accession's leading digits are the CIK of
+            # whoever submitted it, which is a filing agent often enough to matter
+            # (Microsoft's 10-K is submitted by Donnelley Financial). Without this
+            # field a document link has to guess a directory, and guessing wrong 404s.
+            cik=(comp.cik if comp else None),
             market_cap=market_cap,
             roic=derived.get("roic"),
             fcf_yield=derived.get("fcf_yield"),

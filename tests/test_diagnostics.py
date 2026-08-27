@@ -125,9 +125,10 @@ def test_influence_is_reported_against_an_equal_nominal_weight():
         assert p["vs_nominal"] == pytest.approx(p["influence"] * 3, abs=1e-2)
 
 
-def test_a_pillar_with_no_dispersion_gets_no_influence():
-    """The claim the panel makes, tested directly: influence follows variation, not
-    weight. A pillar identical for every name cannot separate any two of them."""
+def test_a_pillar_with_no_dispersion_gets_no_share():
+    """The claim the panel makes, tested directly: on a given cross-section, effective
+    contribution to log-score variance follows variation, not the nominal coefficient.
+    A pillar identical for every name cannot separate any two of them."""
     rows = _universe()
     for r in rows:
         r["c"] = 0.5          # flatten confirmation entirely
@@ -135,12 +136,13 @@ def test_a_pillar_with_no_dispersion_gets_no_influence():
     d = diagnostics.pillar_influence(rows)
     conf = next(p for p in d["pillars"] if p["pillar"] == "confirmation")
     assert conf["sd"] == pytest.approx(0.0, abs=1e-9)
-    assert conf["influence"] == pytest.approx(0.0, abs=1e-6), \
-        "a constant pillar still carries a third of the nominal weight and none of the say"
+    assert conf["influence"] == pytest.approx(0.0, abs=1e-6), (
+        "a constant pillar still carries a third of the nominal weight and none of the "
+        "cross-sectional log-score variance")
     assert d["leader"] != "confirmation"
 
 
-def test_influence_tracks_dispersion_not_the_published_weight():
+def test_share_ordering_follows_log_dispersion_on_this_cross_section():
     rows = _universe()
     d = diagnostics.pillar_influence(rows)
     by_sd = sorted(d["pillars"], key=lambda p: -p["sd_log"])
@@ -149,8 +151,9 @@ def test_influence_tracks_dispersion_not_the_published_weight():
 
 
 def test_the_blend_detail_names_the_closest_pair_of_inputs():
-    """Confirmation's two inputs measure nearly the same thing, which is why its blend
-    cancels almost nothing. The panel has to be able to say so with a number."""
+    """Confirmation's two inputs are strongly overlapping, and strongly overlapping
+    inputs preserve more spread through a weighted mean. The panel has to be able to
+    report that with a number rather than assert it."""
     d = diagnostics.pillar_influence(_universe())
     conf = next(p for p in d["pillars"] if p["pillar"] == "confirmation")
     assert conf["blend"]["components"] == 2
@@ -313,3 +316,74 @@ def test_the_terminal_reads_the_tilt_and_the_capped_list():
     html = TERMINAL.read_text(encoding="utf-8")
     assert "sector_tilt" in html
     assert "capped_by_data" in html
+
+
+# ---------------------------------------------------------------------------
+# the estimator, pinned
+# ---------------------------------------------------------------------------
+def test_the_published_estimator_string_matches_what_is_computed():
+    """The panel prints a formula next to the numbers. If the two ever drift apart the
+    formula becomes the most misleading thing on the page."""
+    d = diagnostics.pillar_influence(_universe())
+    est = d["estimator"]
+    assert "Cov(ln P_j, ln Q + ln C + ln R)" in est
+    assert "Var(ln Q + ln C + ln R)" in est
+    assert "final transformed pillars" in est
+
+
+def test_shares_come_from_the_final_transformed_pillars_not_the_raw_blends():
+    """c must be post-uplift and post-ceiling, r must sit on its floor — the values the
+    geometric mean actually consumes. Reading q_raw/c_raw/r_raw instead would decompose
+    a score nobody publishes."""
+    rows = _universe()
+    d = diagnostics.pillar_influence(rows)
+    for p in d["pillars"]:
+        key = {"quality": "q", "confirmation": "c", "risk": "r"}[p["pillar"]]
+        levels = [r[key] for r in rows if r.get("conviction") is not None]
+        assert p["sd"] == pytest.approx(diagnostics._pstdev(levels), abs=1e-3)
+        assert p["mean"] == pytest.approx(diagnostics._mean(levels), abs=1e-3)
+    # and the floors reported are the model's, not something re-derived
+    floors = {p["pillar"]: p["floor"] for p in d["pillars"]}
+    assert floors == {"quality": model.Q_FLOOR, "confirmation": model.C_FLOOR,
+                      "risk": model.R_FLOOR}
+
+
+def test_uplifted_names_are_decomposed_on_their_uplifted_confirmation():
+    rows = _universe()
+    lifted = [r for r in rows if r.get("mr_uplift", 1.0) > 1.0]
+    assert lifted, "the fixture must exercise the mean-reversion path"
+    for r in lifted[:5]:
+        expected = min(model.C_CEILING,
+                       (model.C_FLOOR + model.C_SPAN * r["c_raw"]) * r["mr_uplift"])
+        assert r["c"] == pytest.approx(expected, abs=1e-9), \
+            "the c the decomposition reads must be post-uplift and post-ceiling"
+
+
+def test_a_share_outside_zero_to_one_is_reported_as_computed_not_clipped():
+    """A share is a covariance ratio and is not bounded to [0,1] a priori: a pillar
+    covarying negatively with the total would produce a negative one. No board has done
+    it, but the number must survive the trip rather than be silently clipped into a
+    plausible-looking range."""
+    rows = _universe()
+    # Invert one pillar against the others so its covariance with the total goes
+    # negative, without touching any published score.
+    ranked = sorted(rows, key=lambda r: r["conviction"])
+    for i, r in enumerate(ranked):
+        r["r"] = 0.35 + 0.75 * (1.0 - i / max(1, len(ranked) - 1)) * 0.9 + 0.05
+    d = diagnostics.pillar_influence(rows)
+    risk = next(p for p in d["pillars"] if p["pillar"] == "risk")
+    assert risk["influence"] < 0, "the fixture must actually produce a negative share"
+    assert sum(p["influence"] for p in d["pillars"]) == pytest.approx(1.0, abs=1e-3), \
+        "the decomposition must still sum to one when a share goes negative"
+    assert d["spread"] is None, "a ratio against a non-positive share is not reportable"
+
+
+def test_the_renderer_clamps_the_bar_but_not_the_printed_share():
+    """A bar at width:-20% vanishes and one at 140% escapes its track. The drawing is
+    clamped; the figure beside it is not, and the cell says when they disagree."""
+    html = TERMINAL.read_text(encoding="utf-8")
+    body = html.split("function renderPillars(", 1)[1].split("\nfunction ", 1)[0]
+    assert "Math.max(0,Math.min(100," in body, "the bar width must be clamped"
+    assert "clamped" in body, "a clamped bar must announce itself"
+    # the printed figure comes straight from the payload, unclamped
+    assert "pct(p.influence,1)" in body

@@ -811,7 +811,7 @@ table.mig th.l,table.mig td.l,
   <div class="brand">Equity Conviction Monitor <span id="hdr-model">·</span></div>
   <span class="chip" id="hdr-status"><span class="dot"></span><span>loading</span></span>
   <span class="chip" id="hdr-universe"></span>
-  <span class="chip" id="hdr-coverage" title="Share of scored names carrying a real, filing-derived value for each quality input"></span>
+  <span class="chip" id="hdr-coverage"></span>
   <button class="chip" id="hdr-health" hidden></button>
   <div class="spacer"></div>
   <button class="btn" id="cmd-open" style="display:flex;align-items:center;gap:7px"
@@ -1547,13 +1547,14 @@ table.mig th.l,table.mig td.l,
       </div>
     </div>
 
-    <!-- Nominal weighting versus realised influence. The prose above describes the
-         weights the model was given; this describes the say each pillar actually ends
-         up having over the ordering, which is not the same number and was never
-         measured until it was asked for directly. -->
+    <!-- Nominal weighting against effective contribution to cross-sectional log-score
+         variance. The prose above describes the weights the model was given; this
+         describes how much of the current ordering's variance each pillar accounts
+         for, which is a different quantity and was not measured until it was asked
+         for directly. Descriptive, not causal. -->
     <div class="card" id="pillar-influence" style="margin-top:12px">
       <div class="tile-row" style="margin-bottom:8px">
-        <h2 style="margin:0">What actually drives the ranking</h2>
+        <h2 style="margin:0">Effective pillar contribution</h2>
         <span class="tile-sub" id="pi-head"></span>
       </div>
       <div id="pi-body"></div>
@@ -1862,12 +1863,38 @@ function renderHeader(){
   $('#hdr-status').title = fresh ? 'Data is current'
     : `Last successful build was ${age.toFixed(0)}h ago — figures may be stale`;
   $('#hdr-universe').innerHTML=`<b>${S.rows.length}</b>&nbsp;names`;
-  const cov=j.coverage||{};
-  const core=['roic','fcf_yield','market_cap'].map(k=>cov[k]).filter(nz);
-  const mean=core.length?core.reduce((a,b)=>a+b,0)/core.length:0;
+  // Pooled, not averaged. These three inputs no longer share a denominator — roic and
+  // fcf_yield are measured against the default-profile names that are scored on them
+  // (792), market_cap against every scored name (1,011) — and the arithmetic mean of
+  // three shares over two different populations is not a rate of anything. Summing
+  // observed over summed population gives one honest figure: of all the (name, input)
+  // pairs these three are scored on, the share actually observed. Falls back to the
+  // flat shares only for a ledger published before coverage_detail existed.
+  const cov=j.coverage||{}, det=j.coverage_detail||{};
+  const core=['roic','fcf_yield','market_cap'];
+  let obs=0, pop=0, pooled=true;
+  for(const k of core){
+    const d=det[k];
+    if(d&&nz(d.observed)&&d.population){ obs+=d.observed; pop+=d.population; }
+    else { pooled=false; }
+  }
+  let mean=0;
+  if(pooled&&pop){ mean=obs/pop; }
+  else {
+    const flat=core.map(k=>cov[k]).filter(nz);
+    mean=flat.length?flat.reduce((a,b)=>a+b,0)/flat.length:0;
+  }
   $('#hdr-coverage').innerHTML=
     `<span class="dot" style="background:${mean>0.8?cssVar('--good'):mean>0.5?cssVar('--warn'):cssVar('--bad')}"></span>`
     +`<b>${(mean*100).toFixed(0)}%</b>&nbsp;fundamentals`;
+  $('#hdr-coverage').title = pooled
+    ? `${obs.toLocaleString()} of ${pop.toLocaleString()} (name, input) pairs observed `
+      + `rather than imputed, across ROIC, FCF yield and market cap. Pooled over each `
+      + `input's own scoring population — ROIC and FCF yield are scored on the `
+      + `default-profile names only, market cap on every scored name — because averaging `
+      + `shares that do not share a denominator would not be a rate.`
+    : 'Mean share across ROIC, FCF yield and market cap. This ledger predates scoped '
+      + 'denominators, so the three are measured universe-wide.';
 }
 
 /* ---------- macro ----------
@@ -2253,16 +2280,18 @@ function renderContext(){
   const pi=(S.ledger.diagnostics||{}).pillar_influence;
   if(pi&&pi.sufficient){
     const lead=pi.pillars.find(x=>x.pillar===pi.leader)||pi.pillars[0];
-    cells.push(cell('Ranking driven by',
+    cells.push(cell('Largest contribution',
       esc(PILLAR_LETTER[pi.leader]||pi.leader),
-      `${pct(lead.influence,0)} of variance · nominal 33%`,
+      `${pct(lead.influence,0)} of log-score variance · nominal 33%`,
       lead.influence>=0.5?`color:${cssVar('--s2')}`:'',
-      `Realised influence over the ordering, not the published weight. Conviction weights `
-      +`the three pillars equally; ranking follows ln Q + ln C + ln R, so the say each `
-      +`pillar has is set by how much it varies across the universe. `
-      +`${(PILLAR_DEFS[pi.leader]||{}).title||pi.leader} carries `
-      +`${(lead.influence*100).toFixed(0)}% of that variance against a nominal 33.3%. `
-      +`Measured on tonight's board; the model is unchanged. Method tab for the full table.`));
+      `Effective contribution to current cross-sectional log-score variance, not the `
+      +`published weight. Conviction weights the three pillars equally; ranking orders on `
+      +`ln Q + ln C + ln R, so a pillar's contribution to the ordering is set by how much `
+      +`it varies across the universe. ${(PILLAR_DEFS[pi.leader]||{}).title||pi.leader} `
+      +`accounts for ${(lead.influence*100).toFixed(0)}% of that variance against a nominal `
+      +`33.3%. A description of tonight's cross-section, recomputed nightly — not causal, `
+      +`and no claim about predictive value. The model is unchanged. Method tab for the `
+      +`estimator and the full table.`));
   }
   const dh=S.ledger.data_health;
   if(dh){
@@ -2946,30 +2975,39 @@ function factorBars(r){
     </div>`).join('');
 }
 
-/* Nominal weight versus realised influence.
+/* Nominal weight against effective contribution to cross-sectional log-score variance.
 
-   Conviction is 100·(Q·C·R)^(1/3), which weights the three pillars equally and reads
-   as though it gives each an equal say. Ranking, though, follows ln Q + ln C + ln R —
-   a plain sum in which each pillar carries the same coefficient — so what actually
-   decides the ordering is how much each pillar VARIES across the universe. A pillar
-   that is nearly the same number for every name cannot separate any two of them, no
-   matter how heavily it is weighted.
+   Conviction is 100·(Q·C·R)^(1/3), which weights the three pillars equally. Ranking
+   orders on ln Q + ln C + ln R, a sum in which each pillar carries the same
+   coefficient, so a pillar's effective contribution to the ordering is set by how much
+   it varies across the universe. A pillar that takes nearly the same value for every
+   name separates none of them, whatever weight it carries.
 
-   On the current board that gap is large: confirmation carries roughly 59% of the
-   ranking variance against a nominal 33%, and risk roughly 10%. Two mechanisms produce
-   it, and the table names both rather than leaving the reader to infer a cause:
+   The estimator, exactly:
 
-     · the blend — confirmation is a weighted mean of two inputs correlated at ~0.79,
-       which is close to one signal counted twice, so almost none of their dispersion
-       cancels; quality averages five near-independent inputs and loses nearly half of
-       its own that way;
-     · the floor and span — each pillar is mapped onto its own range, and risk's 0.35
-       floor compresses it into a narrow band whose *log* dispersion, which is what the
-       geometric mean sees, is narrower still.
+     share_j = Cov(ln P_j, ln Q + ln C + ln R) / Var(ln Q + ln C + ln R)
 
-   Neither is a weight anybody chose, and nothing here changes a score. The model is
-   untouched: this reports the property so it can be watched as the forward record
-   accumulates, and the split is a measurement of THIS board, not a constant. */
+   on the final transformed pillars — c post-uplift and post-ceiling, r on its floor —
+   read before serialisation rounds them. Shares account for covariance between pillars
+   and sum to 1.
+
+   On the current board the split is uneven: confirmation carries roughly 59% of that
+   variance against a nominal 33%, risk roughly 10%. The table reports the two
+   observable quantities associated with it rather than asserting a cause —
+
+     · the blend: confirmation is a weighted mean of two strongly overlapping inputs
+       (observed correlation ~0.79), and strongly overlapping inputs preserve more
+       spread through a mean than near-independent ones do; quality averages five
+       near-independent inputs and retains roughly half as much of theirs;
+     · the floor and span: each pillar is mapped onto a chosen range, and risk's 0.35
+       floor leaves it a narrow band whose LOG dispersion — what the geometric mean
+       operates on — is narrower still.
+
+   Both are chosen model transforms; neither is an explicit top-level weight, which is
+   why the split is not visible from the weights alone. This is a descriptive
+   decomposition of the current cross-section, recomputed nightly — not causal, not a
+   constant of the model, and not evidence about predictive value. Nothing here changes
+   a score. */
 function renderPillars(){
   const host=$('#pi-body'); if(!host) return;
   const d=(S.ledger.diagnostics||{}).pillar_influence;
@@ -2986,13 +3024,24 @@ function renderPillars(){
     +`model ${d.model_version||'—'}`;
 
   const bar=p=>{
-    // Nominal sits as a hairline on the same track the realised share fills, so the
-    // gap between what the model was given and what it does is visible without
-    // subtracting two numbers by eye.
-    const w=Math.max(0,Math.min(100,p.influence*100));
+    // Nominal sits as a hairline on the same track the share fills, so the gap between
+    // the equal weighting and the effective contribution is visible without subtracting
+    // two numbers by eye.
+    //
+    // A share is a covariance ratio, so it is not bounded to [0,1] a priori: a pillar
+    // covarying negatively with the total would produce a negative share, and one
+    // offsetting another could exceed 1. Neither occurs on any board seen so far, but a
+    // bar drawn at width:-20% silently vanishes and one at 140% escapes its track, so
+    // the DRAWING is clamped while the printed figure stays exactly as computed — and
+    // when the two disagree the cell says so rather than quietly showing a full bar.
+    const raw=nz(p.influence)?p.influence*100:0;
+    const w=Math.max(0,Math.min(100,raw));
+    const clamped=Math.abs(w-raw)>0.05;
     const tone=p.influence>0.4?cssVar('--s2'):p.influence<0.2?cssVar('--axis'):cssVar('--s1');
-    return `<span class="pb-track" style="flex:1;width:auto;position:relative">
-      <span class="pb-fill" style="width:${w.toFixed(1)}%;background:${tone}"></span>
+    return `<span class="pb-track" style="flex:1;width:auto;position:relative"${
+      clamped?` title="Bar clamped for drawing: the computed share is ${pct(p.influence,1)}, outside the 0–100% a bar can show. The figure beside it is exact."`:''}>
+      <span class="pb-fill" style="width:${w.toFixed(1)}%;background:${
+        clamped?cssVar('--bad'):tone}"></span>
       <span style="position:absolute;left:33.3%;top:-1px;bottom:-1px;width:1px;
         background:var(--ink-2);opacity:.55"></span></span>`;
   };
@@ -3019,29 +3068,34 @@ function renderPillars(){
     <div class="tbl-wrap"><table>
       <thead><tr>
         <th class="l">Pillar</th>
-        <th class="l">Share of ranking variance</th>
+        <th class="l" title="Effective contribution to the variance of the log score the ranking orders on">Effective contribution to log-score variance</th>
         <th>× nominal</th><th>SD</th><th>ρ conv</th>
-        <th class="l">Why it lands there</th><th>Range</th>
+        <th class="l">Spread retained through the blend</th><th title="Floor + span: the range this pillar is mapped onto before the geometric mean">Floor + span</th>
       </tr></thead>
       <tbody>${rows}</tbody>
     </table></div>
     <p class="card-note">
-      <b>${esc((PILLAR_DEFS[d.leader]||{}).title||d.leader)} leads at ${pct(lead.influence,0)}
-      against a nominal 33.3%</b>${d.spread?`, ${num(d.spread,1)}× the influence of the
-      weakest pillar`:''}. The hairline on each bar marks the nominal third. Nothing about
-      the model changed to produce this: the weights are exactly as published above, and
-      the split falls out of how much each pillar varies across the universe. Two things
-      set that — how much dispersion survives a pillar's internal blend (a mean of two
-      inputs measuring nearly the same thing keeps almost all of it; a mean of five
-      independent ones averages half of it away) and the floor-and-span range each pillar
-      is mapped onto, since a narrow band above a high floor has little room to separate
-      names once the geometric mean takes its log.
+      <b>${esc((PILLAR_DEFS[d.leader]||{}).title||d.leader)} carries ${pct(lead.influence,0)}
+      of current cross-sectional log-score variance against a nominal 33.3%</b>${
+      d.spread?`, ${num(d.spread,1)}× the smallest share`:''}. The hairline on each bar marks
+      the nominal third. The weights are exactly as published above and no score changed:
+      this is the implicit influence produced by the chosen transforms and the observed
+      covariance of this cross-section. Two chosen transforms sit behind it — the pillar
+      blends, where strongly overlapping confirmation inputs preserve more spread through
+      a weighted mean than quality's five near-independent inputs do, and the floor-and-span
+      range each pillar is mapped onto, since a narrow band above a high floor has little
+      room left once the geometric mean takes its log. Both are deliberate model choices;
+      neither is an explicit top-level weight, which is why the split cannot be read off
+      the weights.
     </p>
     <p class="card-note">${esc(d.basis)}</p>
+    <p class="card-note"><b>Estimator.</b> <code>${esc(d.estimator||'')}</code></p>
     <p class="card-note"><em>Descriptive, not a correction.</em> Rankings, signals and
-    weights are untouched by this panel. Whether confirmation's larger realised say
-    corresponds to predictive value is a question for the forward record, which is what
-    the snapshots are accumulating — it is not settled by measuring the board.</p>`;
+    weights are untouched by this panel, and the split is a property of the current
+    cross-section rather than of the model — it is recomputed nightly and moves with the
+    board. It is not a causal decomposition and carries no claim about predictive value:
+    whether a larger effective contribution corresponds to skill is a forward-record
+    question the snapshots are accumulating, and measuring the board does not settle it.</p>`;
 }
 
 /* Staleness, said once for every artifact rather than once for the calendar.
@@ -3192,11 +3246,15 @@ function openPanel(r){
   // dropping it, so the sentence described something that did not exist.
   const facts=Object.entries(r.as_of||{}).slice(0,8)
     .map(([k,v])=>{
-      const u=edgarDoc(v.accn);
+      // Needs the registrant CIK, not the accession prefix — see edgarDoc. Without one
+      // the accession is still printed, because the number itself is the traceable
+      // record; only the hyperlink is withheld rather than pointed somewhere guessed.
+      const u=edgarDoc(r.cik, v.accn);
       return `<tr><td>${esc(k)}</td><td class="src">${esc(v.tag)} · ${esc(v.end)}${
         u?` · <a href="${esc(u)}" target="_blank" rel="noopener noreferrer"
              title="Filing index for accession ${esc(v.accn)}">${esc(v.accn)} ↗</a>`
-         :(v.accn?` · ${esc(v.accn)}`:'')}</td></tr>`;
+         :(v.accn?` · <span title="No registrant CIK on this row, so no document path is
+             guessed — use the filings link above">${esc(v.accn)}</span>`:'')}</td></tr>`;
     }).join('');
 
   $('#p-body').innerHTML=`
@@ -5502,23 +5560,37 @@ function renderFactorRank(){
    its rows link to the filtered list instead of guessing an accession that may not
    exist. A link to the right list beats a link to the wrong document. */
 function edgarUrl(cik, form){
-  if(!nz(cik)) return null;
+  // nz() admits 0 and '' — both would emit CIK=0000000000, a link to nothing. A CIK is
+  // a positive integer or it is not a CIK.
+  if(!nz(cik)||!/^\d+$/.test(String(cik))||Number(cik)<=0) return null;
   const p=new URLSearchParams({action:'getcompany', CIK:String(cik).padStart(10,'0'),
     type:form||'', dateb:'', owner:'include', count:'25'});
   return 'https://www.sec.gov/cgi-bin/browse-edgar?'+p.toString();
 }
 /* The filing index page for one accession number.
 
-   The CIK in the path is taken from the accession's own prefix, NOT from the company.
-   Those are frequently different: Microsoft's XBRL is submitted by Donnelley Financial
-   (1193125) and several REITs here by Workiva (1628280), so building the path from the
-   registrant's CIK 404s on exactly the large names most likely to be clicked. EDGAR
-   serves the accession index under the submitting filer's path; verified against eight
-   randomly drawn accessions from this ledger, agent-filed ones included, all 200. */
-function edgarDoc(accn){
-  if(!accn||!/^\d{10}-\d{2}-\d{6}$/.test(String(accn))) return null;
-  const s=String(accn), filer=String(parseInt(s.slice(0,10),10));
-  return `https://www.sec.gov/Archives/edgar/data/${filer}/${s.replace(/-/g,'')}/${s}-index.htm`;
+   SEC archive paths are keyed by the REGISTRANT's CIK:
+
+     /Archives/edgar/data/{registrant CIK, no leading zeros}/{accession, no dashes}/…
+
+   An accession number's leading ten digits are the CIK of whoever SUBMITTED the
+   filing, which is a filing agent often enough to matter — Microsoft's 10-K is
+   accession 0000950170-25-100235 (Donnelley Financial) against registrant CIK 789019.
+   The two are not interchangeable. The `-index.htm` endpoint happens to resolve under
+   either, because it looks the accession up rather than walking the directory, and
+   that permissiveness is exactly what made an earlier version of this function look
+   correct: every index URL it built returned 200. Documents inside the folder do not
+   forgive it — /data/950170/…/msft-20250630.htm is a hard 404 while /data/789019/…
+   serves the file, and EDGAR's own index page emits the registrant path.
+
+   So the registrant CIK is used, and when the row does not carry one no directory is
+   guessed: the caller falls back to a ticker-scoped filing list, which is a link to
+   the right list rather than a link to the wrong document. */
+function edgarDoc(cik, accn){
+  if(!nz(cik)||!accn||!/^\d{10}-\d{2}-\d{6}$/.test(String(accn))) return null;
+  const s=String(accn), reg=String(cik).replace(/^0+/,'');
+  if(!/^\d+$/.test(reg)) return null;
+  return `https://www.sec.gov/Archives/edgar/data/${reg}/${s.replace(/-/g,'')}/${s}-index.htm`;
 }
 function edgarLink(cik, form, label){
   const u=edgarUrl(cik, form);
